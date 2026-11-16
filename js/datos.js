@@ -206,7 +206,8 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
   if (!a) throw new Error('Ejemplar no encontrado.');
   const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, pesoG, puntos, defectos });
   if (ev.invalidos.length) throw new Error('Hay puntuaciones fuera de rango (de 0 al máximo del apartado, en pasos de 0,5).');
-  if (!ev.completa) throw new Error(`Puntúa los ${BAREMO.apartados.length} apartados antes de cerrar la ficha.`);
+  if (!ev.completa) throw new Error(`Puntúa las ${BAREMO.apartados.length} regiones antes de cerrar la ficha.`);
+  if (ev.pesoConforme === null) throw new Error('El peso del animal (en gramos) es obligatorio en la calificación.');
   const limpios = Object.fromEntries(BAREMO.apartados.map(x => [x.id, puntoValido(puntos[x.id], x.max)]));
   const c = {
     id: uuid(), animal_id: a.id, inspector_id: p.id, inspector_nombre: p.nombre || p.email,

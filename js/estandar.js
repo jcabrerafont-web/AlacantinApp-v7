@@ -148,34 +148,32 @@ export function tramoEdad(fechaNacimiento, hoy = new Date()) {
 }
 
 // ============================================================================
-// BAREMO DE CALIFICACIÓN MORFOLÓGICA — PROPUESTA
-// El Estándar ESGA025 no fija baremo. Se adopta el modelo del programa de cría
-// oficial de la Castellana Negra (MAPA, Resol. 9/8/2018, BOE 15/02/2019):
-// 100 puntos en 13 apartados, clases EX/MB/B/R/I y descalificación por defecto
-// grave. Los textos de cada apartado son los del Estándar de la Alacantina.
-// Pendiente de aprobación en el programa de cría de la Asociación.
+// BAREMO DE CALIFICACIÓN MORFOLÓGICA DE LA ALACANTINA — PROPUESTA
+// El Estándar ESGA025 no fija baremo. Se puntúan sobre 100 las 12 regiones en
+// que se agrupa el Estándar, con más peso en lo que define la impresión general
+// de la raza y en las regiones de los defectos graves. Precedente de método:
+// programa de cría de la Castellana Negra (BOE 15/02/2019).
+// Pendiente de ratificar por la Dirección Técnica del Libro Genealógico.
+// Si cambia un máximo, actualizar también baremo_maximos() en supabase/schema.sql.
 // ============================================================================
-const R = Object.fromEntries(ESTANDAR.regiones.map(r => [r.id, r]));
+const MAXIMOS = Object.freeze({
+  tronco: 15,       // Impresión general y tronco: esbelto, talla alta, porte erguido, triangular
+  cabeza: 6,
+  cresta: 10,
+  barbillas: 5,
+  orejillas: 10,    // defecto grave: orejilla amarilla o roja
+  cuello: 6,        // defecto grave: flameado (moteada, exchequer)
+  dorso: 8,
+  alas: 4,
+  pecho: 10,        // defecto grave: pecho prominente
+  cola: 10,         // defecto grave: cola baja o larga
+  extremidades: 6,  // defecto grave: tarsos amarillos
+  plumaje: 10       // color según la variedad
+});
 export const BAREMO = Object.freeze({
   estado: 'propuesta',
-  fuente: 'Modelo del programa de cría de la Castellana Negra (BOE 15/02/2019), adaptado al Estándar ESGA025',
-  apartados: Object.freeze([
-    { id: 'tipo', nombre: 'Tipo general', max: 10, gallo: ESTANDAR.impresionGeneral, gallina: ESTANDAR.impresionGeneral, defectos: [] },
-    { id: 'cresta', nombre: 'Cresta', max: 10, gallo: R.cresta.gallo, gallina: R.cresta.gallina, defectos: [] },
-    { id: 'pico', nombre: 'Pico', max: 5, gallo: 'Medio y ligeramente curvado. Color según la variedad.', gallina: 'Medio y ligeramente curvado. Color según la variedad.', defectos: [] },
-    { id: 'cara', nombre: 'Cara', max: 4, gallo: 'Lisa y de color rojo.', gallina: 'Lisa y de color rojo.', defectos: [] },
-    { id: 'ojos', nombre: 'Ojos', max: 3, gallo: 'Grandes, con el iris color anaranjado.', gallina: 'Grandes, con el iris color anaranjado.', defectos: [] },
-    { id: 'orejillas', nombre: 'Orejillas', max: 10, gallo: R.orejillas.gallo, gallina: R.orejillas.gallina, defectos: ['orejilla'] },
-    { id: 'barbillas', nombre: 'Barbillas', max: 5, gallo: R.barbillas.gallo, gallina: R.barbillas.gallina, defectos: [] },
-    { id: 'cuello', nombre: 'Cuello y esclavina', max: 5, gallo: R.cuello.gallo, gallina: R.cuello.gallina, defectos: ['flameado'] },
-    { id: 'tronco', nombre: 'Tronco, dorso y pecho', max: 10,
-      gallo: `${R.tronco.gallo.replace(/^.*?\. /, '')} Dorso: ${R.dorso.gallo.toLowerCase()} ${R.pecho.gallo}`,
-      gallina: `Dorso ${R.dorso.gallina.toLowerCase()} ${R.pecho.gallina}`, defectos: ['pecho'] },
-    { id: 'cola', nombre: 'Cola (desarrollo y posición)', max: 10, gallo: R.cola.gallo, gallina: R.cola.gallina, defectos: ['cola'] },
-    { id: 'alas', nombre: 'Alas', max: 5, gallo: R.alas.gallo, gallina: R.alas.gallina, defectos: [] },
-    { id: 'patas', nombre: 'Patas (forma y color)', max: 8, gallo: R.extremidades.gallo, gallina: R.extremidades.gallina, defectos: ['tarsos'] },
-    { id: 'plumaje', nombre: 'Color del plumaje', max: 15, gallo: 'Plumaje ceñido; color según la descripción de la variedad.', gallina: 'Plumaje ceñido; color según la descripción de la variedad.', defectos: [] }
-  ].map(x => Object.freeze({ ...x, defectos: Object.freeze(x.defectos) }))),
+  fuente: 'Baremo propuesto para la Alacantina sobre las 12 regiones del Estándar ESGA025, pendiente de ratificar por la Dirección Técnica',
+  apartados: Object.freeze(ESTANDAR.regiones.map(r => Object.freeze({ ...r, max: MAXIMOS[r.id] }))),
   // Clases por puntuación total (límite inferior incluido)
   clases: Object.freeze([
     Object.freeze({ id: 'EX', nombre: 'Excelente', min: 90 }),

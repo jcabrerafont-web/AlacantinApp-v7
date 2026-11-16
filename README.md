@@ -30,12 +30,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Gallina: 2,200–2,600 kg, anilla de 18 mm.
 - **Huevo:** de 55 a 70 g con cáscara blanco crema. Cada huevo se pesa y se registra por separado.
 - **Calificación morfológica (baremo de 100 puntos, en fase de propuesta):**
-  - El Estándar ESGA025 no fija baremo. Se adopta el modelo del programa de cría oficial de la Castellana Negra (MAPA, Resol. 9/8/2018, BOE 15/02/2019), con los textos del Estándar de la Alacantina en cada apartado.
-  - 13 apartados: tipo general 10, cresta 10, pico 5, cara 4, ojos 3, orejillas 10, barbillas 5, cuello y esclavina 5, tronco/dorso/pecho 10, cola 10, alas 5, patas 8 y color del plumaje 15. Se puntúa de 0 al máximo en pasos de 0,5.
-  - Clases: **EX** ≥ 90 · **MB** ≥ 80 · **B** ≥ 70 · **R** ≥ 65 · **I** < 65. Cualquiera de los 5 defectos descalificantes del Estándar da **D (descalificado)**, sume lo que sume; el flameado de esclavina solo cuenta en las variedades moteada y exchequer.
-  - Resultado **Apto** con clase EX, MB, B o R. El inspector no elige el resultado: lo calcula la app y lo **recalcula el servidor** a partir de los puntos.
-  - Todo está en `BAREMO` (`js/estandar.js`) y en las funciones `baremo_maximos()` y `clase_de()` del esquema SQL. Si el programa de cría aprobado cambia pesos o límites, hay que actualizar ambos sitios.
-  - La Guía de Campo y la vista del Estándar mantienen las 12 regiones descriptivas del texto oficial.
+  - El Estándar ESGA025 no fija baremo. Se puntúan sobre 100 las **12 regiones** en que se agrupa el Estándar, con el texto oficial del gallo y de la gallina en cada una. Las que más puntúan son las que definen la impresión general de la raza y las de los defectos graves. Precedente de método: programa de cría de la Castellana Negra (BOE 15/02/2019).
+  - Reparto: impresión general y tronco 15 · cabeza, cara, ojos y pico 6 · cresta 10 · barbillas 5 · orejillas 10 · cuello y esclavina 6 · dorso 8 · alas 4 · pecho y abdomen 10 · cola 10 · muslos, tarsos y dedos 6 · plumaje y color de la variedad 10. Se puntúa de 0 al máximo en pasos de 0,5.
+  - Clases: **EX** ≥ 90 · **MB** ≥ 80 · **B** ≥ 70 · **R** ≥ 65 · **I** < 65. Cualquiera de los 5 defectos graves del Estándar da **D (descalificado)**, sume lo que sume; el flameado de esclavina solo cuenta en las variedades moteada y exchequer.
+  - El resultado es **Apto** con clase EX, MB, B o R. Lo calcula la app y lo **recalcula el servidor**: el inspector no lo elige.
+  - **Peso:** obligatorio en la calificación. Se pesa al animal y se anota en gramos; la app y el servidor lo contrastan con el Estándar (gallo 3000–3500 g, gallina 2200–2600 g) y el acta lo refleja como conforme o fuera de rango. No suma puntos.
+  - Para ajustar el reparto hay que cambiar `MAXIMOS` en `js/estandar.js` y `baremo_maximos()` en `supabase/schema.sql`.
 - **Registro Definitivo:** se alcanza con resultado Apto, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.

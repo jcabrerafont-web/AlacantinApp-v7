@@ -78,15 +78,15 @@ export function acta(a, c, titular) {
       <strong>Inspector:</strong> ${c.inspector_nombre} · <strong>Fecha:</strong> ${fecha(c.fecha)}
       ${c.latitud ? h` · <strong>Lugar (GPS):</strong> ${Number(c.latitud).toFixed(5)}, ${Number(c.longitud).toFixed(5)}` : ''}</p>
     <h2>Valoración morfológica (100 puntos)</h2>
-    <table><thead><tr><th>Apartado</th><th class="num">Máx.</th><th class="num">Puntos</th></tr></thead><tbody>
+    <table><thead><tr><th>Región</th><th class="num">Máx.</th><th class="num">Puntos</th></tr></thead><tbody>
       ${BAREMO.apartados.map(x => h`<tr><td>${x.nombre}</td><td class="num">${x.max}</td><td class="num">${num(c.puntos?.[x.id])}</td></tr>`)}
       <tr><th>Total</th><th class="num">100</th><th class="num">${num(c.total)}</th></tr>
     </tbody></table>
-    <p><strong>Peso:</strong> ${c.peso_g ? `${c.peso_g} g` : 'no medido'}${pc === null || pc === undefined ? '' : pc ? ' (conforme al Estándar)' : ' (fuera del rango del Estándar)'}</p>
+    <p><strong>Peso en báscula:</strong> ${c.peso_g ? `${c.peso_g} g` : 'no medido'} · Estándar ${sexoTexto(a.sexo).toLowerCase()}: ${ESTANDAR.peso[a.sexo]?.min}–${ESTANDAR.peso[a.sexo]?.max} g${pc === null || pc === undefined ? '' : h` · <strong>${pc ? 'conforme' : 'fuera de rango'}</strong>`}</p>
     <h2>Defectos descalificantes</h2>
     <p>${c.defectos?.length ? c.defectos.map(id => ESTANDAR.defectosGraves.find(d => d.id === id)?.texto).join(' · ') : 'No se observan.'}</p>
     <h2>Clase: ${c.clase} · ${nombreClase(c.clase)} — Resultado: ${c.resultado}</h2>
     ${c.observaciones ? h`<p>${c.observaciones}</p>` : ''}
     <div class="doc-firmas"><div>Firma del inspector: ${c.inspector_nombre}</div><div>Enterado, el titular: ${titular?.nombre || ''}</div></div>
-    <p class="doc-pie">Baremo en fase de propuesta (${BAREMO.fuente}). Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Se admiten en el Libro las clases ${BAREMO.clasesAptas.join(', ')}. El acceso al Registro Definitivo exige además variedad oficial y edad mínima según las normas del Libro.</p>`);
+    <p class="doc-pie">${BAREMO.fuente}. El peso se registra y se contrasta con el Estándar, pero no puntúa. Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Se admiten en el Libro las clases ${BAREMO.clasesAptas.join(', ')}. El acceso al Registro Definitivo exige además variedad oficial y edad mínima según las normas del Libro.</p>`);
 }

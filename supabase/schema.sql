@@ -154,23 +154,23 @@ CREATE OR REPLACE VIEW public.censo_publico WITH (security_invoker = false) AS
   WHERE estado = 'activo' OR id IN (SELECT padre_id FROM public.animales UNION SELECT madre_id FROM public.animales);
 
 -- ----------------------------------------------------------------------------
--- 3. Calificaciones: baremo de 100 puntos en 13 apartados (PROPUESTA)
---    Modelo del programa de cría de la Castellana Negra (BOE 15/02/2019):
---    clases EX>=90, MB>=80, B>=70, R>=65, I<65; D = descalificado por defecto grave.
+-- 3. Calificaciones: baremo de 100 puntos en las 12 regiones del Estándar (PROPUESTA)
+--    Clases EX>=90, MB>=80, B>=70, R>=65, I<65; D = descalificado por defecto grave.
 --    Total, clase y resultado se recalculan SIEMPRE en el servidor.
+--    El peso es obligatorio; se contrasta con el Estándar pero no puntúa.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.baremo_maximos() RETURNS jsonb
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT '{"tipo":10,"cresta":10,"pico":5,"cara":4,"ojos":3,"orejillas":10,"barbillas":5,
-           "cuello":5,"tronco":10,"cola":10,"alas":5,"patas":8,"plumaje":15}'::jsonb
+  SELECT '{"tronco":15,"cabeza":6,"cresta":10,"barbillas":5,"orejillas":10,"cuello":6,
+           "dorso":8,"alas":4,"pecho":10,"cola":10,"extremidades":6,"plumaje":10}'::jsonb
 $$;
 
--- true si "puntos" tiene exactamente los 13 apartados, cada uno numérico,
+-- true si "puntos" tiene exactamente las 12 regiones, cada uno numérico,
 -- entre 0 y su máximo y en pasos de 0,5
 CREATE OR REPLACE FUNCTION public.puntos_validos(j jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE AS $$
   SELECT jsonb_typeof(j) = 'object'
-     AND (SELECT count(*) FROM jsonb_object_keys(j)) = 13
+     AND (SELECT count(*) FROM jsonb_object_keys(j)) = (SELECT count(*) FROM jsonb_object_keys(public.baremo_maximos()))
      AND NOT EXISTS (
        SELECT 1 FROM jsonb_each(j) e
        LEFT JOIN jsonb_each(public.baremo_maximos()) m ON m.key = e.key
@@ -195,14 +195,14 @@ CREATE TABLE IF NOT EXISTS public.calificaciones (
   total            numeric(4,1) NOT NULL,
   clase            text NOT NULL CHECK (clase IN ('EX', 'MB', 'B', 'R', 'I', 'D')),
   defectos         jsonb NOT NULL DEFAULT '[]'::jsonb,
-  peso_g           integer CHECK (peso_g IS NULL OR peso_g BETWEEN 30 AND 6000),
+  peso_g           integer NOT NULL CHECK (peso_g BETWEEN 30 AND 6000),
   peso_conforme    boolean,
   resultado        text NOT NULL CHECK (resultado IN ('Apto', 'No apto')),
   observaciones    text,
   latitud          double precision,
   longitud         double precision,
   created_at       timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT trece_apartados CHECK (public.puntos_validos(puntos)),
+  CONSTRAINT doce_regiones CHECK (public.puntos_validos(puntos)),
   CONSTRAINT total_rango CHECK (total BETWEEN 0 AND 100),
   CONSTRAINT clase_coherente CHECK (clase = public.clase_de(total, jsonb_array_length(defectos) > 0)),
   CONSTRAINT resultado_coherente CHECK ((resultado = 'Apto') = (clase IN ('EX', 'MB', 'B', 'R')))
@@ -219,13 +219,16 @@ BEGIN
     RAISE EXCEPTION 'Solo un inspector acreditado puede registrar calificaciones' USING ERRCODE = '42501';
   END IF;
   IF NOT public.puntos_validos(NEW.puntos) THEN
-    RAISE EXCEPTION 'Puntuación incompleta o fuera de rango (13 apartados, de 0 al máximo, pasos de 0,5)' USING ERRCODE = '23514';
+    RAISE EXCEPTION 'Puntuación incompleta o fuera de rango (12 regiones, de 0 al máximo, pasos de 0,5)' USING ERRCODE = '23514';
   END IF;
   NEW.inspector_id := auth.uid();
   NEW.total := (SELECT sum(value::numeric) FROM jsonb_each_text(NEW.puntos));
   NEW.clase := public.clase_de(NEW.total, jsonb_array_length(NEW.defectos) > 0);
   NEW.resultado := CASE WHEN NEW.clase IN ('EX', 'MB', 'B', 'R') THEN 'Apto' ELSE 'No apto' END;
   SELECT * INTO a FROM public.animales WHERE id = NEW.animal_id;
+  -- Estándar ESGA025: gallo 3000–3500 g, gallina 2200–2600 g
+  NEW.peso_conforme := CASE a.sexo WHEN 'M' THEN NEW.peso_g BETWEEN 3000 AND 3500
+                                   WHEN 'H' THEN NEW.peso_g BETWEEN 2200 AND 2600 END;
   IF NEW.resultado = 'Apto' AND a.seccion = 'RN'
      AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND current_date - a.fecha_nacimiento >= 180 THEN
     PERFORM set_config('alacantina.promocion', 'si', true);

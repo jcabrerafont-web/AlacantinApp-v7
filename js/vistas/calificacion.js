@@ -1,4 +1,4 @@
-// Calificación morfológica: baremo de 100 puntos en 13 apartados (inspector / administrador)
+// Calificación morfológica: baremo de 100 puntos en las 12 regiones del Estándar (inspector / administrador)
 import * as datos from '../datos.js';
 import { ESTANDAR, BAREMO, evaluarCalificacion, nombreVariedad, sexoTexto, variedadPorId, pesoConforme } from '../estandar.js';
 import * as docs from '../documentos.js';
@@ -17,15 +17,15 @@ export default function (main, { id }) {
     <p><a href="#/animal/${a.id}">← ${a.anilla}</a></p>
     <h1>Calificación de ${a.anilla}</h1>
     <p class="muted">${sexoTexto(a.sexo)} · ${nombreVariedad(a.variedad)} · ${a.seccion}</p>
-    <div class="aviso-caja info peq">Baremo en fase de <strong>propuesta</strong>: ${BAREMO.fuente}. Clases: ${BAREMO.clases.map(c => `${c.id} ≥ ${c.min}`).join(' · ')}.</div>
+    <div class="aviso-caja info peq">Baremo en fase de <strong>propuesta</strong>, pendiente de ratificar por la Dirección Técnica. Clases: ${BAREMO.clases.map(c => `${c.id} ≥ ${c.min}`).join(' · ')}.</div>
     ${!v?.oficial ? h`<div class="aviso-caja aviso">Variedad en proceso de reconocimiento: la calificación queda registrada, pero no da acceso al Registro Definitivo.</div>` : ''}
     <form id="form-cal" novalidate>
       <div class="tarjeta marcador" aria-live="polite"><div><b id="c-total">0</b> <span class="muted">/ 100</span></div><span id="c-clase" class="chip">—</span></div>
       <fieldset class="tarjeta"><legend>Defectos descalificantes del Estándar</legend>
         ${defectosAplicables.map(d => h`<label class="check-grande"><input type="checkbox" name="defecto" value="${d.id}"> ${d.texto}</label>`)}
       </fieldset>
-      <div class="tarjeta"><h2>Apartados (Estándar ${ESTANDAR.codigo})</h2>
-        <p class="muted peq">Puntúa cada apartado de 0 a su máximo, en pasos de 0,5. Pulsa sobre el nombre para ver el texto del Estándar para ${a.sexo === 'M' ? 'el gallo' : 'la gallina'}.</p>
+      <div class="tarjeta"><h2>Regiones (Estándar ${ESTANDAR.codigo})</h2>
+        <p class="muted peq">Puntúa cada región de 0 a su máximo, en pasos de 0,5. Pulsa sobre el nombre para ver el texto del Estándar para ${a.sexo === 'M' ? 'el gallo' : 'la gallina'}.</p>
         ${BAREMO.apartados.map((x, i) => h`<div class="region" data-apartado="${x.id}">
           <div class="region-cab">
             <details style="flex:1"><summary><strong>${i + 1}. ${x.nombre}</strong></summary>
@@ -38,11 +38,11 @@ export default function (main, { id }) {
             </div>
           </div>
         </div>`)}
-        <button type="button" class="btn btn-pequeno" id="todo-max">Poner el máximo en los apartados vacíos</button>
+        <button type="button" class="btn btn-pequeno" id="todo-max">Poner el máximo en las regiones vacías</button>
       </div>
       <div class="tarjeta">
-        <div class="campo"><label for="c-peso">Peso en báscula (g)</label>
-          <input id="c-peso" type="number" inputmode="numeric" min="30" max="6000" value="${a.peso_g ?? ''}">
+        <div class="campo"><label for="c-peso">Peso en báscula (g) <span class="muted">· obligatorio</span></label>
+          <input id="c-peso" type="number" inputmode="numeric" min="30" max="6000" required>
           <p class="ayuda" id="c-peso-ayuda"></p></div>
         <div class="campo"><label for="c-obs">Observaciones</label><textarea id="c-obs"></textarea></div>
         <div id="c-resumen" class="aviso-caja info"></div>
@@ -64,7 +64,7 @@ export default function (main, { id }) {
     BAREMO.apartados.forEach(x => f.querySelector(`[data-apartado="${x.id}"]`).classList.toggle('invalido', ev.invalidos.includes(x.id)));
     $('#c-total', f).textContent = coma(ev.total);
     const chip = $('#c-clase', f);
-    chip.textContent = ev.completa || ev.clase === 'D' ? `${ev.clase} · ${ev.claseNombre}` : `${BAREMO.apartados.length - ev.sinPuntuar.length}/${BAREMO.apartados.length} apartados`;
+    chip.textContent = ev.completa || ev.clase === 'D' ? `${ev.clase} · ${ev.claseNombre}` : `${BAREMO.apartados.length - ev.sinPuntuar.length}/${BAREMO.apartados.length} regiones`;
     chip.className = `chip ${ev.clase === 'D' ? 'chip-alerta' : !ev.completa ? '' : ev.resultado === 'Apto' ? 'chip-ok' : 'chip-aviso'}`;
     const r = ESTANDAR.peso[a.sexo];
     const conf = pesoConforme(a.sexo, l.pesoG);
@@ -72,7 +72,7 @@ export default function (main, { id }) {
     const box = $('#c-resumen', f);
     box.className = `aviso-caja ${ev.clase === 'D' ? 'alerta' : !ev.completa ? 'info' : ev.resultado === 'Apto' ? 'ok' : 'aviso'}`;
     box.textContent = !ev.completa && ev.clase !== 'D'
-      ? `Faltan ${ev.sinPuntuar.length} apartado(s)${ev.invalidos.length ? ` y hay ${ev.invalidos.length} fuera de rango` : ''}.`
+      ? `Faltan ${ev.sinPuntuar.length} región(es)${ev.invalidos.length ? ` y hay ${ev.invalidos.length} fuera de rango` : ''}.`
       : `Total ${coma(ev.total)} · ${ev.claseNombre} · Resultado: ${ev.resultado}${ev.resultado === 'Apto' && !ev.accedeRD ? ' (sin acceso a RD)' : ''}` +
         (ev.motivos.length ? ` · ${ev.motivos.join(' · ')}` : '');
     f.dataset.sucio = '1';
@@ -108,8 +108,9 @@ export default function (main, { id }) {
     e.preventDefault();
     const l = leer();
     const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, ...l });
-    if (!ev.completa) { aviso(ev.invalidos.length ? 'Hay puntuaciones fuera de rango.' : `Faltan ${ev.sinPuntuar.length} apartado(s) por puntuar.`, 'error'); return; }
-    if (!(await confirmar('Cerrar ficha', `${coma(ev.total)} puntos · ${ev.claseNombre} · ${ev.resultado}. La ficha no se puede modificar después.`, 'Cerrar ficha'))) return;
+    if (!ev.completa) { aviso(ev.invalidos.length ? 'Hay puntuaciones fuera de rango.' : `Faltan ${ev.sinPuntuar.length} región(es) por puntuar.`, 'error'); return; }
+    if (ev.pesoConforme === null) { aviso('Pesa al animal y anota el peso en gramos.', 'error'); $('#c-peso', f).focus(); return; }
+    if (!(await confirmar('Cerrar ficha', `${coma(ev.total)} puntos · ${ev.claseNombre} · ${ev.resultado}. Peso ${l.pesoG} g (${ev.pesoConforme ? 'conforme' : 'fuera del rango del Estándar'}). La ficha no se puede modificar después.`, 'Cerrar ficha'))) return;
     try {
       const c = await datos.guardarCalificacion({ animalId: a.id, ...l, observaciones: $('#c-obs', f).value.trim(), posicion });
       f.dataset.sucio = '';
