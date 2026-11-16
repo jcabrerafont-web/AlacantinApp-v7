@@ -199,3 +199,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .doc-firmas div { border-top: 1px solid #000; padding-top: 4pt; font-size: 9pt; }
   .doc-pie { margin-top: 18pt; font-size: 8pt; color: #475569; }
 }
+
+/* Baremo de calificación (100 puntos) */
+.puntos { display: inline-flex; align-items: center; gap: .25rem; flex-shrink: 0; }
+.puntos input { width: 4.2rem; min-height: 44px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.puntos button { min-width: 44px; min-height: 44px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); color: var(--texto); font-size: 1.1rem; font-weight: 700; cursor: pointer; }
+.puntos .max { color: var(--texto-2); font-size: .8rem; min-width: 2.2rem; }
+.region.invalido { border-color: var(--rojo); }
+.marcador { position: sticky; top: 64px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.marcador b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }

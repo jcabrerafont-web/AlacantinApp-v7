@@ -147,32 +147,94 @@ export function tramoEdad(fechaNacimiento, hoy = new Date()) {
   return REGLAS.tramosEdadMeses.find(t => m < t.hasta) || REGLAS.tramosEdadMeses.at(-1);
 }
 
-// Evalúa una ficha de conformidad.
-// regiones: { [regionId]: { conforme: boolean, nota?: string } }
-// defectos: Set|Array de ids de defectos graves observados
-export function evaluarConformidad({ sexo, variedad, pesoG, regiones = {}, defectos = [] }) {
+// ============================================================================
+// BAREMO DE CALIFICACIÓN MORFOLÓGICA — PROPUESTA
+// El Estándar ESGA025 no fija baremo. Se adopta el modelo del programa de cría
+// oficial de la Castellana Negra (MAPA, Resol. 9/8/2018, BOE 15/02/2019):
+// 100 puntos en 13 apartados, clases EX/MB/B/R/I y descalificación por defecto
+// grave. Los textos de cada apartado son los del Estándar de la Alacantina.
+// Pendiente de aprobación en el programa de cría de la Asociación.
+// ============================================================================
+const R = Object.fromEntries(ESTANDAR.regiones.map(r => [r.id, r]));
+export const BAREMO = Object.freeze({
+  estado: 'propuesta',
+  fuente: 'Modelo del programa de cría de la Castellana Negra (BOE 15/02/2019), adaptado al Estándar ESGA025',
+  apartados: Object.freeze([
+    { id: 'tipo', nombre: 'Tipo general', max: 10, gallo: ESTANDAR.impresionGeneral, gallina: ESTANDAR.impresionGeneral, defectos: [] },
+    { id: 'cresta', nombre: 'Cresta', max: 10, gallo: R.cresta.gallo, gallina: R.cresta.gallina, defectos: [] },
+    { id: 'pico', nombre: 'Pico', max: 5, gallo: 'Medio y ligeramente curvado. Color según la variedad.', gallina: 'Medio y ligeramente curvado. Color según la variedad.', defectos: [] },
+    { id: 'cara', nombre: 'Cara', max: 4, gallo: 'Lisa y de color rojo.', gallina: 'Lisa y de color rojo.', defectos: [] },
+    { id: 'ojos', nombre: 'Ojos', max: 3, gallo: 'Grandes, con el iris color anaranjado.', gallina: 'Grandes, con el iris color anaranjado.', defectos: [] },
+    { id: 'orejillas', nombre: 'Orejillas', max: 10, gallo: R.orejillas.gallo, gallina: R.orejillas.gallina, defectos: ['orejilla'] },
+    { id: 'barbillas', nombre: 'Barbillas', max: 5, gallo: R.barbillas.gallo, gallina: R.barbillas.gallina, defectos: [] },
+    { id: 'cuello', nombre: 'Cuello y esclavina', max: 5, gallo: R.cuello.gallo, gallina: R.cuello.gallina, defectos: ['flameado'] },
+    { id: 'tronco', nombre: 'Tronco, dorso y pecho', max: 10,
+      gallo: `${R.tronco.gallo.replace(/^.*?\. /, '')} Dorso: ${R.dorso.gallo.toLowerCase()} ${R.pecho.gallo}`,
+      gallina: `Dorso ${R.dorso.gallina.toLowerCase()} ${R.pecho.gallina}`, defectos: ['pecho'] },
+    { id: 'cola', nombre: 'Cola (desarrollo y posición)', max: 10, gallo: R.cola.gallo, gallina: R.cola.gallina, defectos: ['cola'] },
+    { id: 'alas', nombre: 'Alas', max: 5, gallo: R.alas.gallo, gallina: R.alas.gallina, defectos: [] },
+    { id: 'patas', nombre: 'Patas (forma y color)', max: 8, gallo: R.extremidades.gallo, gallina: R.extremidades.gallina, defectos: ['tarsos'] },
+    { id: 'plumaje', nombre: 'Color del plumaje', max: 15, gallo: 'Plumaje ceñido; color según la descripción de la variedad.', gallina: 'Plumaje ceñido; color según la descripción de la variedad.', defectos: [] }
+  ].map(x => Object.freeze({ ...x, defectos: Object.freeze(x.defectos) }))),
+  // Clases por puntuación total (límite inferior incluido)
+  clases: Object.freeze([
+    Object.freeze({ id: 'EX', nombre: 'Excelente', min: 90 }),
+    Object.freeze({ id: 'MB', nombre: 'Muy bueno', min: 80 }),
+    Object.freeze({ id: 'B', nombre: 'Bueno', min: 70 }),
+    Object.freeze({ id: 'R', nombre: 'Regular', min: 65 }),
+    Object.freeze({ id: 'I', nombre: 'Insuficiente', min: 0 })
+  ]),
+  descalificado: Object.freeze({ id: 'D', nombre: 'Descalificado' }),
+  // Clases que se admiten en el Libro (en el modelo GANECA: EX, MB, B y R)
+  clasesAptas: Object.freeze(['EX', 'MB', 'B', 'R']),
+  paso: 0.5
+});
+
+export const claseDe = (total) => BAREMO.clases.find(c => total >= c.min) || BAREMO.clases.at(-1);
+export const nombreClase = (id) => (id === 'D' ? BAREMO.descalificado.nombre : BAREMO.clases.find(c => c.id === id)?.nombre || id || '—');
+
+// Normaliza una puntuación: número entre 0 y max, en pasos de 0,5. null si no es válida.
+export function puntoValido(valor, max) {
+  const n = typeof valor === 'string' ? Number(valor.replace(',', '.')) : Number(valor);
+  if (valor === '' || valor === null || valor === undefined || !Number.isFinite(n)) return null;
+  if (n < 0 || n > max || Math.round(n / BAREMO.paso) * BAREMO.paso !== n) return null;
+  return n;
+}
+
+// Evalúa una calificación morfológica.
+// puntos: { [apartadoId]: number }   defectos: ids de defectos graves observados
+export function evaluarCalificacion({ sexo, variedad, pesoG, puntos = {}, defectos = [] }) {
   const v = variedadPorId(variedad);
   const graves = [...new Set(defectos)].filter(id => {
     const d = ESTANDAR.defectosGraves.find(x => x.id === id);
     if (!d) return false;
     return !(d.soloVariedadesFlameado && !v?.flameadoDescalifica);
   });
-  const noConformes = ESTANDAR.regiones.filter(r => regiones[r.id] && regiones[r.id].conforme === false).map(r => r.id);
-  const sinEvaluar = ESTANDAR.regiones.filter(r => !regiones[r.id] || typeof regiones[r.id].conforme !== 'boolean').map(r => r.id);
-  const peso = pesoConforme(sexo, pesoG);
+  const invalidos = [];
+  const sinPuntuar = [];
+  let total = 0;
+  for (const a of BAREMO.apartados) {
+    const bruto = puntos[a.id];
+    if (bruto === undefined || bruto === null || bruto === '') { sinPuntuar.push(a.id); continue; }
+    const n = puntoValido(bruto, a.max);
+    if (n === null) invalidos.push(a.id); else total += n;
+  }
+  const completa = sinPuntuar.length === 0 && invalidos.length === 0;
+  const clase = graves.length ? BAREMO.descalificado : claseDe(total);
+  const apto = completa && BAREMO.clasesAptas.includes(clase.id);
   const motivos = [];
   graves.forEach(id => motivos.push(ESTANDAR.defectosGraves.find(d => d.id === id).texto));
+  if (!graves.length && completa && !apto) motivos.push(`Puntuación inferior a ${BAREMO.clases.find(c => c.id === 'R').min}`);
   if (!v) motivos.push('Variedad no registrada');
   else if (!v.oficial) motivos.push(`Variedad «${v.nombre}» en proceso de reconocimiento`);
   return {
-    completa: sinEvaluar.length === 0,
-    sinEvaluar,
-    noConformes,
+    completa, sinPuntuar, invalidos,
+    total: Math.round(total * 2) / 2,
+    clase: clase.id, claseNombre: clase.nombre,
     defectosGraves: graves,
-    pesoConforme: peso,
-    // Propuesta automática; el inspector la confirma o la modifica razonadamente
-    propuesta: graves.length > 0 ? 'No apto' : 'Apto',
-    accedeRD: graves.length === 0 && Boolean(v?.oficial),
+    pesoConforme: pesoConforme(sexo, pesoG),
+    resultado: apto ? 'Apto' : 'No apto',
+    accedeRD: apto && Boolean(v?.oficial),
     motivos
   };
 }

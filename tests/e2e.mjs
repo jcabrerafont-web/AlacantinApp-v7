@@ -115,22 +115,38 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a');
 const idH1 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E 0002').id);
 await ir(`#/calificar/${idH1}`);
-await page.click('#todo-conforme');
+ok((await page.$$('#form-cal [data-apartado]')).length === 13, 'Baremo: 13 apartados');
+await page.click('#form-cal button[type=submit]');
+ok((await aviso()).includes('Faltan 13'), `Calificación incompleta bloqueada (${await aviso()})`);
+await page.click('#todo-max');
+ok((await page.textContent('#c-total')) === '100' && (await page.textContent('#c-clase')).includes('EX'), 'Máximo en todo: 100 · EX');
+// Descontar: plumaje 15 -> 12, cola 10 -> 8,5
+for (let i = 0; i < 6; i++) await page.click('[data-apartado="plumaje"] button[data-paso="-1"]');
+await page.fill('[name="p-cola"]', '8,5');
+await page.dispatchEvent('[name="p-cola"]', 'input');
+ok((await page.textContent('#c-total')) === '95,5', `Total con descuentos y coma decimal (${await page.textContent('#c-total')})`);
+if (process.env.CAPTURAS) { await page.screenshot({ path: `${process.env.CAPTURAS}/calificacion-arriba.png` }); await page.$eval('[data-apartado="tronco"]', e => e.scrollIntoView()); await page.screenshot({ path: `${process.env.CAPTURAS}/calificacion-medio.png` }); }
+await page.fill('[name="p-ojos"]', '4');
+await page.dispatchEvent('[name="p-ojos"]', 'input');
+ok(await page.$eval('[data-apartado="ojos"]', e => e.classList.contains('invalido')), 'Puntuación por encima del máximo marcada');
+await page.fill('[name="p-ojos"]', '3');
+await page.dispatchEvent('[name="p-ojos"]', 'input');
 await page.fill('#c-peso', '2400');
 await page.evaluate(() => { window.print = () => { window.__impreso = true; }; });
 await page.click('#form-cal button[type=submit]');
 await page.click('dialog button[value="si"]');
 await page.waitForTimeout(800);
 const sec = await page.evaluate(async id => (await import('./js/datos.js')).animal(id).seccion, idH1);
-ok(sec === 'RD', `Calificación Apto promociona RN → RD (${sec})`);
-ok(await page.evaluate(() => window.__impreso === true && document.querySelector('#impresion').innerText.includes('Acta de calificación')), 'Acta generada para imprimir');
+ok(sec === 'RD', `Calificación EX (Apto) promociona RN → RD (${sec})`);
+ok(await page.evaluate(() => window.__impreso === true && document.querySelector('#impresion').innerText.includes('95,5')), 'Acta con desglose de puntos generada');
 const conDefecto = await page.evaluate(async id => {
   const d = await import('./js/datos.js');
-  const { ESTANDAR } = await import('./js/estandar.js');
-  const regiones = Object.fromEntries(ESTANDAR.regiones.map(r => [r.id, { conforme: true }]));
-  try { await d.guardarCalificacion({ animalId: id, regiones, defectos: ['orejilla'], resultado: 'Apto' }); return 'aceptado'; } catch (e) { return e.message; }
+  const { BAREMO } = await import('./js/estandar.js');
+  const puntos = Object.fromEntries(BAREMO.apartados.map(x => [x.id, x.max]));
+  const c = await d.guardarCalificacion({ animalId: id, puntos, defectos: ['orejilla'] });
+  return `${c.total}/${c.clase}/${c.resultado}`;
 }, idH1);
-ok(conDefecto.includes('no puede ser Apto'), 'Defecto grave impide Apto');
+ok(conDefecto === '100/D/No apto', `Defecto descalificante: descalificado aunque sume 100 (${conDefecto})`);
 
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {

@@ -77,8 +77,8 @@ export default function (main, { id }) {
 
       ${verPrivado ? h`<div class="tarjeta"><h2>Calificaciones</h2>
         ${califs.length ? h`<ul class="lista">${califs.map(c => h`<li class="item"><div class="item-principal">
-          <div class="item-titulo">${c.resultado} · ${fecha(c.fecha)}</div>
-          <div class="item-sub">${c.inspector_nombre}${c.defectos?.length ? ` · ${c.defectos.length} defecto(s) grave(s)` : ''}</div></div>
+          <div class="item-titulo">${c.clase ?? '—'} · ${c.total === undefined || c.total === null ? "—" : String(c.total).replace(".", ",")} puntos · ${c.resultado} · ${fecha(c.fecha)}</div>
+          <div class="item-sub">${c.inspector_nombre}${c.defectos?.length ? ` · ${c.defectos.length} defecto(s) descalificante(s)` : ''}</div></div>
           <button class="btn btn-pequeno" data-acta="${c.id}">Acta</button></li>`)}</ul>`
           : h`<p class="muted">Sin calificar. ${propio ? 'La califica un inspector del Club en visita al aviario.' : ''}</p>`}</div>` : ''}
 

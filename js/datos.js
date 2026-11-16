@@ -5,7 +5,7 @@
 // ============================================================================
 import * as db from './db.js';
 import * as sync from './sync.js';
-import { ESTANDAR, REGLAS, variedadPorId, evaluarConformidad, huevoApto, edadMeses } from './estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses } from './estandar.js';
 import { indice, fxAnimal, creaCiclo } from './genetica.js';
 import { esAuditor } from './auth.js';
 import { uuid } from './ui.js';
@@ -196,24 +196,24 @@ export function resumenPuesta(animalId, desde = null, hasta = null) {
 }
 
 // ---------------------------------------------------------------------------
-// Calificación (ficha de conformidad con el Estándar) — solo inspectores
+// Calificación morfológica (baremo de 100 puntos) — solo inspectores
+// El resultado y la clase se calculan; el inspector no puede forzarlos.
 // ---------------------------------------------------------------------------
-export async function guardarCalificacion({ animalId, regiones, defectos, pesoG, resultado, observaciones, posicion }) {
+export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, observaciones, posicion }) {
   const p = estado.perfil;
   if (!esAuditor(p?.rol)) throw new Error('La calificación oficial corresponde a un inspector acreditado.');
   const a = estado.idx.get(animalId);
   if (!a) throw new Error('Ejemplar no encontrado.');
-  const ev = evaluarConformidad({ sexo: a.sexo, variedad: a.variedad, pesoG, regiones, defectos });
-  if (!ev.completa) throw new Error('Evalúa las 12 regiones antes de cerrar la ficha.');
-  if (ev.defectosGraves.length && resultado === 'Apto') throw new Error('Con un defecto grave el resultado no puede ser Apto.');
-  if (resultado === 'No apto' && ev.defectosGraves.length === 0 && !String(observaciones || '').trim()) {
-    throw new Error('Justifica en observaciones el resultado No apto sin defectos graves.');
-  }
+  const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, pesoG, puntos, defectos });
+  if (ev.invalidos.length) throw new Error('Hay puntuaciones fuera de rango (de 0 al máximo del apartado, en pasos de 0,5).');
+  if (!ev.completa) throw new Error(`Puntúa los ${BAREMO.apartados.length} apartados antes de cerrar la ficha.`);
+  const limpios = Object.fromEntries(BAREMO.apartados.map(x => [x.id, puntoValido(puntos[x.id], x.max)]));
   const c = {
     id: uuid(), animal_id: a.id, inspector_id: p.id, inspector_nombre: p.nombre || p.email,
-    fecha: new Date().toISOString().slice(0, 10), regiones, defectos: ev.defectosGraves,
+    fecha: new Date().toISOString().slice(0, 10), puntos: limpios, total: ev.total, clase: ev.clase,
+    defectos: ev.defectosGraves,
     peso_g: pesoG ? Math.round(Number(pesoG)) : null, peso_conforme: ev.pesoConforme,
-    resultado, observaciones: observaciones || '',
+    resultado: ev.resultado, observaciones: observaciones || '',
     latitud: posicion?.latitud ?? null, longitud: posicion?.longitud ?? null,
     created_at: new Date().toISOString()
   };
@@ -221,8 +221,7 @@ export async function guardarCalificacion({ animalId, regiones, defectos, pesoG,
   await sync.encolar('calificaciones', 'upsert', c);
   // Promoción RN -> RD (la confirma también el trigger del servidor)
   const meses = edadMeses(a.fecha_nacimiento);
-  if (resultado === 'Apto' && ev.accedeRD && a.seccion === 'RN' && meses !== null &&
-      meses * 30.44 >= REGLAS.edadMinimaRD_dias) {
+  if (ev.accedeRD && a.seccion === 'RN' && meses !== null && meses * 30.44 >= REGLAS.edadMinimaRD_dias) {
     const promovido = { ...a, seccion: 'RD', updated_at: new Date().toISOString() };
     await db.guardar('animales', promovido);
   }

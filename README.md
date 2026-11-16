@@ -29,11 +29,14 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Gallo: 3,000–3,500 kg, anilla de 20 mm.
   - Gallina: 2,200–2,600 kg, anilla de 18 mm.
 - **Huevo:** de 55 a 70 g con cáscara blanco crema. Cada huevo se pesa y se registra por separado.
-- **Calificación morfológica:**
-  - Es una **ficha de conformidad** con el Estándar: 12 regiones que reproducen literalmente el texto oficial para el gallo y la gallina, marcadas como conforme o no conforme, más los 5 **defectos graves**.
-  - Un defecto grave implica «No apto»; en el flameado de esclavina, solo en las variedades moteada y exchequer.
-  - El Estándar, el Protocolo CNZ y el RD 45/2019 **no contienen un baremo de 100 puntos**: el RD remite al programa de cría de la raza. Si el Club aprueba un baremo con puntos, se añade en `js/estandar.js`.
-- **Registro Definitivo:** se alcanza con resultado Apto, sin defectos graves, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
+- **Calificación morfológica (baremo de 100 puntos, en fase de propuesta):**
+  - El Estándar ESGA025 no fija baremo. Se adopta el modelo del programa de cría oficial de la Castellana Negra (MAPA, Resol. 9/8/2018, BOE 15/02/2019), con los textos del Estándar de la Alacantina en cada apartado.
+  - 13 apartados: tipo general 10, cresta 10, pico 5, cara 4, ojos 3, orejillas 10, barbillas 5, cuello y esclavina 5, tronco/dorso/pecho 10, cola 10, alas 5, patas 8 y color del plumaje 15. Se puntúa de 0 al máximo en pasos de 0,5.
+  - Clases: **EX** ≥ 90 · **MB** ≥ 80 · **B** ≥ 70 · **R** ≥ 65 · **I** < 65. Cualquiera de los 5 defectos descalificantes del Estándar da **D (descalificado)**, sume lo que sume; el flameado de esclavina solo cuenta en las variedades moteada y exchequer.
+  - Resultado **Apto** con clase EX, MB, B o R. El inspector no elige el resultado: lo calcula la app y lo **recalcula el servidor** a partir de los puntos.
+  - Todo está en `BAREMO` (`js/estandar.js`) y en las funciones `baremo_maximos()` y `clase_de()` del esquema SQL. Si el programa de cría aprobado cambia pesos o límites, hay que actualizar ambos sitios.
+  - La Guía de Campo y la vista del Estándar mantienen las 12 regiones descriptivas del texto oficial.
+- **Registro Definitivo:** se alcanza con resultado Apto, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales: precaución a partir del 6,25 % y alerta a partir del 12,5 % (configurables).

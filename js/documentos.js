@@ -3,7 +3,7 @@
 // Se maquetan en #impresion y se imprimen con el diálogo del sistema
 // ("Guardar como PDF"). Sin ventanas emergentes ni librerías externas.
 // ============================================================================
-import { ESTANDAR, nombreVariedad, sexoTexto, evaluarConformidad } from './estandar.js';
+import { ESTANDAR, BAREMO, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
 import { ancestros, fxAnimal } from './genetica.js';
 import { h, pintar, fecha, kg, pct } from './ui.js';
 
@@ -61,30 +61,32 @@ export function certificado(a, { idx, titular, ultimaCalificacion }) {
       <tr><td></td><td></td>${celda('MMM', 'Bisabuela')}</tr>
     </tbody></table>
     <h2>Calificación morfológica</h2>
-    ${ultimaCalificacion ? h`<p>${fecha(ultimaCalificacion.fecha)} · ${ultimaCalificacion.inspector_nombre} · Resultado: <strong>${ultimaCalificacion.resultado}</strong></p>`
+    ${ultimaCalificacion ? h`<p>${fecha(ultimaCalificacion.fecha)} · ${ultimaCalificacion.inspector_nombre} · <strong>${String(ultimaCalificacion.total).replace(".", ",")} puntos · ${ultimaCalificacion.clase} (${nombreClase(ultimaCalificacion.clase)})</strong> · ${ultimaCalificacion.resultado}</p>`
       : h`<p>Sin calificación registrada.</p>`}
     <div class="doc-firmas"><div>Firma del titular</div><div>Firma y sello de la Dirección Técnica del Libro Genealógico</div></div>
     <p class="doc-pie">Documento generado por AlacantinApp a partir de los registros del Libro Genealógico. La referencia identifica de forma única el contenido certificado. Solo es válido con la firma de la Dirección Técnica.</p>`);
 }
 
 export function acta(a, c, titular) {
-  const ev = evaluarConformidad({ sexo: a.sexo, variedad: a.variedad, pesoG: c.peso_g, regiones: c.regiones, defectos: c.defectos });
-  const ref = `AC-${ESTANDAR.codigo}-${huella([c.id, a.id, c.resultado, c.fecha].join('|'))}`;
+  const ref = `AC-${ESTANDAR.codigo}-${huella([c.id, a.id, c.total, c.clase, c.resultado, c.fecha].join('|'))}`;
+  const pc = c.peso_conforme ?? pesoConforme(a.sexo, c.peso_g);
+  const num = (n) => (n === null || n === undefined ? '—' : String(n).replace('.', ','));
   imprimir(h`
     ${cabecera('Acta de calificación morfológica', ref)}
     <p><strong>Ejemplar:</strong> ${a.anilla} · ${sexoTexto(a.sexo)} · ${nombreVariedad(a.variedad)} · nacido el ${fecha(a.fecha_nacimiento)}<br>
       <strong>Titular:</strong> ${titular?.nombre || '—'} · REGA ${a.rega || '—'}<br>
       <strong>Inspector:</strong> ${c.inspector_nombre} · <strong>Fecha:</strong> ${fecha(c.fecha)}
       ${c.latitud ? h` · <strong>Lugar (GPS):</strong> ${Number(c.latitud).toFixed(5)}, ${Number(c.longitud).toFixed(5)}` : ''}</p>
-    <h2>Conformidad con el Estándar por regiones</h2>
-    <table><thead><tr><th>Región</th><th>Resultado</th><th>Observación</th></tr></thead><tbody>
-      ${ESTANDAR.regiones.map(r => h`<tr><td>${r.nombre}</td><td>${c.regiones?.[r.id]?.conforme === false ? 'No conforme' : 'Conforme'}</td><td>${c.regiones?.[r.id]?.nota || ''}</td></tr>`)}
-      <tr><td>Peso</td><td>${ev.pesoConforme === null ? 'No medido' : ev.pesoConforme ? 'Conforme' : 'Fuera de rango'}</td><td>${c.peso_g ? `${c.peso_g} g` : ''}</td></tr>
+    <h2>Valoración morfológica (100 puntos)</h2>
+    <table><thead><tr><th>Apartado</th><th class="num">Máx.</th><th class="num">Puntos</th></tr></thead><tbody>
+      ${BAREMO.apartados.map(x => h`<tr><td>${x.nombre}</td><td class="num">${x.max}</td><td class="num">${num(c.puntos?.[x.id])}</td></tr>`)}
+      <tr><th>Total</th><th class="num">100</th><th class="num">${num(c.total)}</th></tr>
     </tbody></table>
-    <h2>Defectos graves</h2>
+    <p><strong>Peso:</strong> ${c.peso_g ? `${c.peso_g} g` : 'no medido'}${pc === null || pc === undefined ? '' : pc ? ' (conforme al Estándar)' : ' (fuera del rango del Estándar)'}</p>
+    <h2>Defectos descalificantes</h2>
     <p>${c.defectos?.length ? c.defectos.map(id => ESTANDAR.defectosGraves.find(d => d.id === id)?.texto).join(' · ') : 'No se observan.'}</p>
-    <h2>Resultado: ${c.resultado}</h2>
+    <h2>Clase: ${c.clase} · ${nombreClase(c.clase)} — Resultado: ${c.resultado}</h2>
     ${c.observaciones ? h`<p>${c.observaciones}</p>` : ''}
     <div class="doc-firmas"><div>Firma del inspector: ${c.inspector_nombre}</div><div>Enterado, el titular: ${titular?.nombre || ''}</div></div>
-    <p class="doc-pie">Ficha de conformidad con el Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision}). El acceso al Registro Definitivo exige resultado Apto, variedad oficial y edad mínima según las normas del Libro.</p>`);
+    <p class="doc-pie">Baremo en fase de propuesta (${BAREMO.fuente}). Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Se admiten en el Libro las clases ${BAREMO.clasesAptas.join(', ')}. El acceso al Registro Definitivo exige además variedad oficial y edad mínima según las normas del Libro.</p>`);
 }

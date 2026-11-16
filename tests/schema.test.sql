@@ -41,8 +41,8 @@ INSERT INTO huevos (id, animal_id, usuario_id, fecha, peso_g, cascara) VALUES
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), current_date, 60.0, 'Tostada');
 SELECT peso_g, cascara, apto FROM huevos ORDER BY peso_g;
 \echo '== 7. El criador no puede calificar (esperado: error 42501)'
-INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, regiones, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'yo', '{"a":1,"b":1,"c":1,"d":1,"e":1,"f":1,"g":1,"h":1,"i":1,"j":1,"k":1,"l":1}', 'Apto');
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'yo', '{"tipo":10,"cresta":10,"pico":5,"cara":4,"ojos":3,"orejillas":10,"barbillas":5,"cuello":5,"tronco":10,"cola":10,"alas":5,"patas":8,"plumaje":15}', 100, 'EX', 'Apto');
 RESET ROLE;
 
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
@@ -62,13 +62,24 @@ RESET ROLE;
 SELECT string_agg(column_name, ', ' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = 'censo_publico';
 
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
-\echo '== 10. Inspector: 12 regiones obligatorias; defecto grave impide Apto; Apto promociona RN->RD (>=180 días)'
-INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, regiones, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"a":1}', 'Apto');
-INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, regiones, defectos, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"a":1,"b":1,"c":1,"d":1,"e":1,"f":1,"g":1,"h":1,"i":1,"j":1,"k":1,"l":1}', '["orejilla"]', 'Apto');
-INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, regiones, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"a":1,"b":1,"c":1,"d":1,"e":1,"f":1,"g":1,"h":1,"i":1,"j":1,"k":1,"l":1}', 'Apto');
+\echo '== 10. Inspector: 13 apartados obligatorios y en rango; el servidor recalcula total/clase/resultado; Apto promociona RN->RD (>=180 días)'
+\echo '   10a incompleto (esperado: error 23514)'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tipo":10}', 100, 'EX', 'Apto');
+\echo '   10b apartado por encima del máximo (esperado: error 23514)'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tipo":11,"cresta":10,"pico":5,"cara":4,"ojos":3,"orejillas":10,"barbillas":5,"cuello":5,"tronco":10,"cola":10,"alas":5,"patas":8,"plumaje":15}', 100, 'EX', 'Apto');
+\echo '   10c cliente miente (100 con 58 puntos reales) -> servidor guarda 58 / I / No apto'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tipo":5,"cresta":5,"pico":3,"cara":2,"ojos":2,"orejillas":6,"barbillas":3,"cuello":3,"tronco":6,"cola":6,"alas":3,"patas":5,"plumaje":9}', 100, 'EX', 'Apto');
+\echo '   10d 100 puntos con defecto grave -> D / No apto'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, defectos, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tipo":10,"cresta":10,"pico":5,"cara":4,"ojos":3,"orejillas":10,"barbillas":5,"cuello":5,"tronco":10,"cola":10,"alas":5,"patas":8,"plumaje":15}', 100, 'EX', '["orejilla"]', 'Apto');
+SELECT anilla, seccion AS seccion_tras_no_aptos FROM animales WHERE anilla = 'H1';
+\echo '   10e 82,5 puntos -> MB / Apto y promoción a RD'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tipo":8,"cresta":8.5,"pico":4,"cara":3,"ojos":3,"orejillas":9,"barbillas":4,"cuello":4,"tronco":8,"cola":8,"alas":4,"patas":7,"plumaje":12}', 0, 'I', 'No apto');
+SELECT total, clase, resultado FROM calificaciones ORDER BY created_at, total;
 SELECT anilla, seccion FROM animales WHERE anilla = 'H1';
 \echo '== 11. Calificación cerrada no modificable (esperado: 0 filas)'
 UPDATE calificaciones SET resultado = 'No apto';

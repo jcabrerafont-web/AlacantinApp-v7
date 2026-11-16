@@ -1,7 +1,7 @@
 // Pruebas unitarias: node tests/genetica.test.mjs
 import assert from 'node:assert/strict';
 import { fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
-import { evaluarConformidad, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
+import { evaluarCalificacion, claseDe, puntoValido, BAREMO, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
 
 let ok = 0;
 const t = (nombre, fn) => { fn(); ok++; console.log('✓', nombre); };
@@ -70,15 +70,40 @@ t('Tramos de edad', () => {
   assert.equal(tramoEdad('2026-01-10', hoy).id, 'joven');
   assert.equal(tramoEdad('2024-05-01', hoy).id, 'adulto');
 });
-t('Conformidad: defecto grave → No apto; flameado no cuenta en Blanca', () => {
-  const todas = Object.fromEntries(ESTANDAR.regiones.map(r => [r.id, { conforme: true }]));
-  const e1 = evaluarConformidad({ sexo: 'M', variedad: 'negra-moteada', pesoG: 3200, regiones: todas, defectos: ['flameado'] });
-  assert.equal(e1.propuesta, 'No apto');
-  const e2 = evaluarConformidad({ sexo: 'M', variedad: 'blanca', pesoG: 3200, regiones: todas, defectos: ['flameado'] });
-  assert.equal(e2.propuesta, 'Apto');
-  assert.equal(e2.accedeRD, true);
-  const e3 = evaluarConformidad({ sexo: 'H', variedad: 'milflores', regiones: todas });
-  assert.equal(e3.accedeRD, false);
-  assert.equal(evaluarConformidad({ sexo: 'H', variedad: 'blanca', regiones: {} }).completa, false);
+t('Baremo: 13 apartados que suman 100; clases EX/MB/B/R/I en sus límites', () => {
+  assert.equal(BAREMO.apartados.length, 13);
+  assert.equal(BAREMO.apartados.reduce((x, y) => x + y.max, 0), 100);
+  assert.deepEqual([100, 90, 89.5, 80, 79.5, 70, 69.5, 65, 64.5, 0].map(n => claseDe(n).id),
+    ['EX', 'EX', 'MB', 'MB', 'B', 'B', 'R', 'R', 'I', 'I']);
+});
+
+t('Baremo: validación de puntos (rango, pasos de 0,5, coma decimal)', () => {
+  assert.equal(puntoValido('7,5', 10), 7.5);
+  assert.equal(puntoValido(0, 3), 0);
+  assert.equal(puntoValido(10.5, 10), null);
+  assert.equal(puntoValido(-1, 10), null);
+  assert.equal(puntoValido(7.3, 10), null);
+  assert.equal(puntoValido('', 10), null);
+});
+
+t('Calificación: total, clase, descalificación y acceso a RD', () => {
+  const max = Object.fromEntries(BAREMO.apartados.map(x => [x.id, x.max]));
+  const e1 = evaluarCalificacion({ sexo: 'M', variedad: 'negra-moteada', pesoG: 3200, puntos: max });
+  assert.equal(e1.total, 100); assert.equal(e1.clase, 'EX'); assert.equal(e1.resultado, 'Apto'); assert.equal(e1.accedeRD, true);
+  const e2 = evaluarCalificacion({ sexo: 'M', variedad: 'negra-moteada', puntos: max, defectos: ['flameado'] });
+  assert.equal(e2.clase, 'D'); assert.equal(e2.resultado, 'No apto');
+  // El flameado no descalifica en la Blanca
+  assert.equal(evaluarCalificacion({ sexo: 'M', variedad: 'blanca', puntos: max, defectos: ['flameado'] }).clase, 'EX');
+  // 64,5 puntos -> I, No apto
+  const bajo = { ...max, plumaje: 0, tipo: 0, cresta: 10 - 0.5, orejillas: 0 }; // 100-15-10-0,5-10 = 64,5
+  const e3 = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', puntos: bajo });
+  assert.equal(e3.total, 64.5); assert.equal(e3.clase, 'I'); assert.equal(e3.resultado, 'No apto');
+  // Variedad en proceso: Apto pero sin RD
+  const e4 = evaluarCalificacion({ sexo: 'H', variedad: 'milflores', puntos: max });
+  assert.equal(e4.resultado, 'Apto'); assert.equal(e4.accedeRD, false);
+  // Incompleta o fuera de rango
+  assert.equal(evaluarCalificacion({ sexo: 'H', variedad: 'blanca', puntos: { tipo: 5 } }).completa, false);
+  const e5 = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', puntos: { ...max, ojos: 4 } });
+  assert.deepEqual(e5.invalidos, ['ojos']); assert.equal(e5.resultado, 'No apto');
 });
 console.log(`\n${ok} pruebas superadas`);

@@ -154,19 +154,46 @@ CREATE OR REPLACE VIEW public.censo_publico WITH (security_invoker = false) AS
   WHERE estado = 'activo' OR id IN (SELECT padre_id FROM public.animales UNION SELECT madre_id FROM public.animales);
 
 -- ----------------------------------------------------------------------------
--- 3. Calificaciones (ficha de conformidad con el Estándar)
-CREATE OR REPLACE FUNCTION public.num_claves(j jsonb) RETURNS integer
-LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE WHEN jsonb_typeof(j) = 'object' THEN (SELECT count(*)::int FROM jsonb_object_keys(j)) ELSE 0 END
-$$;
+-- 3. Calificaciones: baremo de 100 puntos en 13 apartados (PROPUESTA)
+--    Modelo del programa de cría de la Castellana Negra (BOE 15/02/2019):
+--    clases EX>=90, MB>=80, B>=70, R>=65, I<65; D = descalificado por defecto grave.
+--    Total, clase y resultado se recalculan SIEMPRE en el servidor.
 -- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.baremo_maximos() RETURNS jsonb
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT '{"tipo":10,"cresta":10,"pico":5,"cara":4,"ojos":3,"orejillas":10,"barbillas":5,
+           "cuello":5,"tronco":10,"cola":10,"alas":5,"patas":8,"plumaje":15}'::jsonb
+$$;
+
+-- true si "puntos" tiene exactamente los 13 apartados, cada uno numérico,
+-- entre 0 y su máximo y en pasos de 0,5
+CREATE OR REPLACE FUNCTION public.puntos_validos(j jsonb) RETURNS boolean
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT jsonb_typeof(j) = 'object'
+     AND (SELECT count(*) FROM jsonb_object_keys(j)) = 13
+     AND NOT EXISTS (
+       SELECT 1 FROM jsonb_each(j) e
+       LEFT JOIN jsonb_each(public.baremo_maximos()) m ON m.key = e.key
+       WHERE m.key IS NULL OR jsonb_typeof(e.value) <> 'number'
+          OR (e.value)::numeric < 0 OR (e.value)::numeric > (m.value)::numeric
+          OR ((e.value)::numeric * 2) <> trunc((e.value)::numeric * 2))
+$$;
+
+CREATE OR REPLACE FUNCTION public.clase_de(total numeric, descalificado boolean) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN descalificado THEN 'D' WHEN total >= 90 THEN 'EX' WHEN total >= 80 THEN 'MB'
+              WHEN total >= 70 THEN 'B' WHEN total >= 65 THEN 'R' ELSE 'I' END
+$$;
+
 CREATE TABLE IF NOT EXISTS public.calificaciones (
   id               uuid PRIMARY KEY,
   animal_id        uuid NOT NULL REFERENCES public.animales(id) ON DELETE CASCADE,
   inspector_id     uuid NOT NULL REFERENCES public.perfiles(id),
   inspector_nombre text NOT NULL,
   fecha            date NOT NULL DEFAULT current_date,
-  regiones         jsonb NOT NULL,
+  puntos           jsonb NOT NULL,
+  total            numeric(4,1) NOT NULL,
+  clase            text NOT NULL CHECK (clase IN ('EX', 'MB', 'B', 'R', 'I', 'D')),
   defectos         jsonb NOT NULL DEFAULT '[]'::jsonb,
   peso_g           integer CHECK (peso_g IS NULL OR peso_g BETWEEN 30 AND 6000),
   peso_conforme    boolean,
@@ -175,12 +202,15 @@ CREATE TABLE IF NOT EXISTS public.calificaciones (
   latitud          double precision,
   longitud         double precision,
   created_at       timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT doce_regiones CHECK (public.num_claves(regiones) = 12),
-  CONSTRAINT grave_no_apto CHECK (jsonb_array_length(defectos) = 0 OR resultado = 'No apto')
+  CONSTRAINT trece_apartados CHECK (public.puntos_validos(puntos)),
+  CONSTRAINT total_rango CHECK (total BETWEEN 0 AND 100),
+  CONSTRAINT clase_coherente CHECK (clase = public.clase_de(total, jsonb_array_length(defectos) > 0)),
+  CONSTRAINT resultado_coherente CHECK ((resultado = 'Apto') = (clase IN ('EX', 'MB', 'B', 'R')))
 );
 CREATE INDEX IF NOT EXISTS calificaciones_animal ON public.calificaciones (animal_id);
 
--- Promoción RN -> RD: Apto, sin defectos graves, variedad oficial y >= 180 días de edad
+-- Recalcula total/clase/resultado y promociona RN -> RD:
+-- resultado Apto (clase EX/MB/B/R sin defectos), variedad oficial y >= 180 días de edad
 CREATE OR REPLACE FUNCTION public.procesar_calificacion() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE a public.animales%ROWTYPE;
@@ -188,9 +218,15 @@ BEGIN
   IF NOT public.es_auditor() THEN
     RAISE EXCEPTION 'Solo un inspector acreditado puede registrar calificaciones' USING ERRCODE = '42501';
   END IF;
+  IF NOT public.puntos_validos(NEW.puntos) THEN
+    RAISE EXCEPTION 'Puntuación incompleta o fuera de rango (13 apartados, de 0 al máximo, pasos de 0,5)' USING ERRCODE = '23514';
+  END IF;
   NEW.inspector_id := auth.uid();
+  NEW.total := (SELECT sum(value::numeric) FROM jsonb_each_text(NEW.puntos));
+  NEW.clase := public.clase_de(NEW.total, jsonb_array_length(NEW.defectos) > 0);
+  NEW.resultado := CASE WHEN NEW.clase IN ('EX', 'MB', 'B', 'R') THEN 'Apto' ELSE 'No apto' END;
   SELECT * INTO a FROM public.animales WHERE id = NEW.animal_id;
-  IF NEW.resultado = 'Apto' AND jsonb_array_length(NEW.defectos) = 0 AND a.seccion = 'RN'
+  IF NEW.resultado = 'Apto' AND a.seccion = 'RN'
      AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND current_date - a.fecha_nacimiento >= 180 THEN
     PERFORM set_config('alacantina.promocion', 'si', true);
     UPDATE public.animales SET seccion = 'RD' WHERE id = NEW.animal_id;
