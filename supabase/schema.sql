@@ -103,7 +103,12 @@ CREATE TABLE IF NOT EXISTS public.animales (
   updated_at       timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT progenitores_distintos CHECK (padre_id IS NULL OR madre_id IS NULL OR padre_id <> madre_id),
   CONSTRAINT no_es_su_propio_padre CHECK (padre_id IS DISTINCT FROM id AND madre_id IS DISTINCT FROM id),
-  CONSTRAINT rd_solo_oficiales CHECK (seccion <> 'RD' OR variedad IN ('negra-moteada', 'pinta', 'blanca'))
+  CONSTRAINT rd_solo_oficiales CHECK (seccion <> 'RD' OR variedad IN ('negra-moteada', 'pinta', 'blanca')),
+  -- Anilla oficial EE: E + año de nacimiento (2) + diámetro (2) + número (6). Ej.: E2620000123
+  CONSTRAINT anilla_ee CHECK (anilla ~ '^E[0-9]{10}$' AND substr(anilla, 6, 6) <> '000000'),
+  CONSTRAINT anilla_anio CHECK (substr(anilla, 2, 2) = to_char(fecha_nacimiento, 'YY')),
+  CONSTRAINT anilla_diametro CHECK ((sexo = 'M' AND substr(anilla, 4, 2) IN ('20', '22'))
+                                 OR (sexo = 'H' AND substr(anilla, 4, 2) IN ('18', '20')))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS animales_anilla_activa ON public.animales (upper(anilla)) WHERE estado = 'activo';
 CREATE UNIQUE INDEX IF NOT EXISTS animales_rfid_activo ON public.animales (rfid) WHERE rfid IS NOT NULL AND estado = 'activo';

@@ -1,7 +1,7 @@
 // Pruebas unitarias: node tests/genetica.test.mjs
 import assert from 'node:assert/strict';
 import { fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
-import { evaluarCalificacion, claseDe, puntoValido, BAREMO, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
+import { componerAnilla, parsearAnilla, comprobarAnilla, anillaLegible, evaluarCalificacion, claseDe, puntoValido, BAREMO, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
 
 let ok = 0;
 const t = (nombre, fn) => { fn(); ok++; console.log('✓', nombre); };
@@ -108,5 +108,19 @@ t('Calificación: total, clase, descalificación y acceso a RD', () => {
   assert.equal(evaluarCalificacion({ sexo: 'H', variedad: 'blanca', puntos: { tronco: 5 } }).completa, false);
   const e5 = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', puntos: { ...max, alas: 4.5 } });
   assert.deepEqual(e5.invalidos, ['alas']); assert.equal(e5.resultado, 'No apto');
+});
+t('Anilla EE: composición, lectura y validación', () => {
+  assert.equal(componerAnilla({ anio: '2026', diametro: 20, numero: '123' }), 'E2620000123');
+  assert.equal(componerAnilla({ anio: '2014', diametro: 16, numero: '9025' }), 'E1416009025');
+  assert.equal(componerAnilla({ anio: '2026', diametro: 20, numero: '0' }), null);
+  assert.equal(componerAnilla({ anio: '2026', diametro: 20, numero: '1234567' }), null);
+  assert.deepEqual(parsearAnilla('e 26 18 000045'), { anio2: '26', diametro: 18, numero: '000045' });
+  assert.equal(parsearAnilla('ABC123'), null);
+  assert.equal(anillaLegible('E2620000123'), 'E 26 20 000123');
+  assert.deepEqual(comprobarAnilla('E2620000123', { sexo: 'M', fechaNacimiento: '2026-03-01' }).errores, []);
+  assert.equal(comprobarAnilla('E2520000123', { sexo: 'M', fechaNacimiento: '2026-03-01' }).errores.length, 1); // año
+  assert.equal(comprobarAnilla('E2618000123', { sexo: 'M', fechaNacimiento: '2026-03-01' }).errores.length, 1); // 18 en gallo
+  const g = comprobarAnilla('E2622000123', { sexo: 'M', fechaNacimiento: '2026-03-01' });
+  assert.equal(g.errores.length, 0); assert.equal(g.avisos.length, 1); // 22 en gallo: admitido con aviso
 });
 console.log(`\n${ok} pruebas superadas`);

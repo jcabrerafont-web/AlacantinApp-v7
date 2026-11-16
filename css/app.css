@@ -97,6 +97,7 @@ main { max-width: 960px; margin: 0 auto; padding: 1rem .75rem 2rem; outline: non
 label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
 .campo { margin-bottom: .85rem; }
 .ayuda { font-size: .8rem; color: var(--texto-2); margin-top: .2rem; }
+.ayuda.error { color: var(--rojo); font-weight: 600; }
 input, select, textarea {
   width: 100%; min-height: 44px; padding: .5rem .65rem; border: 1px solid var(--borde); border-radius: 10px;
   background: var(--superficie); color: var(--texto); font: inherit;

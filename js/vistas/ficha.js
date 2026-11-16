@@ -1,7 +1,7 @@
 // Ficha del ejemplar (datos, genealogía, puesta, calificaciones y acciones según rol)
 import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
-import { ESTANDAR, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
+import { ESTANDAR, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
 import { nivelFx, generacionesEquivalentes } from '../genetica.js';
 import * as docs from '../documentos.js';
 import { h, pintar, $, aviso, fecha, kg, pct, dialogo, hoyISO } from '../ui.js';
@@ -42,7 +42,8 @@ export default function (main, { id }) {
           </div>
         </div>
         <table style="margin-top:.75rem"><tbody>
-          <tr><th>Sexo</th><td>${sexoTexto(a.sexo)} · anilla ${ESTANDAR.anilla[a.sexo] || '—'} mm</td></tr>
+          <tr><th>Sexo</th><td>${sexoTexto(a.sexo)}</td></tr>
+          <tr><th>Anilla EE</th><td>${anillaLegible(a.anilla)}${parsearAnilla(a.anilla) ? ` · ${parsearAnilla(a.anilla).diametro} mm${parsearAnilla(a.anilla).diametro !== ESTANDAR.anilla[a.sexo] ? ` (Estándar ${ESTANDAR.anilla[a.sexo]} mm)` : ''}` : ''}</td></tr>
           <tr><th>Variedad</th><td>${nombreVariedad(a.variedad)} ${v && !v.oficial ? h`<span class="chip chip-aviso">En proceso</span>` : ''}</td></tr>
           <tr><th>Nacimiento</th><td>${fecha(a.fecha_nacimiento)}${meses !== null ? ` · ${meses} meses` : ''}</td></tr>
           <tr><th>Peso</th><td>${kg(a.peso_g)} ${conf === true ? h`<span class="chip chip-ok">Estándar</span>` : conf === false ? h`<span class="chip chip-aviso">Fuera de rango</span>` : ''}</td></tr>

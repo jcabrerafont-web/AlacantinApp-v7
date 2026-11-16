@@ -1,7 +1,7 @@
 // Alta rápida / edición de ejemplar. Campos mínimos visibles; el resto en "Más datos".
 import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
-import { ESTANDAR, pesoConforme, sexoTexto } from '../estandar.js';
+import { ESTANDAR, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
 import { h, pintar, $, aviso, pct, hoyISO, comprimirFoto } from '../ui.js';
 
@@ -16,6 +16,7 @@ export default function (main, params) {
   }
   const a = previo || { sexo: '', variedad: '', fecha_nacimiento: '', seccion: 'RN', fotos: {} };
   const fotos = { ...(a.fotos || {}) };
+  const pa = parsearAnilla(a.anilla);
   const machos = datos.estado.todos.filter(x => x.sexo === 'M' && x.estado !== 'baja' && x.id !== a.id);
   const hembras = datos.estado.todos.filter(x => x.sexo === 'H' && x.estado !== 'baja' && x.id !== a.id);
   const etiqueta = (x) => `${x.anilla}${x.nombre ? ' · ' + x.nombre : ''}${x.usuario_id !== p.id ? ' (otro criador)' : ''}`;
@@ -28,9 +29,13 @@ export default function (main, params) {
       : h`<p class="muted peq">Aviario: ${p.rega || 'REGA pendiente'} · ${p.municipio || '—'}${p.latitud ? ' · ubicación registrada' : ''}</p>`}
     <form id="form-alta" class="tarjeta" novalidate>
       <div class="rejilla rejilla-2">
-        <div class="campo"><label for="a-anilla">Anilla *</label>
-          <input id="a-anilla" required autocomplete="off" autocapitalize="characters" value="${a.anilla || ''}" placeholder="Número de anilla">
-          <p class="ayuda" id="a-anilla-ayuda">Gallo ${ESTANDAR.anilla.M} mm · Gallina ${ESTANDAR.anilla.H} mm</p></div>
+        <div class="campo"><label for="a-num">Nº de anilla EE *</label>
+          <div class="fila" style="gap:.5rem;flex-wrap:nowrap">
+            <input id="a-num" required inputmode="numeric" autocomplete="off" maxlength="6" style="flex:1" value="${pa ? String(Number(pa.numero)) : ''}" placeholder="Número grabado">
+            <select id="a-diam" aria-label="Diámetro de la anilla (mm)" style="width:6.5rem">
+              ${[18, 20, 22].map(d => h`<option value="${d}">${d} mm</option>`)}</select>
+          </div>
+          <p class="ayuda" id="a-anilla-ayuda">Anilla oficial EE de FESACOCUR. El año lo pone la fecha de nacimiento.</p></div>
         <div class="campo"><label for="a-sexo">Sexo *</label>
           <select id="a-sexo" required><option value="">Elegir…</option>
             <option value="M">Gallo (♂)</option><option value="H">Gallina (♀)</option></select></div>
@@ -80,6 +85,8 @@ export default function (main, params) {
 
   const f = $('#form-alta', main);
   $('#a-sexo', f).value = a.sexo || '';
+  if (pa) { $('#a-diam', f).value = String(pa.diametro); $('#a-diam', f).dataset.sexo = a.sexo; }
+  else $('#a-diam', f).value = String(ESTANDAR.anilla.M);
   $('#a-variedad', f).value = a.variedad || '';
   $('#a-padre', f).value = a.padre_id || '';
   $('#a-madre', f).value = a.madre_id || '';
@@ -96,9 +103,23 @@ export default function (main, params) {
   };
   FOTOS.forEach(([k]) => pintarFoto(k));
 
+  const codigoAnilla = () => componerAnilla({
+    anio: ($('#a-fecha', f).value || '').slice(0, 4), diametro: $('#a-diam', f).value, numero: $('#a-num', f).value });
   const refrescar = () => {
     const sexo = $('#a-sexo', f).value;
-    $('#a-anilla-ayuda', f).textContent = sexo ? `Anilla de ${ESTANDAR.anilla[sexo]} mm (${sexoTexto(sexo).toLowerCase()})` : `Gallo ${ESTANDAR.anilla.M} mm · Gallina ${ESTANDAR.anilla.H} mm`;
+    const diam = $('#a-diam', f);
+    if (sexo && diam.dataset.sexo !== sexo) { diam.value = String(ESTANDAR.anilla[sexo]); diam.dataset.sexo = sexo; } // diámetro del Estándar
+    const fechaN = $('#a-fecha', f).value;
+    const codigo = codigoAnilla();
+    const ayuda = $('#a-anilla-ayuda', f);
+    if (!codigo || !fechaN || !sexo) {
+      ayuda.className = 'ayuda';
+      ayuda.textContent = `Anilla oficial EE de FESACOCUR (gallo ${ESTANDAR.anilla.M} mm · gallina ${ESTANDAR.anilla.H} mm). El año lo pone la fecha de nacimiento.`;
+    } else {
+      const c = comprobarAnilla(codigo, { sexo, fechaNacimiento: fechaN });
+      ayuda.className = `ayuda ${c.errores.length ? 'error' : ''}`;
+      ayuda.textContent = `Código del Libro: ${codigo}` + (c.errores.length ? ` · ${c.errores.join(' ')}` : c.avisos.length ? ` · ⚠ ${c.avisos.join(' ')}` : ' · ✓');
+    }
     const peso = $('#a-peso', f).value;
     const r = ESTANDAR.peso[sexo];
     const conf = pesoConforme(sexo, peso);
@@ -139,7 +160,7 @@ export default function (main, params) {
     try {
       const guardado = await datos.guardarAnimal({
         id: previo?.id,
-        anilla: $('#a-anilla', f).value,
+        anilla: codigoAnilla() || `E??${$('#a-diam', f).value}${$('#a-num', f).value}`,
         sexo: $('#a-sexo', f).value,
         variedad: $('#a-variedad', f).value,
         fecha_nacimiento: $('#a-fecha', f).value,

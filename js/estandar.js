@@ -236,3 +236,55 @@ export function evaluarCalificacion({ sexo, variedad, pesoG, puntos = {}, defect
     motivos
   };
 }
+
+// ============================================================================
+// ANILLA OFICIAL EE (suministrada por FESACOCUR)
+// Código del Libro Genealógico = E + año de nacimiento (2 dígitos) + diámetro (mm)
+// + número de anilla completado con ceros hasta 6 cifras. Ej.: E2620000123.
+// Diámetros del Estándar ESGA025: gallo 20, gallina 18. Si el pie no admite la
+// anilla del Estándar se acepta el diámetro inmediatamente superior (+2 mm), con aviso.
+// ============================================================================
+export const ANILLA = Object.freeze({
+  pais: 'E',
+  patron: /^E(\d{2})(\d{2})(\d{6})$/,
+  diametrosAdmitidos: Object.freeze({ M: Object.freeze([20, 22]), H: Object.freeze([18, 20]) })
+});
+
+export const normalizarAnilla = (txt) => String(txt ?? '').toUpperCase().replace(/[\s.\-]/g, '');
+
+export function componerAnilla({ anio, diametro, numero }) {
+  const n = String(numero ?? '').replace(/\D/g, '');
+  const yy = String(anio ?? '').slice(-2);
+  const d = String(diametro ?? '');
+  if (!/^\d{2}$/.test(yy) || !/^\d{2}$/.test(d) || !n || n.length > 6 || Number(n) === 0) return null;
+  return `${ANILLA.pais}${yy}${d}${n.padStart(6, '0')}`;
+}
+
+export function parsearAnilla(codigo) {
+  const m = ANILLA.patron.exec(normalizarAnilla(codigo));
+  if (!m || Number(m[3]) === 0) return null;
+  return { anio2: m[1], diametro: Number(m[2]), numero: m[3] };
+}
+
+// "E2620000123" -> "E 26 20 000123" (lectura humana)
+export const anillaLegible = (codigo) => {
+  const p = parsearAnilla(codigo);
+  return p ? `E ${p.anio2} ${String(p.diametro).padStart(2, '0')} ${p.numero}` : String(codigo ?? '');
+};
+
+// Errores (bloquean) y avisos (no bloquean) de una anilla para un ejemplar
+export function comprobarAnilla(codigo, { sexo, fechaNacimiento } = {}) {
+  const errores = []; const avisos = [];
+  const p = parsearAnilla(codigo);
+  if (!p) { errores.push('La anilla debe ser oficial EE: E + año + diámetro + número (p. ej. E2620000123).'); return { errores, avisos, partes: null }; }
+  if (fechaNacimiento && fechaNacimiento.slice(2, 4) !== p.anio2) {
+    errores.push(`El año de la anilla (${p.anio2}) no coincide con el año de nacimiento (${fechaNacimiento.slice(0, 4)}).`);
+  }
+  const admitidos = ANILLA.diametrosAdmitidos[sexo];
+  if (admitidos && !admitidos.includes(p.diametro)) {
+    errores.push(`Diámetro ${p.diametro} mm no admitido para ${sexo === 'M' ? 'gallo' : 'gallina'} (Estándar: ${ESTANDAR.anilla[sexo]} mm).`);
+  } else if (admitidos && p.diametro !== ESTANDAR.anilla[sexo]) {
+    avisos.push(`Diámetro ${p.diametro} mm, distinto del Estándar (${ESTANDAR.anilla[sexo]} mm).`);
+  }
+  return { errores, avisos, partes: p };
+}

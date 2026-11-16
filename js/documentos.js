@@ -3,7 +3,7 @@
 // Se maquetan en #impresion y se imprimen con el diálogo del sistema
 // ("Guardar como PDF"). Sin ventanas emergentes ni librerías externas.
 // ============================================================================
-import { ESTANDAR, BAREMO, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
+import { ESTANDAR, BAREMO, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
 import { ancestros, fxAnimal } from './genetica.js';
 import { h, pintar, fecha, kg, pct } from './ui.js';
 
@@ -40,7 +40,7 @@ export function certificado(a, { idx, titular, ultimaCalificacion }) {
     ${cabecera('Certificado genealógico', ref)}
     <h2>Ejemplar</h2>
     <table><tbody>
-      <tr><th>Anilla</th><td>${a.anilla} (${ESTANDAR.anilla[a.sexo] || '—'} mm)</td><th>Sexo</th><td>${sexoTexto(a.sexo)}</td></tr>
+      <tr><th>Anilla EE</th><td>${anillaLegible(a.anilla)} (${parsearAnilla(a.anilla)?.diametro ?? '—'} mm)</td><th>Sexo</th><td>${sexoTexto(a.sexo)}</td></tr>
       <tr><th>Nombre</th><td>${a.nombre || '—'}</td><th>Variedad</th><td>${nombreVariedad(a.variedad)}</td></tr>
       <tr><th>Nacimiento</th><td>${fecha(a.fecha_nacimiento)}</td><th>Sección</th><td>${a.seccion} · ${ESTANDAR.secciones[a.seccion] || ''}</td></tr>
       <tr><th>Peso</th><td>${kg(a.peso_g)}</td><th>Familia</th><td>${a.familia ? `Familia ${a.familia}` : '—'}</td></tr>

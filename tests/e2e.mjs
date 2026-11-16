@@ -51,10 +51,11 @@ const credEnClaro = await page.evaluate(async () => {
 ok(!credEnClaro, 'La contraseña no se guarda en claro');
 
 // 3. Altas
-const alta = async ({ anilla, sexo, variedad, fecha, padre, madre, nombre, peso }) => {
-  await ir('#/alta');
-  await page.fill('#a-anilla', anilla);
+const alta = async ({ num, diam, sexo, variedad, fecha, padre, madre, nombre, peso }) => {
+  await ir('#/censo'); await ir('#/alta'); // formulario limpio aunque el alta anterior fallara
+  await page.fill('#a-num', num);
   await page.selectOption('#a-sexo', sexo);
+  if (diam) await page.selectOption('#a-diam', diam);
   await page.selectOption('#a-variedad', variedad);
   await page.fill('#a-fecha', fecha);
   if (padre) await page.selectOption('#a-padre', { label: padre });
@@ -65,15 +66,17 @@ const alta = async ({ anilla, sexo, variedad, fecha, padre, madre, nombre, peso 
   await page.click('#form-alta button[type=submit]');
   await page.waitForTimeout(700);
 };
-await alta({ anilla: 'e 0001', sexo: 'M', variedad: 'negra-moteada', fecha: '2024-01-10', peso: 3200 });
-ok(page.url().includes('#/animal/'), 'Alta del gallo E 0001 → ficha');
-await alta({ anilla: 'E 0002', sexo: 'H', variedad: 'negra-moteada', fecha: '2024-02-01', nombre: '<img src=x onerror="window.__xss=1">' });
-await alta({ anilla: 'E 0003', sexo: 'H', variedad: 'blanca', fecha: '2025-03-01', padre: 'E 0001', madre: 'E 0002 · <img src=x onerror="window.__xss=1">' });
+await alta({ num: '1', sexo: 'M', variedad: 'negra-moteada', fecha: '2024-01-10', peso: 3200 });
+ok(page.url().includes('#/animal/') && (await page.innerText('main')).includes('E2420000001'), 'Alta del gallo nº 1 → código E2420000001 (E + 24 + 20 mm + 000001)');
+await alta({ num: '2', sexo: 'H', variedad: 'negra-moteada', fecha: '2024-02-01', nombre: '<img src=x onerror="window.__xss=1">' });
+await alta({ num: '3', sexo: 'H', variedad: 'blanca', fecha: '2025-03-01', padre: 'E2420000001', madre: 'E2418000002 · <img src=x onerror="window.__xss=1">' });
 const fichaHija = await page.evaluate(() => ({ url: location.hash, texto: document.querySelector('main').innerText }));
-ok(fichaHija.texto.includes('E 0003') && /consanguinidad/i.test(fichaHija.texto), `Ficha de la hija con padres y consanguinidad (${fichaHija.url} · ${(await aviso()).slice(0, 80)})`);
-await alta({ anilla: 'E 0002', sexo: 'H', variedad: 'blanca', fecha: '2025-01-01' });
+ok(fichaHija.texto.includes('E2518000003') && /consanguinidad/i.test(fichaHija.texto), `Ficha de la hija con padres y consanguinidad (${fichaHija.url} · ${(await aviso()).slice(0, 80)})`);
+await alta({ num: '000002', sexo: 'H', variedad: 'blanca', fecha: '2024-05-01' });
 ok((await aviso()).includes('ya está registrada'), 'Anilla duplicada rechazada');
-await alta({ anilla: 'E 0009', sexo: 'M', variedad: 'blanca', fecha: '2023-01-01', padre: 'E 0001' });
+await alta({ num: '7', diam: '18', sexo: 'M', variedad: 'blanca', fecha: '2025-01-01' });
+ok((await aviso()).includes('no admitido para gallo'), `Gallo con anilla de 18 mm rechazado (${(await aviso()).slice(0, 70)})`);
+await alta({ num: '9', sexo: 'M', variedad: 'blanca', fecha: '2023-01-01', padre: 'E2420000001' });
 ok((await aviso()).includes('anterior'), `Padre más joven que el hijo rechazado (${(await aviso()).slice(0, 60)})`);
 await ir('#/censo');
 ok((await page.$$('#censo-lista a.item')).length === 3, 'Mi censo: 3 ejemplares');
@@ -83,14 +86,14 @@ ok(herenciaRega, 'Las altas heredan REGA y municipio del aviario');
 
 // 4. Puesta
 await ir('#/puesta');
-await page.selectOption('#pu-gallina', { label: 'E 0002 · <img src=x onerror="window.__xss=1">' });
+await page.selectOption('#pu-gallina', { label: 'E2418000002 · <img src=x onerror="window.__xss=1">' });
 for (const g of ['61,5', '72', '58']) { await page.fill('#pu-peso', g); await page.press('#pu-peso', 'Enter'); }
 await page.click('#pu-guardar');
 await page.waitForTimeout(600);
 ok((await aviso()).includes('3 huevo(s) guardados · 2 aptos'), `Puesta individual (${await aviso()})`);
 const huevoGallo = await page.evaluate(async () => {
   const d = await import('./js/datos.js');
-  const g = d.estado.todos.find(a => a.anilla === 'E 0001');
+  const g = d.estado.todos.find(a => a.anilla === 'E2420000001');
   try { await d.registrarHuevos(g.id, '2026-01-01', [60], 'Blanco crema'); return 'aceptado'; } catch (e) { return e.message; }
 });
 ok(huevoGallo.includes('solo para gallinas'), 'Huevo asignado a un gallo rechazado');
@@ -102,7 +105,7 @@ const [descarga] = await Promise.all([page.waitForEvent('download'), page.click(
 const ruta = await descarga.path();
 const contenido = (await import('node:fs')).readFileSync(ruta, 'utf8');
 const lineas = contenido.trim().split(/\r?\n/);
-ok(lineas.length === 4 && lineas.findIndex(l => l.startsWith('E 0003')) > lineas.findIndex(l => l.startsWith('E 0001')), 'Matriz de pedigrí CSV ordenada (progenitores primero)');
+ok(lineas.length === 4 && lineas.findIndex(l => l.startsWith('E2518000003')) > lineas.findIndex(l => l.startsWith('E2420000001')), 'Matriz de pedigrí CSV ordenada (progenitores primero)');
 
 // 6. Inspector (rol asignado por el servidor; aquí se simula en la copia local)
 await page.evaluate(async () => {
@@ -113,7 +116,7 @@ await page.evaluate(async () => {
 });
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a');
-const idH1 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E 0002').id);
+const idH1 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E2418000002').id);
 await ir(`#/calificar/${idH1}`);
 ok((await page.$$('#form-cal [data-apartado]')).length === 12, 'Baremo: 12 regiones del Estándar');
 await page.click('#form-cal button[type=submit]');

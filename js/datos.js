@@ -5,7 +5,7 @@
 // ============================================================================
 import * as db from './db.js';
 import * as sync from './sync.js';
-import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses } from './estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla } from './estandar.js';
 import { indice, fxAnimal, creaCiclo } from './genetica.js';
 import { esAuditor } from './auth.js';
 import { uuid } from './ui.js';
@@ -76,8 +76,9 @@ export const fx = (a) => fxAnimal(a, estado.idx);
 // ---------------------------------------------------------------------------
 export function validarAnimal(a, { esNuevo }) {
   const errores = [];
-  const anilla = String(a.anilla || '').trim().toUpperCase();
+  const anilla = normalizarAnilla(a.anilla);
   if (!anilla) errores.push('La anilla es obligatoria.');
+  else errores.push(...comprobarAnilla(anilla, { sexo: a.sexo, fechaNacimiento: a.fecha_nacimiento }).errores);
   if (!['M', 'H'].includes(a.sexo)) errores.push('Indica el sexo.');
   if (!variedadPorId(a.variedad)) errores.push('Elige una variedad.');
   if (!a.fecha_nacimiento) errores.push('La fecha de nacimiento es obligatoria.');
@@ -116,7 +117,7 @@ export async function guardarAnimal(datos) {
     ...(previo || {}),
     ...datos,
     id: previo?.id || uuid(),
-    anilla: String(datos.anilla).trim().toUpperCase(),
+    anilla: normalizarAnilla(datos.anilla),
     peso_g: datos.peso_g === '' || datos.peso_g === null || datos.peso_g === undefined ? null : Math.round(Number(datos.peso_g)),
     padre_id: datos.padre_id || null,
     madre_id: datos.madre_id || null,

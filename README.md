@@ -25,6 +25,10 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - **Variedades:**
   - Oficiales, según el Estándar 2025: Negra moteada, Pinta o exchequer y Blanca.
   - Armiñada y Milflores se pueden registrar marcadas «en proceso de reconocimiento» (art. 3.3 del Protocolo CNZ), pero no acceden al Registro Definitivo.
+- **Anilla oficial EE (FESACOCUR):**
+  - El código del Libro es **E + año de nacimiento (2 cifras) + diámetro (mm) + número (6 cifras, con ceros delante)**. Por ejemplo, un gallo nacido en 2026 con la anilla nº 123 es `E2620000123`. Es el mismo sistema que usa el Libro de la Castellana Negra (manual GANECA).
+  - En el alta se escribe solo el número grabado. El año sale de la fecha de nacimiento y el diámetro se propone según el sexo.
+  - Se rechaza una anilla cuyo año no coincide con el de nacimiento, o con un diámetro no admitido. Se admite el diámetro del Estándar o el inmediatamente superior (+2 mm), este último con aviso. La base de datos aplica las mismas reglas.
 - **Pesos y anillas:**
   - Gallo: 3,000–3,500 kg, anilla de 20 mm.
   - Gallina: 2,200–2,600 kg, anilla de 18 mm.
