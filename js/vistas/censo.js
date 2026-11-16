@@ -1,0 +1,80 @@
+// Censo: "Mi censo" (criador), censo completo (inspector/administrador) o censo público (visitante)
+import * as datos from '../datos.js';
+import { esAuditor } from '../auth.js';
+import { ESTANDAR, nombreVariedad, tramoEdad } from '../estandar.js';
+import { nivelFx } from '../genetica.js';
+import { h, pintar, $, pct } from '../ui.js';
+
+const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const filtros = { q: '', sexo: '', variedad: '', seccion: '', bajas: false };
+
+export default function (main) {
+  const p = datos.estado.perfil;
+  const titulo = !p ? 'Censo público' : esAuditor(p.rol) ? 'Censo del Libro' : 'Mi censo';
+
+  pintar(main, h`
+    <div class="fila entre"><h1>${titulo}</h1>
+      ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">➕ Alta</a>` : ''}</div>
+    ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
+    ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
+    <div id="censo-kpis" class="kpis"></div>
+    <div class="tarjeta">
+      <label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Anilla o nombre" value="${filtros.q}">
+      <details style="margin-top:.6rem" ${filtros.sexo || filtros.variedad || filtros.seccion || filtros.bajas ? h`open` : ''}><summary class="muted">Filtros</summary>
+      <div class="rejilla rejilla-3" style="margin-top:.5rem">
+        <div><label for="f-sexo">Sexo</label><select id="f-sexo">
+          <option value="">Todos</option><option value="M">Gallos</option><option value="H">Gallinas</option></select></div>
+        <div><label for="f-var">Variedad</label><select id="f-var"><option value="">Todas</option>
+          ${ESTANDAR.variedades.map(v => h`<option value="${v.id}">${v.nombre}</option>`)}</select></div>
+        <div><label for="f-sec">Sección</label><select id="f-sec"><option value="">Todas</option>
+          ${Object.entries(ESTANDAR.secciones).map(([k, v]) => h`<option value="${k}">${k} · ${v}</option>`)}</select></div>
+        ${p ? h`<label class="fila" style="align-self:end"><input id="f-bajas" type="checkbox"> Incluir bajas</label>` : ''}
+      </div></details>
+    </div>
+    <div class="tarjeta"><ul id="censo-lista" class="lista"></ul></div>`);
+
+  for (const [id, k] of [['#f-sexo', 'sexo'], ['#f-var', 'variedad'], ['#f-sec', 'seccion']]) $(id, main).value = filtros[k];
+  if ($('#f-bajas', main)) $('#f-bajas', main).checked = filtros.bajas;
+
+  const dibujar = () => {
+    const todos = datos.censo({ incluirBajas: filtros.bajas });
+    const q = normal(filtros.q);
+    const lista = todos.filter(a => (!q || normal(`${a.anilla} ${a.nombre}`).includes(q)) &&
+      (!filtros.sexo || a.sexo === filtros.sexo) && (!filtros.variedad || a.variedad === filtros.variedad) &&
+      (!filtros.seccion || a.seccion === filtros.seccion));
+    const activos = todos.filter(a => a.estado !== 'baja');
+    pintar($('#censo-kpis', main), h`
+      <div class="kpi"><b>${activos.length}</b><span>Ejemplares activos</span></div>
+      <div class="kpi"><b>${activos.filter(a => a.sexo === 'M').length}</b><span>Gallos</span></div>
+      <div class="kpi"><b>${activos.filter(a => a.sexo === 'H').length}</b><span>Gallinas</span></div>
+      <div class="kpi"><b>${activos.filter(a => a.seccion === 'RD').length}</b><span>Registro Definitivo</span></div>`);
+    pintar($('#censo-lista', main), lista.length === 0
+      ? h`<li class="muted" style="padding:1rem 0">${todos.length === 0
+        ? (p ? h`Aún no hay ejemplares. Empieza con <a href="#/alta">Alta Rápida</a>.` : 'Todavía no hay ejemplares publicados.')
+        : 'Ningún ejemplar coincide con los filtros.'}</li>`
+      : h`${lista.map(a => {
+        const f = datos.fx(datos.animal(a.id) || a);
+        const nf = nivelFx(f);
+        const t = tramoEdad(a.fecha_nacimiento);
+        return h`<li><a class="item" href="#/animal/${encodeURIComponent(a.id)}">
+          <span class="sexo sexo-${a.sexo}" aria-label="${a.sexo === 'M' ? 'Gallo' : 'Gallina'}">${a.sexo === 'M' ? '♂' : '♀'}</span>
+          <span class="item-principal">
+            <span class="item-titulo">${a.anilla}${a.nombre ? h` · ${a.nombre}` : ''}</span>
+            <span class="item-sub">${nombreVariedad(a.variedad)} · ${t ? t.nombre : 'Edad desconocida'}</span>
+          </span>
+          <span class="fila" style="flex-direction:column;align-items:flex-end;gap:.2rem">
+            <span class="chip ${a.seccion === 'RD' ? 'chip-ok' : 'chip-info'}">${a.seccion}</span>
+            ${a.estado === 'baja' ? h`<span class="chip chip-alerta">Baja</span>` :
+              (f > 0 ? h`<span class="chip ${nf.nivel === 'alerta' ? 'chip-alerta' : nf.nivel === 'precaucion' ? 'chip-aviso' : ''}">Fx ${pct(f, 1)}</span>` : '')}
+          </span></a></li>`;
+      })}`);
+  };
+
+  $('#f-q', main).addEventListener('input', e => { filtros.q = e.target.value; dibujar(); });
+  $('#f-sexo', main).addEventListener('change', e => { filtros.sexo = e.target.value; dibujar(); });
+  $('#f-var', main).addEventListener('change', e => { filtros.variedad = e.target.value; dibujar(); });
+  $('#f-sec', main).addEventListener('change', e => { filtros.seccion = e.target.value; dibujar(); });
+  $('#f-bajas', main)?.addEventListener('change', e => { filtros.bajas = e.target.checked; dibujar(); });
+  dibujar();
+  return datos.suscribir(dibujar);
+}

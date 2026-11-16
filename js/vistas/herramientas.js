@@ -1,0 +1,45 @@
+// Herramientas: lo que no cabe en la barra, mostrado según el rol
+import * as datos from '../datos.js';
+import { ROLES, esAuditor } from '../auth.js';
+import { CONFIG, supabaseConfigurado } from '../config.js';
+import { cerrarSesion } from '../app.js';
+import { h, pintar, $, confirmar } from '../ui.js';
+
+export default function (main) {
+  const p = datos.estado.perfil;
+  const r = p.rol;
+  const grupos = [
+    ['Mi cuenta', [
+      ['#/perfil', '🏡', 'Mi aviario', 'Nombre, REGA, municipio y ubicación que heredan las altas'],
+      ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
+    ]],
+    ['Cría', [
+      ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
+      ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
+    ]],
+    ['Consulta', [
+      ['#/estandar', '📖', 'Estándar Racial', 'Texto oficial ESGA025'],
+      ['#/guia', '📋', 'Guía de Campo', 'Las 12 regiones y los defectos graves']
+    ]]
+  ];
+  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»']]]);
+  if (r === 'administrador') grupos.push(['Administración', [['#/usuarios', '🛡️', 'Usuarios y roles', 'Asignar inspectores y administradores']]]);
+
+  pintar(main, h`
+    <h1>Herramientas</h1>
+    <div class="tarjeta fila entre">
+      <div><strong>${p.nombre || p.email}</strong><div class="muted peq">${ROLES[r]} · ${p.email || ''}</div></div>
+      <button class="btn" id="b-salir">Cerrar sesión</button>
+    </div>
+    ${grupos.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">
+      ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span style="font-size:1.4rem" aria-hidden="true">${ico}</span>
+        <span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}
+    </ul></div>`)}
+    <p class="muted peq">AlacantinApp ${CONFIG.version} · ${supabaseConfigurado() ? 'Conectada al Libro central' : 'Modo dispositivo (sin servidor)'}</p>`);
+
+  $('#b-salir', main).addEventListener('click', async () => {
+    const pend = datos.estado.pendientes;
+    if (pend && !(await confirmar('Cerrar sesión', `Hay ${pend} operación(es) sin sincronizar. Se conservarán en este dispositivo y se enviarán cuando vuelvas a entrar.`, 'Cerrar sesión'))) return;
+    await cerrarSesion();
+  });
+}

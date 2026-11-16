@@ -1,0 +1,134 @@
+// Puesta y RFID: pesaje individual de cada huevo (55–70 g, cáscara blanco crema).
+// Lectores RFID en modo teclado (Bluetooth/USB HID): leer el chip en el campo
+// "Chip" selecciona la gallina automáticamente.
+import * as datos from '../datos.js';
+import { ESTANDAR, huevoApto } from '../estandar.js';
+import { h, pintar, $, aviso, fecha, hoyISO, confirmar } from '../ui.js';
+
+const coma = (n, d = 1) => (n === null || n === undefined ? '—' : Number(n).toFixed(d).replace('.', ','));
+
+export default function (main) {
+  const p = datos.estado.perfil;
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  let seleccion = q.get('gallina') || '';
+  const pesos = [];
+
+  const gallinas = () => datos.censo().filter(a => a.sexo === 'H' && (a.usuario_id === p.id));
+
+  pintar(main, h`
+    <h1>Puesta & RFID</h1>
+    <form id="form-puesta" class="tarjeta" novalidate>
+      <div class="rejilla rejilla-2">
+        <div class="campo"><label for="pu-chip">Chip RFID</label>
+          <input id="pu-chip" inputmode="numeric" autocomplete="off" placeholder="Leer chip o escribir 15 dígitos">
+          <p class="ayuda">Con el lector conectado en modo teclado, acerque la gallina y lea.</p></div>
+        <div class="campo"><label for="pu-gallina">Gallina *</label><select id="pu-gallina"></select></div>
+        <div class="campo"><label for="pu-fecha">Fecha *</label><input id="pu-fecha" type="date" value="${hoyISO()}" max="${hoyISO()}"></div>
+        <div class="campo"><label for="pu-cascara">Cáscara</label><select id="pu-cascara">
+          <option>Blanco crema</option><option>Blanco puro</option><option>Tostada</option><option>Defectuosa</option></select></div>
+      </div>
+      <div class="campo"><label for="pu-peso">Peso del huevo (g)</label>
+        <div class="fila"><input id="pu-peso" type="text" inputmode="decimal" autocomplete="off" pattern="[0-9]+([.,][0-9])?" style="flex:1" placeholder="Ej.: 61,5">
+          <button class="btn" type="button" id="pu-anadir">Añadir</button></div>
+        <p class="ayuda">Pulsa Intro o «Añadir» por cada huevo. Rango del Estándar: ${ESTANDAR.huevo.min}–${ESTANDAR.huevo.max} g.</p></div>
+      <div id="pu-pesos" class="fila" style="margin-bottom:.75rem"></div>
+      <button class="btn btn-primario btn-bloque" type="submit" id="pu-guardar" disabled>Guardar huevos</button>
+    </form>
+    <div id="pu-resumen"></div>`);
+
+  const f = $('#form-puesta', main);
+  const sel = $('#pu-gallina', f);
+
+  const pintarSelect = () => {
+    const lista = gallinas();
+    pintar(sel, h`<option value="">${lista.length ? 'Elegir gallina…' : 'No tienes gallinas activas'}</option>
+      ${lista.map(a => h`<option value="${a.id}">${a.anilla}${a.nombre ? ` · ${a.nombre}` : ''}</option>`)}`);
+    sel.value = lista.some(a => a.id === seleccion) ? seleccion : '';
+  };
+
+  const pintarPesos = () => {
+    const cascara = $('#pu-cascara', f).value;
+    pintar($('#pu-pesos', f), h`${pesos.map((g, i) => h`<button type="button" class="chip chip-boton ${huevoApto(g, cascara) ? 'chip-ok' : 'chip-aviso'}" data-quitar="${i}" title="Quitar">${coma(g)} g ✕</button>`)}`);
+    $('#pu-guardar', f).disabled = pesos.length === 0 || !sel.value;
+    $('#pu-guardar', f).textContent = pesos.length ? `Guardar ${pesos.length} huevo(s)` : 'Guardar huevos';
+  };
+
+  const pintarResumen = () => {
+    const desde = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+    const lista = gallinas();
+    const filas = lista.map(a => ({ a, r: datos.resumenPuesta(a.id, desde) })).filter(x => x.r.n > 0);
+    const total = datos.resumenPuesta(null, desde);
+    const recientes = datos.estado.huevos.filter(x => lista.some(a => a.id === x.animal_id))
+      .sort((x, y) => (y.fecha + y.created_at).localeCompare(x.fecha + x.created_at)).slice(0, 15);
+    pintar($('#pu-resumen', main), h`
+      <div class="tarjeta"><h2>Últimos 30 días</h2>
+        ${total.n ? h`<div class="kpis">
+          <div class="kpi"><b>${total.n}</b><span>Huevos</span></div>
+          <div class="kpi"><b>${coma(total.media)} g</b><span>Peso medio</span></div>
+          <div class="kpi"><b>${Math.round(100 * total.aptos / total.n)} %</b><span>Aptos para incubar</span></div></div>
+          <div class="tabla-scroll"><table><thead><tr><th>Gallina</th><th class="num">Huevos</th><th class="num">Medio</th><th class="num">Mín–máx</th><th class="num">Aptos</th></tr></thead>
+          <tbody>${filas.map(({ a, r }) => h`<tr><td><a href="#/animal/${a.id}">${a.anilla}</a></td><td class="num">${r.n}</td><td class="num">${coma(r.media)} g</td>
+            <td class="num">${coma(r.min)}–${coma(r.max)}</td><td class="num">${r.aptos}</td></tr>`)}</tbody></table></div>`
+          : h`<p class="muted">Sin registros en los últimos 30 días.</p>`}
+      </div>
+      ${recientes.length ? h`<div class="tarjeta"><h2>Últimos registros</h2><ul class="lista">${recientes.map(x => {
+        const a = datos.animal(x.animal_id);
+        return h`<li class="item"><div class="item-principal"><div class="item-titulo">${coma(x.peso_g)} g · ${a?.anilla || ''}</div>
+          <div class="item-sub">${fecha(x.fecha)} · ${x.cascara}</div></div>
+          <span class="chip ${x.apto ? 'chip-ok' : 'chip-aviso'}">${x.apto ? 'Apto' : 'No apto'}</span>
+          <button class="btn btn-pequeno" data-borrar="${x.id}" aria-label="Borrar registro">🗑</button></li>`;
+      })}</ul></div>` : ''}`);
+  };
+
+  const anadir = () => {
+    const inp = $('#pu-peso', f);
+    const g = Number(String(inp.value).replace(',', '.'));
+    if (!Number.isFinite(g) || g < 20 || g > 120) { aviso('Peso fuera de rango físico (20–120 g).', 'error'); return; }
+    pesos.push(Math.round(g * 10) / 10);
+    inp.value = '';
+    inp.focus();
+    f.dataset.sucio = '1';
+    pintarPesos();
+  };
+
+  $('#pu-anadir', f).addEventListener('click', anadir);
+  $('#pu-peso', f).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); anadir(); } });
+  $('#pu-pesos', f).addEventListener('click', e => {
+    const i = e.target.closest('[data-quitar]')?.dataset.quitar;
+    if (i !== undefined) { pesos.splice(Number(i), 1); pintarPesos(); }
+  });
+  $('#pu-cascara', f).addEventListener('change', pintarPesos);
+  sel.addEventListener('change', () => { seleccion = sel.value; pintarPesos(); });
+  $('#pu-chip', f).addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const chip = e.target.value.replace(/\D/g, '');
+    const g = gallinas().find(a => a.rfid === chip);
+    if (g) { seleccion = g.id; sel.value = g.id; aviso(`Gallina ${g.anilla}`, 'ok'); $('#pu-peso', f).focus(); pintarPesos(); }
+    else aviso(chip ? `El chip ${chip} no está asignado a ninguna de tus gallinas.` : 'Lectura vacía.', 'error');
+    e.target.value = '';
+  });
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      const regs = await datos.registrarHuevos(sel.value, $('#pu-fecha', f).value, pesos, $('#pu-cascara', f).value);
+      const aptos = regs.filter(r => r.apto).length;
+      aviso(`${regs.length} huevo(s) guardados · ${aptos} aptos`, 'ok');
+      pesos.length = 0;
+      f.dataset.sucio = '';
+      pintarPesos();
+    } catch (err) { aviso(err.message, 'error'); }
+  });
+  main.addEventListener('click', async e => {
+    const id = e.target.closest('[data-borrar]')?.dataset.borrar;
+    if (!id) return;
+    if (await confirmar('Borrar registro', '¿Eliminar este huevo del control de puesta?', 'Borrar', true)) {
+      try { await datos.borrarHuevo(id); } catch (err) { aviso(err.message, 'error'); }
+    }
+  });
+
+  pintarSelect();
+  pintarPesos();
+  pintarResumen();
+  return datos.suscribir(() => { pintarSelect(); pintarResumen(); });
+}
