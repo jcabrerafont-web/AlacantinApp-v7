@@ -39,7 +39,7 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - **Registro Definitivo:** se alcanza con resultado Apto, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
-  - Umbrales: precaución a partir del 6,25 % y alerta a partir del 12,5 % (configurables).
+  - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.
 - **Informes:** recogen los datos que pide la memoria técnica del Protocolo CNZ (apdo. 3.1 f, j, l):
   - censo por sexo y edad;
   - criadores y distribución territorial;
