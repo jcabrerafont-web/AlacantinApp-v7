@@ -235,6 +235,49 @@ export const calificacionesDe = (animalId) =>
   estado.calificaciones.filter(c => c.animal_id === animalId).sort((x, y) => y.created_at.localeCompare(x.created_at));
 
 // ---------------------------------------------------------------------------
+// Registro de Méritos (RM)
+// ---------------------------------------------------------------------------
+// Situación de un ejemplar frente a los requisitos del RM
+export function meritosRM(a) {
+  const req = REGLAS.rm[a?.sexo];
+  if (!req) return null;
+  const califs = calificacionesDe(a.id).filter(c => c.clase !== 'D');
+  const mejorPuntos = califs.length ? Math.max(...califs.map(c => Number(c.total) || 0)) : null;
+  const hijosRD = estado.todos.filter(x => (x.padre_id === a.id || x.madre_id === a.id) && ['RD', 'RM'].includes(x.seccion)).length;
+  const origenValido = REGLAS.rm.seccionesOrigen.includes(a.seccion);
+  const cumplePuntos = mejorPuntos !== null && mejorPuntos >= req.puntos;
+  const cumpleHijos = hijosRD >= req.hijosRD;
+  return { req, mejorPuntos, hijosRD, origenValido, cumplePuntos, cumpleHijos,
+    cumple: origenValido && cumplePuntos && cumpleHijos && Boolean(variedadPorId(a.variedad)?.oficial) };
+}
+
+// Inscripción en el RM (solo administración). via: 'requisitos' | 'premio'
+export async function inscribirRM(animalId, { via = 'requisitos', motivo = '' } = {}) {
+  if (rol() !== 'administrador') throw new Error('La inscripción en el Registro de Méritos la acuerda la administración del Libro.');
+  const a = estado.idx.get(animalId);
+  if (!a) throw new Error('Ejemplar no encontrado.');
+  const m = meritosRM(a);
+  if (!m.origenValido) throw new Error('Solo acceden al RM ejemplares del Registro Fundacional o del Definitivo.');
+  if (!variedadPorId(a.variedad)?.oficial) throw new Error('Las variedades en proceso de reconocimiento no acceden al RM.');
+  if (!m.cumplePuntos) throw new Error(`Necesita una calificación de ${m.req.puntos} puntos o más.`);
+  if (via === 'requisitos' && !m.cumpleHijos) throw new Error(`Necesita ${m.req.hijosRD} descendientes en el Registro Definitivo (tiene ${m.hijosRD}).`);
+  if (via === 'premio' && !String(motivo).trim()) throw new Error('Indica el premio: certamen, fecha y distinción.');
+  const ahora = new Date().toISOString();
+  const nuevo = { ...a, seccion: 'RM', rm_fecha: ahora.slice(0, 10), rm_via: via,
+    rm_motivo: via === 'premio' ? String(motivo).trim() : `${m.mejorPuntos} puntos · ${m.hijosRD} descendientes en RD`, updated_at: ahora };
+  await db.guardar('animales', nuevo);
+  await sync.encolar('animales', 'upsert', nuevo);
+  await cargar();
+  return nuevo;
+}
+
+// Ejemplares que cumplen los requisitos y aún no están en el RM
+export const candidatosRM = () => estado.todos
+  .filter(a => a.estado !== 'baja' && a.seccion !== 'RM')
+  .map(a => ({ a, m: meritosRM(a) }))
+  .filter(x => x.m?.cumple);
+
+// ---------------------------------------------------------------------------
 // Perfil y administración
 // ---------------------------------------------------------------------------
 export async function guardarPerfilServidor(paraServidor) {

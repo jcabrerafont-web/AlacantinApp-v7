@@ -41,6 +41,10 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - **Peso:** obligatorio en la calificación. Se pesa al animal y se anota en gramos; la app y el servidor lo contrastan con el Estándar (gallo 3000–3500 g, gallina 2200–2600 g) y el acta lo refleja como conforme o fuera de rango. No suma puntos.
   - Para ajustar el reparto hay que cambiar `MAXIMOS` en `js/estandar.js` y `baremo_maximos()` en `supabase/schema.sql`.
 - **Registro Definitivo:** se alcanza con resultado Apto, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
+- **Registro de Méritos (RM):** el Club no tenía criterio propio. Se equipara a la reglamentación oficial del Libro Genealógico de la Castellana Negra (anexo I, apdo. A.7, MAPA):
+  - Acceden ejemplares del **RF o del RD**, de variedad oficial, que tengan una calificación (no descalificada) de **80 puntos o más las gallinas y 85 los gallos**, y **3 (gallinas) o 10 (gallos) descendientes** en el Registro Definitivo.
+  - Vía alternativa, tomada del reglamento de la Gallina del Sobrarbe: con la misma calificación mínima, un **premio en feria, concurso o exposición**, que debe describirse.
+  - La app muestra en la ficha el camino al RM y, en Informes, la lista de candidatos. La inscripción la confirma un **administrador**, y el servidor vuelve a comprobar los requisitos (`comprobar_rm`). Los umbrales están en `REGLAS.rm`.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.

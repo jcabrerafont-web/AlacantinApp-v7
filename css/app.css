@@ -209,3 +209,5 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .region.invalido { border-color: var(--rojo); }
 .marcador { position: sticky; top: 64px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
 .marcador b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.lista-simple { list-style: none; padding: 0; margin: .25rem 0 .5rem; }
+.lista-simple li { padding: .3rem 0; }

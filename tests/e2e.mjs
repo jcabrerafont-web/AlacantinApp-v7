@@ -156,6 +156,37 @@ const conDefecto = await page.evaluate(async id => {
 }, idH1);
 ok(conDefecto === '100/D/No apto', `Defecto descalificante: descalificado aunque sume 100 (${conDefecto})`);
 
+// 6b. Registro de Méritos (administración): requisitos y vía por premio
+const cambiarRolLocal = async (nuevo) => {
+  await page.evaluate(async r => {
+    const db = await import('./js/db.js');
+    const p = await db.obtener('perfiles', await db.metaGet('sesion'));
+    await db.guardar('perfiles', { ...p, rol: r });
+  }, nuevo);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#barra a');
+};
+await cambiarRolLocal('administrador');
+const rmRes = await page.evaluate(async id => {
+  const d = await import('./js/datos.js');
+  const out = [];
+  const m = d.meritosRM(d.animal(id));
+  out.push(`${m.mejorPuntos}/${m.hijosRD}/${m.cumple}`);
+  try { await d.inscribirRM(id, { via: 'requisitos' }); out.push('aceptado'); } catch (e) { out.push(e.message); }
+  try { await d.inscribirRM(id, { via: 'premio', motivo: '' }); out.push('aceptado'); } catch (e) { out.push(e.message); }
+  const r = await d.inscribirRM(id, { via: 'premio', motivo: 'Exposición de Elche 2026 · 1º gallina Negra moteada' });
+  out.push(`${r.seccion}/${r.rm_via}`);
+  return out;
+}, idH1);
+ok(rmRes[0] === '95.5/0/false', `RM: mejor calificación no descalificada (95,5; el 100 con defecto no cuenta) y descendientes en RD (${rmRes[0]})`);
+ok(rmRes[1].includes('3 descendientes'), `RM por requisitos exige 3 hijas/os en RD a una gallina (${rmRes[1]})`);
+ok(rmRes[2].includes('premio'), 'RM por premio exige describir el premio');
+ok(rmRes[3] === 'RM/premio', `RM por premio inscrito (${rmRes[3]})`);
+await ir('#/censo'); await ir(`#/animal/${idH1}`);
+ok((await page.innerText('main')).includes('Registro de Méritos'), 'Ficha muestra la inscripción en el RM');
+if (process.env.CAPTURAS) { await page.$eval('main', m => [...m.querySelectorAll('h2')].find(x => x.textContent.includes('Méritos'))?.scrollIntoView({ block: 'center' })); await page.screenshot({ path: `${process.env.CAPTURAS}/ficha-rm.png` }); }
+await cambiarRolLocal('inspector');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');

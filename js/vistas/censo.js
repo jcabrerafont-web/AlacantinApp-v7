@@ -47,7 +47,7 @@ export default function (main) {
       <div class="kpi"><b>${activos.length}</b><span>Ejemplares activos</span></div>
       <div class="kpi"><b>${activos.filter(a => a.sexo === 'M').length}</b><span>Gallos</span></div>
       <div class="kpi"><b>${activos.filter(a => a.sexo === 'H').length}</b><span>Gallinas</span></div>
-      <div class="kpi"><b>${activos.filter(a => a.seccion === 'RD').length}</b><span>Registro Definitivo</span></div>`);
+      <div class="kpi"><b>${activos.filter(a => ['RD', 'RM'].includes(a.seccion)).length}</b><span>Definitivo + Méritos</span></div>`);
     pintar($('#censo-lista', main), lista.length === 0
       ? h`<li class="muted" style="padding:1rem 0">${todos.length === 0
         ? (p ? h`Aún no hay ejemplares. Empieza con <a href="#/alta">Alta Rápida</a>.` : 'Todavía no hay ejemplares publicados.')
@@ -63,7 +63,7 @@ export default function (main) {
             <span class="item-sub">${nombreVariedad(a.variedad)} · ${t ? t.nombre : 'Edad desconocida'}</span>
           </span>
           <span class="fila" style="flex-direction:column;align-items:flex-end;gap:.2rem">
-            <span class="chip ${a.seccion === 'RD' ? 'chip-ok' : 'chip-info'}">${a.seccion}</span>
+            <span class="chip ${['RD', 'RM'].includes(a.seccion) ? 'chip-ok' : 'chip-info'}">${a.seccion === 'RM' ? '★ ' : ''}${a.seccion}</span>
             ${a.estado === 'baja' ? h`<span class="chip chip-alerta">Baja</span>` :
               (f > 0 ? h`<span class="chip ${nf.nivel === 'alerta' ? 'chip-alerta' : nf.nivel === 'precaucion' ? 'chip-aviso' : ''}">Fx ${pct(f, 1)}</span>` : '')}
           </span></a></li>`;

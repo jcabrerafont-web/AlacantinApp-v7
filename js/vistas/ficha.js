@@ -4,7 +4,7 @@ import { esAuditor } from '../auth.js';
 import { ESTANDAR, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
 import { nivelFx, generacionesEquivalentes } from '../genetica.js';
 import * as docs from '../documentos.js';
-import { h, pintar, $, aviso, fecha, kg, pct, dialogo, hoyISO } from '../ui.js';
+import { h, pintar, $, aviso, fecha, kg, pct, dialogo, confirmar, hoyISO } from '../ui.js';
 
 export default function (main, { id }) {
   const dibujar = () => {
@@ -28,6 +28,8 @@ export default function (main, { id }) {
     const califs = verPrivado ? datos.calificacionesDe(a.id) : [];
     const puesta = verPrivado && a.sexo === 'H' ? datos.resumenPuesta(a.id) : null;
     const hijos = datos.estado.todos.filter(x => x.padre_id === a.id || x.madre_id === a.id);
+    const rm = verPrivado && a.estado !== 'baja' ? datos.meritosRM(completo) : null;
+    const admin = datos.rol() === 'administrador';
     const enlace = (x) => (x ? h`<a href="#/animal/${x.id}">${x.anilla}</a>${x.nombre ? h` · ${x.nombre}` : ''}` : h`<span class="muted">No registrado</span>`);
 
     pintar(main, h`
@@ -37,7 +39,7 @@ export default function (main, { id }) {
           <div class="fila"><span class="sexo sexo-${a.sexo}">${a.sexo === 'M' ? '♂' : '♀'}</span>
             <div><h1 style="margin:0">${a.anilla}</h1><div class="muted">${a.nombre || sexoTexto(a.sexo)}</div></div></div>
           <div class="fila">
-            <span class="chip ${a.seccion === 'RD' ? 'chip-ok' : 'chip-info'}">${a.seccion} · ${ESTANDAR.secciones[a.seccion]}</span>
+            <span class="chip ${['RD', 'RM'].includes(a.seccion) ? 'chip-ok' : 'chip-info'}">${a.seccion === 'RM' ? '★ ' : ''}${a.seccion} · ${ESTANDAR.secciones[a.seccion]}</span>
             ${a.estado === 'baja' ? h`<span class="chip chip-alerta">Baja</span>` : ''}
           </div>
         </div>
@@ -83,6 +85,18 @@ export default function (main, { id }) {
           <button class="btn btn-pequeno" data-acta="${c.id}">Acta</button></li>`)}</ul>`
           : h`<p class="muted">Sin calificar. ${propio ? 'La califica un inspector del Club en visita al aviario.' : ''}</p>`}</div>` : ''}
 
+      ${a.seccion === 'RM' ? h`<div class="tarjeta"><h2>★ Registro de Méritos</h2>
+        <p>Inscrito el ${fecha(a.rm_fecha)} · ${a.rm_via === 'premio' ? 'por premio' : 'por calificación y descendencia'}${a.rm_motivo ? h`<br><span class="muted">${a.rm_motivo}</span>` : ''}</p></div>`
+      : rm && rm.origenValido ? h`<div class="tarjeta"><h2>Camino al Registro de Méritos</h2>
+        <ul class="lista-simple">
+          <li>${rm.cumplePuntos ? '✓' : '○'} Calificación: <strong>${rm.mejorPuntos === null ? 'sin calificar' : String(rm.mejorPuntos).replace('.', ',')}</strong> / ${rm.req.puntos} puntos</li>
+          <li>${rm.cumpleHijos ? '✓' : '○'} Descendientes en el Registro Definitivo: <strong>${rm.hijosRD}</strong> / ${rm.req.hijosRD}</li>
+        </ul>
+        <p class="muted peq">Requisitos equiparados a la reglamentación oficial del Libro de la Castellana Negra (${a.sexo === 'M' ? 'gallos' : 'gallinas'}). La inscripción la acuerda la administración del Libro.</p>
+        ${admin ? h`<div class="fila"><button class="btn btn-primario" id="b-rm" ${rm.cumple ? '' : h`disabled`}>★ Inscribir en RM</button>
+          ${rm.cumplePuntos && !rm.cumpleHijos ? h`<button class="btn" id="b-rm-premio">Inscribir por premio…</button>` : ''}</div>` : ''}
+      </div>` : ''}
+
       ${hijos.length ? h`<div class="tarjeta"><h2>Descendencia (${hijos.length})</h2><ul class="lista">
         ${hijos.map(x => h`<li><a class="item" href="#/animal/${x.id}"><span class="sexo sexo-${x.sexo}">${x.sexo === 'M' ? '♂' : '♀'}</span>
           <span class="item-principal"><span class="item-titulo">${x.anilla}</span><span class="item-sub">${fecha(x.fecha_nacimiento)} · ${x.seccion}</span></span></a></li>`)}</ul></div>` : ''}`);
@@ -91,6 +105,21 @@ export default function (main, { id }) {
     $('#b-cert', main)?.addEventListener('click', () => docs.certificado(completo, { idx: datos.estado.idx, titular: titular(), ultimaCalificacion: califs[0] }));
     main.querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () =>
       docs.acta(completo, califs.find(c => c.id === b.dataset.acta), titular())));
+    $('#b-rm', main)?.addEventListener('click', async () => {
+      if (!(await confirmar('Registro de Méritos', `Inscribir ${a.anilla} en el RM por calificación y descendencia.`, 'Inscribir'))) return;
+      try { await datos.inscribirRM(a.id, { via: 'requisitos' }); aviso(`${a.anilla} inscrito en el Registro de Méritos.`, 'ok'); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#b-rm-premio', main)?.addEventListener('click', async () => {
+      const r = await dialogo({
+        titulo: `RM por premio · ${a.anilla}`,
+        cuerpo: h`<div class="campo"><label for="rm-motivo">Premio (certamen, fecha y distinción)</label><textarea id="rm-motivo" placeholder="Ej.: Campeonato de España 2026, Valencia · 1º premio gallo Blanca"></textarea></div>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Inscribir' }]
+      });
+      if (r !== 'si') return;
+      try { await datos.inscribirRM(a.id, { via: 'premio', motivo: document.getElementById('rm-motivo')?.value || '' }); aviso(`${a.anilla} inscrito en el Registro de Méritos.`, 'ok'); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
     $('#b-baja', main)?.addEventListener('click', async () => {
       const r = await dialogo({
         titulo: `Baja de ${a.anilla}`,

@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.animales (
   sexo             char(1) NOT NULL CHECK (sexo IN ('M', 'H')),
   variedad         text NOT NULL CHECK (variedad IN ('negra-moteada', 'pinta', 'blanca', 'arminada', 'milflores')),
   fecha_nacimiento date NOT NULL CHECK (fecha_nacimiento <= current_date),
-  seccion          text NOT NULL DEFAULT 'RN' CHECK (seccion IN ('RN', 'RF', 'RA', 'RD')),
+  seccion          text NOT NULL DEFAULT 'RN' CHECK (seccion IN ('RN', 'RF', 'RA', 'RD', 'RM')),
   padre_id         uuid REFERENCES public.animales(id) ON DELETE SET NULL,
   madre_id         uuid REFERENCES public.animales(id) ON DELETE SET NULL,
   familia          text CHECK (familia IS NULL OR familia IN ('A', 'B', 'C', 'D', 'E')),
@@ -103,7 +103,11 @@ CREATE TABLE IF NOT EXISTS public.animales (
   updated_at       timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT progenitores_distintos CHECK (padre_id IS NULL OR madre_id IS NULL OR padre_id <> madre_id),
   CONSTRAINT no_es_su_propio_padre CHECK (padre_id IS DISTINCT FROM id AND madre_id IS DISTINCT FROM id),
-  CONSTRAINT rd_solo_oficiales CHECK (seccion <> 'RD' OR variedad IN ('negra-moteada', 'pinta', 'blanca')),
+  rm_fecha         date,
+  rm_via           text CHECK (rm_via IS NULL OR rm_via IN ('requisitos', 'premio')),
+  rm_motivo        text,
+  CONSTRAINT rd_solo_oficiales CHECK (seccion NOT IN ('RD', 'RM') OR variedad IN ('negra-moteada', 'pinta', 'blanca')),
+  CONSTRAINT rm_documentado CHECK (seccion <> 'RM' OR (rm_fecha IS NOT NULL AND rm_via IS NOT NULL AND coalesce(trim(rm_motivo), '') <> '')),
   -- Anilla oficial EE: E + año de nacimiento (2) + diámetro (2) + número (6). Ej.: E2620000123
   CONSTRAINT anilla_ee CHECK (anilla ~ '^E[0-9]{10}$' AND substr(anilla, 6, 6) <> '000000'),
   CONSTRAINT anilla_anio CHECK (substr(anilla, 2, 2) = to_char(fecha_nacimiento, 'YY')),
@@ -117,6 +121,41 @@ CREATE INDEX IF NOT EXISTS animales_padre ON public.animales (padre_id);
 CREATE INDEX IF NOT EXISTS animales_madre ON public.animales (madre_id);
 
 -- Reglas que no puede saltarse el cliente: titularidad, sexo de progenitores y sección
+-- Requisitos del Registro de Méritos (equiparados al LG de la Castellana Negra, A.7):
+-- origen RF o RD, variedad oficial y calificación >= 80 (gallinas) / 85 (gallos), y
+--   via 'requisitos': >= 3 (gallinas) / 10 (gallos) descendientes en RD o RM
+--   via 'premio'    : premio en feria, concurso o exposición, descrito en rm_motivo
+CREATE OR REPLACE FUNCTION public.comprobar_rm(a public.animales, via text, motivo text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE puntos numeric; hijos integer;
+  min_puntos integer := CASE a.sexo WHEN 'M' THEN 85 ELSE 80 END;
+  min_hijos  integer := CASE a.sexo WHEN 'M' THEN 10 ELSE 3 END;
+BEGIN
+  IF NOT public.es_admin() THEN
+    RAISE EXCEPTION 'La inscripción en el Registro de Méritos la acuerda la administración del Libro' USING ERRCODE = '42501';
+  END IF;
+  IF a.seccion NOT IN ('RF', 'RD') THEN
+    RAISE EXCEPTION 'Solo acceden al RM ejemplares del Registro Fundacional o del Definitivo' USING ERRCODE = '23514';
+  END IF;
+  SELECT max(total) INTO puntos FROM public.calificaciones WHERE animal_id = a.id AND clase <> 'D';
+  IF coalesce(puntos, 0) < min_puntos THEN
+    RAISE EXCEPTION 'El RM exige una calificación de % puntos o más', min_puntos USING ERRCODE = '23514';
+  END IF;
+  IF via = 'requisitos' THEN
+    SELECT count(*) INTO hijos FROM public.animales h
+      WHERE (h.padre_id = a.id OR h.madre_id = a.id) AND h.seccion IN ('RD', 'RM');
+    IF hijos < min_hijos THEN
+      RAISE EXCEPTION 'El RM exige % descendientes en el Registro Definitivo (tiene %)', min_hijos, hijos USING ERRCODE = '23514';
+    END IF;
+  ELSIF via = 'premio' THEN
+    IF coalesce(trim(motivo), '') = '' THEN
+      RAISE EXCEPTION 'Describe el premio que justifica la inscripción en el RM' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Vía de inscripción en el RM no válida' USING ERRCODE = '23514';
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.validar_animal() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_sexo char(1); v_nac date;
@@ -132,6 +171,9 @@ BEGIN
     IF v_nac >= NEW.fecha_nacimiento THEN RAISE EXCEPTION 'La madre debe haber nacido antes que el ejemplar'; END IF;
   END IF;
   IF TG_OP = 'INSERT' THEN
+    IF NEW.seccion = 'RM' THEN
+      RAISE EXCEPTION 'El Registro de Méritos se alcanza desde el RF o el RD, no en el alta' USING ERRCODE = '23514';
+    END IF;
     IF NOT public.es_auditor() THEN
       NEW.usuario_id := auth.uid();                       -- el titular es siempre quien da el alta
       IF NEW.seccion NOT IN ('RN') THEN NEW.seccion := 'RN'; END IF;  -- RF/RA las asigna el Libro
@@ -142,6 +184,12 @@ BEGIN
     IF NEW.seccion IS DISTINCT FROM OLD.seccion AND NOT public.es_auditor()
        AND coalesce(current_setting('alacantina.promocion', true), '') <> 'si' THEN
       NEW.seccion := OLD.seccion;
+    END IF;
+    -- Registro de Méritos: solo la administración y con los requisitos comprobados aquí
+    IF NEW.seccion = 'RM' AND OLD.seccion IS DISTINCT FROM 'RM' THEN
+      PERFORM public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo);
+    ELSIF NEW.seccion <> 'RM' THEN
+      NEW.rm_fecha := NULL; NEW.rm_via := NULL; NEW.rm_motivo := NULL;
     END IF;
   END IF;
   NEW.updated_at := now();

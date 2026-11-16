@@ -91,3 +91,36 @@ SELECT anilla, seccion FROM animales WHERE anilla = 'E2418000002';
 UPDATE calificaciones SET resultado = 'No apto';
 RESET ROLE;
 SELECT count(*) AS calificaciones FROM calificaciones;
+
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+\echo '== 12. Registro de Méritos'
+\echo '   12a inspector no puede inscribir en RM (esperado: error 42501)'
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Premio' WHERE anilla = 'E2418000002';
+RESET ROLE;
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ('00000000-0000-0000-0000-00000000000d', 'admin@x.es', '{"nombre":"Admin"}');
+ALTER TABLE perfiles DISABLE TRIGGER trg_proteger_perfil;
+UPDATE perfiles SET rol = 'administrador' WHERE email = 'admin@x.es';
+ALTER TABLE perfiles ENABLE TRIGGER trg_proteger_perfil;
+\echo '   12a2 el criador titular tampoco: la sección no cambia (esperado: RD)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Premio' WHERE anilla = 'E2418000002';
+SELECT seccion FROM animales WHERE anilla = 'E2418000002';
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+\echo '   12b admin, gallina con 82,5 puntos pero 0 descendientes en RD (esperado: error 23514)'
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'requisitos', rm_motivo = 'auto' WHERE anilla = 'E2418000002';
+\echo '   12c alta directa en RM (esperado: error 23514)'
+INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, seccion, rm_fecha, rm_via, rm_motivo) VALUES
+ (gen_random_uuid(), auth.uid(), 'E2518000040', 'H', 'blanca', '2025-06-01', 'RM', current_date, 'premio', 'x');
+\echo '   12d con 3 hijas en RD -> inscrita en RM'
+INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, madre_id, seccion) VALUES
+ (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000030', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD'),
+ (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000031', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD'),
+ (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000032', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD');
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'requisitos', rm_motivo = '82,5 puntos · 3 descendientes en RD' WHERE anilla = 'E2418000002';
+SELECT anilla, seccion, rm_via, rm_motivo FROM animales WHERE anilla = 'E2418000002';
+\echo '   12e gallo que sigue en RN, aunque sea por premio (esperado: error 23514)'
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Campeonato' WHERE anilla = 'E2420000001';
+\echo '   12f hija en RD sin calificación suficiente (esperado: error 23514)'
+UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = '' WHERE anilla = 'E2518000030';
+RESET ROLE;

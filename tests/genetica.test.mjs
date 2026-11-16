@@ -123,4 +123,10 @@ t('Anilla EE: composición, lectura y validación', () => {
   const g = comprobarAnilla('E2622000123', { sexo: 'M', fechaNacimiento: '2026-03-01' });
   assert.equal(g.errores.length, 0); assert.equal(g.avisos.length, 1); // 22 en gallo: admitido con aviso
 });
+t('Registro de Méritos: requisitos equiparados al LG de la Castellana Negra', async () => {
+  const { REGLAS } = await import('../js/estandar.js');
+  assert.deepEqual({ ...REGLAS.rm.H }, { puntos: 80, hijosRD: 3 });
+  assert.deepEqual({ ...REGLAS.rm.M }, { puntos: 85, hijosRD: 10 });
+  assert.deepEqual([...REGLAS.rm.seccionesOrigen], ['RF', 'RD']);
+});
 console.log(`\n${ok} pruebas superadas`);

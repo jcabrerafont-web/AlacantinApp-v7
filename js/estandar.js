@@ -96,7 +96,8 @@ export const ESTANDAR = Object.freeze({
     RN: 'Registro de Nacimientos',
     RF: 'Registro Fundacional',
     RA: 'Registro Auxiliar',
-    RD: 'Registro Definitivo'
+    RD: 'Registro Definitivo',
+    RM: 'Registro de Méritos'
   }),
 
   // Familias para la rotación circular de Gobe
@@ -106,6 +107,16 @@ export const ESTANDAR = Object.freeze({
 // Reglas del Club (no proceden del Estándar; ajustables por la Dirección Técnica)
 export const REGLAS = Object.freeze({
   edadMinimaRD_dias: 180,            // Edad mínima para promocionar RN -> RD tras calificación Apto
+  // Registro de Méritos: equiparado a la reglamentación oficial del LG de la
+  // Castellana Negra (anexo I, apdo. A.7): reproductores sobresalientes del RF o
+  // RD, a propuesta de la asociación y con acuerdo de la comisión del Libro.
+  // Vía alternativa (reglamento del LG de la Gallina del Sobrarbe, 2.4): premio
+  // en feria, concurso o exposición, con calificación igualmente alta.
+  rm: Object.freeze({
+    seccionesOrigen: Object.freeze(['RF', 'RD']),
+    H: Object.freeze({ puntos: 80, hijosRD: 3 }),
+    M: Object.freeze({ puntos: 85, hijosRD: 10 })
+  }),
   generacionesWright: 5,             // Profundidad del cálculo de consanguinidad
   fxPrecaucion: 0.0625,              // 6,25 %: equivalente a primos hermanos
   fxAlerta: 0.125,                   // 12,5 %: equivalente a medio hermanos

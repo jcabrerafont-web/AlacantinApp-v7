@@ -22,6 +22,7 @@ export default function (main) {
   const geMedio = activos.length ? activos.reduce((s, a) => s + generacionesEquivalentes(a.id, idx), 0) / activos.length : 0;
   const conPadres = cuenta(a => a.padre_id && a.madre_id);
   const criadores = new Set(activos.map(a => a.usuario_id).filter(Boolean));
+  const candidatos = datos.rol() === 'administrador' ? datos.candidatosRM() : [];
   const porMunicipio = {};
   activos.forEach(a => { const k = [a.municipio, a.provincia].filter(Boolean).join(' · ') || 'Sin municipio'; porMunicipio[k] = (porMunicipio[k] || 0) + 1; });
 
@@ -57,6 +58,12 @@ export default function (main) {
     </div>
     ${auditor ? h`<div class="tarjeta"><h2>Distribución territorial</h2><table><tbody>${Object.entries(porMunicipio).sort((a, b) => b[1] - a[1])
       .map(([k, n]) => h`<tr><td>${k}</td><td class="num">${n}</td></tr>`)}</tbody></table></div>` : ''}
+
+    ${candidatos.length ? h`<div class="tarjeta"><h2>★ Candidatos al Registro de Méritos (${candidatos.length})</h2>
+      <p class="muted peq">Cumplen la calificación y la descendencia exigidas. Ábrelos para acordar la inscripción.</p>
+      <ul class="lista">${candidatos.map(({ a, m }) => h`<li><a class="item" href="#/animal/${a.id}"><span class="item-principal">
+        <span class="item-titulo">${a.anilla} · ${a.sexo === 'M' ? 'Gallo' : 'Gallina'} · ${a.seccion}</span>
+        <span class="item-sub">${String(m.mejorPuntos).replace('.', ',')} puntos · ${m.hijosRD} descendientes en RD</span></span></a></li>`)}</ul></div>` : ''}
 
     <div class="tarjeta"><h2>Exportar</h2>
       <div class="fila">
