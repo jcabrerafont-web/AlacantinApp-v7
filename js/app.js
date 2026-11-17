@@ -30,6 +30,7 @@ const RUTAS = [
   ['reproduccion', 'reproduccion', 'usuario'],
   ['incubacion/:id', 'incubacion', 'usuario'],
   ['inspeccion', 'inspeccion', 'usuario'],
+  ['auditoria', 'auditoria', 'usuario'],
   ['calificar/:id', 'calificacion', ['inspector', 'administrador']],
   ['dossier', 'dossier', ['inspector', 'administrador']],
   ['inspecciones', 'inspecciones', ['inspector', 'administrador']],

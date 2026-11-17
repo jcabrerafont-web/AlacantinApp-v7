@@ -6,7 +6,7 @@
 import * as db from './db.js';
 import * as sync from './sync.js';
 import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla } from './estandar.js';
-import { indice, fxAnimal, creaCiclo } from './genetica.js';
+import { indice, fxAnimal, creaCiclo, nivelFx } from './genetica.js';
 import { esAuditor, actualizarPerfil } from './auth.js';
 import { uuid } from './ui.js';
 
@@ -594,7 +594,7 @@ export async function inscribirRM(animalId, { via = 'requisitos', motivo = '' } 
   if (via === 'requisitos' && !m.cumpleHijos) throw new Error(`Necesita ${m.req.hijosRD} descendientes en el Registro Definitivo (tiene ${m.hijosRD}).`);
   if (via === 'premio' && !String(motivo).trim()) throw new Error('Indica el premio: certamen, fecha y distinción.');
   const ahora = new Date().toISOString();
-  const nuevo = { ...a, seccion: 'RM', rm_fecha: ahora.slice(0, 10), rm_via: via,
+  const nuevo = { ...a, seccion: 'RM', rm_origen: a.seccion, rm_fecha: ahora.slice(0, 10), rm_via: via,
     rm_motivo: via === 'premio' ? String(motivo).trim() : `${m.mejorPuntos} puntos · ${m.hijosRD} descendientes en RD`, updated_at: ahora };
   await db.guardar('animales', nuevo);
   await sync.encolar('animales', 'upsert', nuevo);
@@ -607,6 +607,80 @@ export const candidatosRM = () => estado.todos
   .filter(a => a.estado !== 'baja' && a.seccion !== 'RM')
   .map(a => ({ a, m: meritosRM(a) }))
   .filter(x => x.m?.cumple);
+
+// ---------------------------------------------------------------------------
+// Auditoría del Libro: incoherencias que la Dirección Técnica (todo el Libro) o el
+// criador (su censo) deben revisar. Solo informa: nunca corrige sola.
+// ---------------------------------------------------------------------------
+export const TIPOS_AUDITORIA = {
+  anilla_duplicada: ['error', 'Anilla repetida'],
+  anilla_invalida: ['error', 'Anilla incoherente'],
+  sexo_progenitor: ['error', 'Sexo del padre o de la madre'],
+  edad_progenitor: ['error', 'Padre o madre demasiado joven'],
+  baja_progenitor: ['error', 'Padre o madre dado de baja antes'],
+  ciclo: ['error', 'Genealogía circular'],
+  rd_sin_apto: ['error', 'En RD o RM sin calificación Apto'],
+  rd_padres: ['error', 'En RD o RM con padres fuera del Libro'],
+  rd_variedad: ['error', 'En RD o RM con variedad no oficial'],
+  sin_padres: ['aviso', 'Sin padre o madre (no podrá pasar al RD)'],
+  sin_rega: ['aviso', 'Sin REGA'],
+  consanguinidad: ['aviso', 'Consanguinidad elevada'],
+  variedad_padres: ['aviso', 'Variedad distinta de la de los padres'],
+  muy_viejo: ['aviso', '¿Sigue vivo?']
+};
+
+export function auditarLibro({ hoy = hoyIso() } = {}) {
+  const p = estado.perfil;
+  if (!p) return [];
+  const AU = REGLAS.auditoria;
+  const lista = censo({ incluirBajas: true });
+  const activos = lista.filter(a => a.estado !== 'baja');
+  const hallazgos = [];
+  const anotar = (tipo, a, texto) => hallazgos.push({ tipo, nivel: TIPOS_AUDITORIA[tipo][0], animal: a, texto });
+  // Anillas repetidas en todo lo visible (incluidas las bajas: una anilla no se reutiliza)
+  const porAnilla = new Map();
+  estado.todos.forEach(a => { const k = normalizarAnilla(a.anilla); porAnilla.set(k, (porAnilla.get(k) || 0) + 1); });
+  const diasEntre = (x, y) => Math.round((new Date(`${y}T12:00:00Z`) - new Date(`${x}T12:00:00Z`)) / 864e5);
+  const aptos = new Set(estado.calificaciones.filter(c => c.resultado === 'Apto').map(c => c.animal_id));
+  for (const a of lista) {
+    if (porAnilla.get(normalizarAnilla(a.anilla)) > 1) anotar('anilla_duplicada', a, `La anilla ${a.anilla} está registrada más de una vez.`);
+    const an = comprobarAnilla(a.anilla, { sexo: a.sexo, fechaNacimiento: a.fecha_nacimiento });
+    if (an.errores.length) anotar('anilla_invalida', a, an.errores.join(' '));
+    const padre = estado.idx.get(a.padre_id), madre = estado.idx.get(a.madre_id);
+    if (padre && padre.sexo !== 'M') anotar('sexo_progenitor', a, `El padre ${padre.anilla} está registrado como hembra.`);
+    if (madre && madre.sexo !== 'H') anotar('sexo_progenitor', a, `La madre ${madre.anilla} está registrada como macho.`);
+    for (const [pr, quien] of [[padre, 'El padre'], [madre, 'La madre']]) {
+      if (!pr || !pr.fecha_nacimiento || !a.fecha_nacimiento) continue;
+      if (pr.fecha_nacimiento >= a.fecha_nacimiento) { anotar('edad_progenitor', a, `${quien} ${pr.anilla} nació después que su hijo/a.`); continue; }
+      const m = edadMeses(pr.fecha_nacimiento, new Date(`${a.fecha_nacimiento}T12:00:00`));
+      if (m < AU.edadMinimaPadres_meses) anotar('edad_progenitor', a, `${quien} ${pr.anilla} tenía ${m} meses cuando nació (mínimo plausible: ${AU.edadMinimaPadres_meses}).`);
+    }
+    if (madre?.baja_fecha && a.fecha_nacimiento && diasEntre(madre.baja_fecha, a.fecha_nacimiento) > AU.margenBajaMadre_dias)
+      anotar('baja_progenitor', a, `La madre ${madre.anilla} se dio de baja el ${madre.baja_fecha.split('-').reverse().join('/')}, antes de poder poner el huevo.`);
+    if (padre?.baja_fecha && a.fecha_nacimiento && diasEntre(padre.baja_fecha, a.fecha_nacimiento) > AU.margenBajaPadre_dias)
+      anotar('baja_progenitor', a, `El padre ${padre.anilla} se dio de baja el ${padre.baja_fecha.split('-').reverse().join('/')}, antes de poder fecundar el huevo.`);
+    if ((a.padre_id || a.madre_id) && creaCiclo(a.id, a.padre_id, a.madre_id, estado.idx)) anotar('ciclo', a, 'El ejemplar aparece como ancestro de sí mismo.');
+    if (a.estado === 'baja') continue;
+    if (['RD', 'RM'].includes(a.seccion)) {
+      if (!aptos.has(a.id)) anotar('rd_sin_apto', a, `Está en ${a.seccion} sin ninguna calificación Apto registrada.`);
+      // Un RM que procede del Registro Fundacional no tiene por qué tener padres en el Libro
+      const desdeRF = a.seccion === 'RM' && (a.rm_origen === 'RF' || (!a.rm_origen && !a.padre_id && !a.madre_id));
+      const fuera = desdeRF ? [] : [[padre, a.padre_id, 'padre'], [madre, a.madre_id, 'madre']].filter(([x, id]) => !id || (x && !SECCIONES_LIBRO.includes(x.seccion)));
+      if (fuera.length) anotar('rd_padres', a, fuera.map(([x, , q]) => (x ? `${q} ${x.anilla} en ${x.seccion}` : `${q} desconocido/a`)).join('; ') + '.');
+      if (!variedadPorId(a.variedad)?.oficial) anotar('rd_variedad', a, `Variedad ${variedadPorId(a.variedad)?.nombre || a.variedad} aún no oficial.`);
+    }
+    if (a.seccion === 'RN' && (!a.padre_id || !a.madre_id)) anotar('sin_padres', a, `Sin ${!a.padre_id && !a.madre_id ? 'padre ni madre' : !a.padre_id ? 'padre' : 'madre'}. Si es un fundador, la Dirección Técnica puede inscribirlo en RF.`);
+    if (!a.rega) anotar('sin_rega', a, esAuditor(p.rol) ? 'Explotación sin REGA.' : 'Sin REGA: añádelo en Mi aviario y edita el ejemplar.');
+    const f = fxAnimal(a, estado.idx);
+    if (nivelFx(f).nivel === 'alerta') anotar('consanguinidad', a, `Fx ${(f * 100).toFixed(1).replace('.', ',')} %: evita usarlo con parientes.`);
+    if (padre && madre && padre.variedad !== madre.variedad) anotar('variedad_padres', a, `Cruce de variedades: padre ${variedadPorId(padre.variedad)?.nombre || padre.variedad}, madre ${variedadPorId(madre.variedad)?.nombre || madre.variedad}.`);
+    else if (padre && madre && padre.variedad !== a.variedad) anotar('variedad_padres', a, `Sus padres son ${variedadPorId(padre.variedad)?.nombre || padre.variedad}: ¿variedad mal anotada?`);
+    const anios = edadMeses(a.fecha_nacimiento, new Date(`${hoy}T12:00:00`));
+    if (anios !== null && anios >= AU.edadRevisar_anios * 12) anotar('muy_viejo', a, `Tiene ${Math.floor(anios / 12)} años. Si ya no vive, dalo de baja.`);
+  }
+  const orden = Object.keys(TIPOS_AUDITORIA);
+  return hallazgos.sort((x, y) => orden.indexOf(x.tipo) - orden.indexOf(y.tipo) || x.animal.anilla.localeCompare(y.animal.anilla));
+}
 
 // ---------------------------------------------------------------------------
 // Solicitudes de inspección: el criador pide la visita con los ejemplares listos;

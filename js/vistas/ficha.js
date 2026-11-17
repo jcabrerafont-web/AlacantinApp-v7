@@ -2,7 +2,7 @@
 import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, sumarMeses, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
-import { nivelFx, generacionesEquivalentes } from '../genetica.js';
+import { nivelFx, generacionesEquivalentes, purezaVariedad } from '../genetica.js';
 import * as docs from '../documentos.js';
 import { h, pintar, $, aviso, fecha, kg, pct, dialogo, confirmar, hoyISO } from '../ui.js';
 
@@ -90,6 +90,16 @@ export default function (main, { id }) {
           <div class="item-sub">${c.inspector_nombre}${c.defectos?.length ? ` · ${c.defectos.length} defecto(s) descalificante(s)` : ''}</div></div>
           <button class="btn btn-pequeno" data-acta="${c.id}">Acta</button></li>`)}</ul>`
           : h`<p class="muted">Sin calificar. ${propio ? 'La califica un inspector del Club en visita al aviario.' : ''}</p>`}</div>` : ''}
+
+      ${(() => {
+        const pv = purezaVariedad(a.id, datos.estado.idx);
+        if (!pv || (!a.padre_id && !a.madre_id)) return '';
+        const G = REGLAS.generacionesVariedad;
+        return h`<div class="tarjeta" id="ficha-pureza"><h2>Pureza de variedad</h2>
+          <p><strong>${pv.generacionesPuras} de ${G}</strong> generaciones completas de ${nombreVariedad(a.variedad)}${pv.generacionesPuras >= G ? ' ✓' : ''} · pedigrí conocido ${pct(pv.conocidos, 0)}${pv.misma !== null ? ` · ${pct(pv.misma, 0)} de los ancestros conocidos de su variedad` : ''}</p>
+          ${pv.otras.length ? h`<p class="peq">Ancestros de otras variedades: ${pv.otras.map(o => `${nombreVariedad(o.variedad)} (${['', 'padres', 'abuelos', 'bisabuelos', 'tatarabuelos', '5.ª generación'][o.generacion] || `${o.generacion}.ª gen.`})`).join(', ')}.</p>` : ''}
+          <p class="peq muted">Una variedad necesita ${G} generaciones criadas solo con su variedad. <a href="#/programa?s=normativa">Más</a></p></div>`;
+      })()}
 
       ${rd ? h`<div class="tarjeta"><h2>Camino al Registro Definitivo</h2>
         <ul class="lista-simple">${rd.lista.map(x => h`<li>${x.ok ? '✓' : '○'} ${x.texto}</li>`)}</ul>

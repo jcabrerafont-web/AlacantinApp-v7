@@ -20,6 +20,7 @@ export default function (main) {
       ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],
       ['#/reproduccion', '🐣', 'Reproducción e incubación', 'Lotes gallo + gallinas, incubadora y alta de pollitos con sus padres'],
       ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
+      ['#/auditoria', '🩺', esAuditor(r) ? 'Auditoría del Libro' : 'Revisar mi censo', (() => { const x = datos.auditarLibro(); const e = x.filter(y => y.nivel === 'error').length; return x.length ? `${e} error(es) y ${x.length - e} aviso(s) · pureza de variedad` : 'Sin incoherencias · pureza de variedad'; })()],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],
     ['Consulta', [

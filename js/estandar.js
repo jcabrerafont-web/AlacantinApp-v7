@@ -110,6 +110,11 @@ export const REGLAS = Object.freeze({
   // Paso RN -> RD, equiparado a la reglamentación del LG de la Castellana Negra
   // (anexo I, A.6): un año de edad y 65 puntos las gallinas / 70 los gallos.
   edadMinimaRD_meses: 12,
+  // Auditoría del Libro: edad mínima plausible de un reproductor al nacer su hijo,
+  // y margen entre la baja de un progenitor y el nacimiento (21 días de incubación;
+  // el gallo, además, hasta 3 semanas de fecundidad residual).
+  auditoria: Object.freeze({ edadMinimaPadres_meses: 5, margenBajaMadre_dias: 21, margenBajaPadre_dias: 42, edadRevisar_anios: 8 }),
+  generacionesVariedad: 5,
   puntosMinimosApto: Object.freeze({ H: 65, M: 70 }),
   // Registro de Méritos: equiparado a la reglamentación oficial del LG de la
   // Castellana Negra (anexo I, apdo. A.7): reproductores sobresalientes del RF o

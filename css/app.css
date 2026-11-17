@@ -232,3 +232,4 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .dossier-celda span { padding: .35rem .45rem; }
 .dossier-celda.falta { border-style: dashed; justify-content: center; min-height: 110px; color: var(--texto-2); background: transparent; }
 @media print { .dossier-fila { grid-template-columns: repeat(3, 1fr); } .dossier-celda { break-inside: avoid; } }
+.auditoria-grupo summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }

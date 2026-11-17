@@ -114,6 +114,35 @@ export function generacionesEquivalentes(animalId, idx, maxGen = REGLAS.generaci
   return ancestros(animalId, idx, maxGen).reduce((s, x) => s + Math.pow(0.5, x.generacion), 0);
 }
 
+/**
+ * Pureza de variedad (RD 45/2019, art. 3 b; Protocolo CNZ 2025, variedades): una variedad
+ * exige aislamiento reproductivo durante al menos 5 generaciones.
+ * - generacionesPuras: generaciones seguidas (1, 2, 3…) con TODOS los ancestros conocidos y de la misma variedad.
+ * - conocidos: ancestros conocidos, ponderados por (1/2)^g, sobre el máximo posible (1 = pedigrí completo).
+ * - misma: de lo conocido, parte ponderada de la misma variedad (null si no hay ancestros).
+ * - otras: otras variedades encontradas, con la generación más cercana.
+ */
+export function purezaVariedad(animalId, idx, maxGen = REGLAS.generacionesVariedad) {
+  const a = idx.get(animalId);
+  if (!a) return null;
+  const porGen = Array.from({ length: maxGen }, (_, i) => ({ generacion: i + 1, esperados: 2 ** (i + 1), conocidos: 0, mismos: 0 }));
+  let pesoConocido = 0, pesoMismo = 0;
+  const otras = new Map();
+  for (const x of ancestros(animalId, idx, maxGen)) {
+    const b = idx.get(x.id);
+    if (!b) continue;                                   // registro no visible: cuenta como desconocido
+    const g = porGen[x.generacion - 1];
+    const w = 0.5 ** x.generacion;
+    g.conocidos++; pesoConocido += w;
+    if (b.variedad === a.variedad) { g.mismos++; pesoMismo += w; }
+    else if (!otras.has(b.variedad) || otras.get(b.variedad) > x.generacion) otras.set(b.variedad, x.generacion);
+  }
+  let generacionesPuras = 0;
+  for (const g of porGen) { if (g.conocidos === g.esperados && g.mismos === g.esperados) generacionesPuras++; else break; }
+  return { variedad: a.variedad, generacionesPuras, porGen, conocidos: pesoConocido / maxGen, misma: pesoConocido ? pesoMismo / pesoConocido : null,
+    otras: [...otras].map(([variedad, generacion]) => ({ variedad, generacion })).sort((p, q) => p.generacion - q.generacion) };
+}
+
 /** Ne demográfico (Wright, 1931): 4·Nm·Nf / (Nm + Nf) */
 export function neDemografico(nMachos, nHembras) {
   const t = nMachos + nHembras;

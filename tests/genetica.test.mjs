@@ -1,6 +1,6 @@
 // Pruebas unitarias: node tests/genetica.test.mjs
 import assert from 'node:assert/strict';
-import { fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
+import { purezaVariedad, fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
 import { componerAnilla, parsearAnilla, comprobarAnilla, anillaLegible, evaluarCalificacion, claseDe, puntoValido, BAREMO, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
 
 let ok = 0;
@@ -142,5 +142,25 @@ t('Paso a RD como en la Castellana: gallinas >= 65, gallos >= 70, un año de eda
   const joven = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', fechaNacimiento: '2026-03-01', puntos: max, hoy });
   assert.equal(joven.resultado, 'Apto'); assert.equal(joven.accedeRD, false); assert.equal(joven.fechaEdadRD, '2027-03-01');
   assert.equal(evaluarCalificacion({ sexo: 'H', variedad: 'blanca', fechaNacimiento: '2025-11-17', puntos: max, hoy }).accedeRD, true);
+});
+t('Pureza de variedad: 5 generaciones completas de la misma variedad', () => {
+  // Pedigrí completo de 5 generaciones, todos «blanca»: árbol binario de 63 animales
+  const lista = [];
+  const crear = (id, g) => { if (g === 5) { lista.push(A(id, null, null, { variedad: 'blanca' })); return; } crear(id + 'P', g + 1); crear(id + 'M', g + 1); lista.push(A(id, id + 'P', id + 'M', { variedad: 'blanca' })); };
+  crear('X', 0);
+  const idx = indice(lista);
+  const r = purezaVariedad('X', idx);
+  assert.equal(r.generacionesPuras, 5); cerca(r.conocidos, 1); cerca(r.misma, 1); assert.equal(r.otras.length, 0);
+  // Una tatarabuela (generación 4) de otra variedad corta en 3 generaciones puras
+  idx.set('XPPPM', { ...idx.get('XPPPM'), variedad: 'negra-moteada' });
+  const r2 = purezaVariedad('X', idx);
+  assert.equal(r2.generacionesPuras, 3); assert.deepEqual(r2.otras, [{ variedad: 'negra-moteada', generacion: 4 }]);
+  cerca(r2.misma, 1 - 0.5 ** 4 / 5); // solo ella es de otra variedad; sus padres siguen siendo blancos
+});
+t('Pureza de variedad: padres desconocidos o no visibles', () => {
+  const idx = indice([A('h', 'p', 'm', { variedad: 'blanca' }), A('p', null, null, { variedad: 'blanca' })]); // la madre no está en el índice
+  const r = purezaVariedad('h', idx);
+  assert.equal(r.generacionesPuras, 0); cerca(r.conocidos, 0.5 / 5); cerca(r.misma, 1);
+  assert.equal(purezaVariedad('solo', indice([A('solo', null, null, { variedad: 'blanca' })])).misma, null);
 });
 console.log(`\n${ok} pruebas superadas`);

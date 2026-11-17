@@ -91,6 +91,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - El panel de inspección muestra los datos del criador (socio, municipio, REGA), botones para llamar, WhatsApp (prefijo 34) y cómo llegar (coordenadas del aviario), y el avance de la calificación de cada ejemplar.
   - Estados: pendiente → visita programada (con fecha y mensaje al criador) → realizada, o anulada con motivo.
   - En el servidor: una sola solicitud abierta por criador; el criador solo puede anular; inspección no puede cambiar los ejemplares pedidos; una solicitud cerrada no se reabre.
+- **Auditoría del Libro y pureza de variedad** (`#/auditoria`; «Revisar mi censo» para el criador, todo el Libro para inspección y administración):
+  - Errores: anilla repetida o incoherente (año, diámetro), padre que no es macho o madre que no es hembra, progenitor nacido después o con menos de 5 meses, progenitor dado de baja antes de poder dar el huevo, genealogía circular, RD o RM sin Apto, con padres fuera del Libro (salvo RM procedente de RF) o con variedad no oficial.
+  - Avisos: RN sin padres, sin REGA, consanguinidad elevada, variedad distinta de la de los padres (o cruce de variedades), ejemplares de más de 8 años sin baja.
+  - Cada hallazgo enlaza a la ficha y a «Corregir»; nunca se corrige solo. Exportación en CSV.
+  - **Pureza de variedad** (RD 45/2019 art. 3 b; Protocolo CNZ 2025): generaciones seguidas con todos los ancestros conocidos y de la misma variedad (objetivo: 5), pedigrí conocido y parte de los ancestros de la misma variedad. Por ejemplar en la ficha y resumen por variedad en la auditoría.
+  - `rm_origen` (RF o RD) guarda de dónde viene cada ejemplar del RM.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.
@@ -149,9 +155,9 @@ docs/                 Estándar oficial en PDF
 ## Pruebas
 
 ```bash
-node tests/genetica.test.mjs                  # 25 pruebas: Wright, Ne, Gobe, Estándar
+node tests/genetica.test.mjs                  # 27 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 94 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 99 comprobaciones en Chrome (Playwright)
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 

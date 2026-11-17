@@ -65,6 +65,7 @@ export default function (main) {
         <span class="item-titulo">${a.anilla} · ${a.sexo === 'M' ? 'Gallo' : 'Gallina'} · ${a.seccion}</span>
         <span class="item-sub">${String(m.mejorPuntos).replace('.', ',')} puntos · ${m.hijosRD} descendientes en RD</span></span></a></li>`)}</ul></div>` : ''}
 
+    <div class="tarjeta"><p>🩺 <a href="#/auditoria">${auditor ? 'Auditoría del Libro' : 'Revisar mi censo'}</a>: incoherencias por corregir y <a href="#/auditoria">pureza de variedad</a> (${REGLAS.generacionesVariedad} generaciones).</p></div>
     <div class="tarjeta"><h2>Exportar</h2>
       <div class="fila">
         <button class="btn" id="x-pedigri">⬇️ Matriz de pedigrí (CSV · ENDOG/CFC/R)</button>

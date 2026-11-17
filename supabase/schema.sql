@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS public.animales (
   rm_fecha         date,
   rm_via           text CHECK (rm_via IS NULL OR rm_via IN ('requisitos', 'premio')),
   rm_motivo        text,
+  rm_origen        text CHECK (rm_origen IS NULL OR rm_origen IN ('RF', 'RD')),
   CONSTRAINT rd_solo_oficiales CHECK (seccion NOT IN ('RD', 'RM') OR variedad IN ('negra-moteada', 'pinta', 'blanca')),
   CONSTRAINT rm_documentado CHECK (seccion <> 'RM' OR (rm_fecha IS NOT NULL AND rm_via IS NOT NULL AND coalesce(trim(rm_motivo), '') <> '')),
   -- Anilla oficial EE: E + año de nacimiento (2) + diámetro (2) + número (6). Ej.: E2620000123
@@ -193,8 +194,11 @@ BEGIN
     -- Registro de Méritos: solo la administración y con los requisitos comprobados aquí
     IF NEW.seccion = 'RM' AND OLD.seccion IS DISTINCT FROM 'RM' THEN
       PERFORM public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo);
-    ELSIF NEW.seccion <> 'RM' THEN
-      NEW.rm_fecha := NULL; NEW.rm_via := NULL; NEW.rm_motivo := NULL;
+      NEW.rm_origen := OLD.seccion;                        -- RF o RD: de dónde viene (la auditoría lo usa)
+    ELSIF NEW.seccion = 'RM' THEN
+      NEW.rm_origen := OLD.rm_origen;
+    ELSE
+      NEW.rm_fecha := NULL; NEW.rm_via := NULL; NEW.rm_motivo := NULL; NEW.rm_origen := NULL;
     END IF;
   END IF;
   NEW.updated_at := now();

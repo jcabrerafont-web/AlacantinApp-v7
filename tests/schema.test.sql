@@ -138,7 +138,7 @@ INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, 
  (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000031', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD'),
  (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000032', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD');
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'requisitos', rm_motivo = '82,5 puntos · 3 descendientes en RD' WHERE anilla = 'E2418000002';
-SELECT anilla, seccion, rm_via, rm_motivo FROM animales WHERE anilla = 'E2418000002';
+SELECT anilla, seccion, rm_via, rm_motivo, rm_origen FROM animales WHERE anilla = 'E2418000002';
 \echo '   12e gallo fundador (RF) sin calificación, por premio: no llega a 85 (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Campeonato' WHERE anilla = 'E2420000001';
 \echo '   12f hija en RD sin calificación suficiente (esperado: error 23514)'

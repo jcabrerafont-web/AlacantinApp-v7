@@ -434,6 +434,30 @@ ok(!(await page.$('#sol-abierta')) && await page.$eval('main', m => m.textConten
 await cambiarRolLocal('inspector');
 await ir('#/censo');
 
+// 6h. Auditoría del Libro y pureza de variedad (inspector: todo el Libro)
+await page.evaluate(async () => {
+  const db = await import('./js/db.js'); const d = await import('./js/datos.js');
+  const gallina = d.estado.todos.find(a => a.anilla === 'E2418000002');
+  const yo = d.estado.perfil.id;
+  // Datos imposibles a propósito: «padre» que es una gallina y nació después que el hijo; anilla de otro año
+  await db.guardar('animales', { id: 'au-malo', usuario_id: yo, criador_id: yo, anilla: 'E2318000077', sexo: 'H', variedad: 'blanca', fecha_nacimiento: '2022-04-01', padre_id: gallina.id, madre_id: null, seccion: 'RN', estado: 'activo', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  await d.cargar();
+});
+await ir('#/auditoria');
+const au = await page.evaluate(() => ({ tipos: [...document.querySelectorAll('.auditoria-grupo')].map(d => d.dataset.tipo), kpis: [...document.querySelectorAll('.kpi b')].map(b => b.textContent),
+  pureza: [...document.querySelectorAll('#pureza tbody tr')].map(t => t.textContent.replace(/\s+/g, ' ').trim()), malo: [...document.querySelectorAll('.auditoria-grupo li')].filter(li => li.textContent.includes('E2318000077')).map(li => li.textContent.replace(/\s+/g, ' ').trim()) }));
+ok(['anilla_invalida', 'sexo_progenitor', 'edad_progenitor', 'sin_padres', 'variedad_padres'].every(t => au.tipos.includes(t)), `Auditoría: detecta anilla incoherente, sexo y edad del padre, falta de padres y variedad distinta de los padres (${au.tipos.join(', ')})`);
+ok(au.malo.some(t => t.includes('nació después')) && au.malo.some(t => t.includes('registrado como hembra')) && au.malo.some(t => t.includes('Corregir')), 'Auditoría: explica cada incoherencia y enlaza para corregirla');
+ok(au.pureza.some(t => t.startsWith('Blanca')) && au.pureza.some(t => t.startsWith('Negra moteada')), `Auditoría: pureza por variedad (${au.pureza.join(' | ').slice(0, 120)})`);
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/auditoria.png`, fullPage: true });
+const [descargaAu] = await Promise.all([page.waitForEvent('download'), page.click('#au-csv')]);
+ok(descargaAu.suggestedFilename().startsWith('AlacantinApp_auditoria_'), 'Auditoría descargable en CSV');
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.borrar('animales', 'au-malo'); await (await import('./js/datos.js')).cargar(); });
+const idHija3 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E2518000003').id);
+await ir(`#/animal/${idHija3}`);
+ok(await page.$eval('#ficha-pureza', e => e.textContent.includes('0 de 5') && e.textContent.includes('Negra moteada (padres)')), 'Ficha: pureza de variedad (hija blanca de padres negra moteada: 0 de 5 generaciones)');
+await ir('#/censo');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');
