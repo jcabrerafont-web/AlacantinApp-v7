@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import * as auth from './auth.js';
 import * as sync from './sync.js';
 import * as datos from './datos.js';
+import * as instalacion from './instalacion.js';
 import { $, aviso, esc } from './ui.js';
 
 // Rutas: [patrón, módulo, roles permitidos ('*' = todos, 'usuario' = cualquier sesión)]
@@ -138,6 +139,7 @@ function pintarCabecera() {
 
 export async function iniciarSesion(perfil) {
   datos.estado.perfil = perfil;
+  instalacion.pedirPersistencia(); // que el navegador no borre el Libro del móvil
   await datos.cargar();
   pintarBarra();
   pintarCabecera();
@@ -156,6 +158,7 @@ export async function cerrarSesion() {
 }
 
 async function arrancar() {
+  instalacion.vigilar();
   // Espera breve al cliente Supabase (script diferido); si no carga, modo dispositivo
   for (let i = 0; i < 20 && !window.supabase && navigator.onLine; i++) await new Promise(r => setTimeout(r, 50));
   const cliente = auth.crearCliente();
@@ -212,22 +215,43 @@ async function arrancar() {
 
 function registrarServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  const arranque = Date.now();
+  const habiaControlador = Boolean(navigator.serviceWorker.controller);
+  let recargando = false;
+  const aMedias = () => Boolean(document.querySelector('form[data-sucio="1"]')) || sync.sincronizando();
+  const activar = (w) => w.postMessage({ tipo: 'activar' });
+  // Versión nueva descargada y en espera: al abrir la app se aplica sola; después, se ofrece
+  const ofrecer = (w) => {
+    if (Date.now() - arranque < 10000 && !aMedias()) { activar(w); return; }
+    if (document.getElementById('actualizacion')) return;
+    const barra = document.createElement('div');
+    barra.id = 'actualizacion';
+    barra.className = 'banner-actualizar';
+    barra.setAttribute('role', 'status');
+    barra.innerHTML = '<span>Hay una versión nueva de AlacantinApp.</span><button class="btn btn-primario btn-pequeno" type="button">Actualizar</button>';
+    barra.querySelector('button').addEventListener('click', async () => {
+      if (aMedias()) {
+        const { confirmar } = await import('./ui.js');
+        if (!(await confirmar('Actualizar ahora', 'Tienes datos a medias o enviándose. Si actualizas ahora, lo que no hayas guardado se perderá.', 'Actualizar'))) return;
+      }
+      activar(w);
+    });
+    document.body.appendChild(barra);
+  };
   navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    if (reg.waiting && navigator.serviceWorker.controller) ofrecer(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) ofrecer(w); });
+    });
     const comprobar = () => reg.update().catch(() => {});
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') comprobar(); });
     setInterval(comprobar, 60 * 60 * 1000);
   }).catch(e => console.warn('[PWA]', e));
-  const habiaControlador = Boolean(navigator.serviceWorker.controller);
-  let recargado = false;
+  // La versión nueva ya controla la página: recargar para usarla entera
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!habiaControlador || recargado) return;
-    // No recargar si hay un formulario a medias: se avisa y se aplica al volver a abrir
-    const editando = document.querySelector('form[data-sucio="1"]');
-    if (editando || sync.sincronizando()) {
-      aviso('Hay una versión nueva de AlacantinApp. Se aplicará al terminar.', 'info');
-      return;
-    }
-    recargado = true;
+    if (!habiaControlador || recargando) return;
+    recargando = true;
     location.reload();
   });
 }

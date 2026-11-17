@@ -1,15 +1,18 @@
 // ============================================================================
 // AlacantinApp v7 · Service Worker
-//  · Toda la app se precachea al instalar: funciona sin cobertura desde el
-//    primer uso.
-//  · Archivos propios: network-first con timeout (si hay red, siempre la
-//    versión nueva; sin red o con red muy lenta, la copia en caché).
-//  · Al publicar una versión nueva basta con cambiar VERSION: se purgan las
-//    cachés antiguas y la app recarga sola (salvo formularios a medias).
-//  · Supabase (datos, sesión, fotos) nunca se cachea: los datos offline
-//    viven en IndexedDB.
+//  · Toda la versión se guarda en el móvil al instalarla: funciona sin cobertura
+//    desde el primer uso.
+//  · Archivos de la app: primero la copia guardada de ESTA versión. La app abre al
+//    instante aunque la cobertura sea mala (antes se esperaba a la red hasta 3,5 s
+//    por archivo).
+//  · Versión nueva: el navegador descarga sw.js al abrir la app (y la app lo
+//    comprueba cada hora y al volver a ella). La versión nueva se descarga entera
+//    en segundo plano y ESPERA: la app la activa al arrancar o cuando el usuario
+//    pulsa «Actualizar», nunca con un formulario a medias. Así no se mezclan
+//    archivos de dos versiones.
+//  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.9.0';
+const VERSION = '7.10.0';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 const TIMEOUT_MS = 3500;
@@ -22,7 +25,7 @@ const APP = [
   './js/vistas/censo.js', './js/vistas/estandar.js', './js/vistas/ficha.js', './js/vistas/guia.js',
   './js/vistas/herramientas.js', './js/vistas/informes.js', './js/vistas/pedigri.js', './js/vistas/perfil.js',
   './js/vistas/puesta.js', './js/vistas/sincronizacion.js', './js/vistas/usuarios.js',
-  './js/vistas/programa.js', './js/vistas/campanas.js', './js/vistas/campana.js', './js/vistas/dossier.js', './js/vistas/copia.js', './js/respaldo.js', './js/vistas/reproduccion.js', './js/vistas/incubacion.js', './js/vistas/inspeccion.js', './js/vistas/inspecciones.js', './js/vistas/auditoria.js', './js/vistas/acta.js',
+  './js/vistas/programa.js', './js/vistas/campanas.js', './js/vistas/campana.js', './js/vistas/dossier.js', './js/vistas/copia.js', './js/respaldo.js', './js/instalacion.js', './js/vistas/reproduccion.js', './js/vistas/incubacion.js', './js/vistas/inspeccion.js', './js/vistas/inspecciones.js', './js/vistas/auditoria.js', './js/vistas/acta.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
   './icons/logo.png', './docs/Estandar-Alacantina2025.pdf'
 ];
@@ -34,8 +37,13 @@ self.addEventListener('install', (e) => {
     await c.addAll(APP.map(u => new Request(u, { cache: 'reload' })));
     const cdn = await caches.open(CACHE_CDN);
     await Promise.allSettled(CDN.map(async u => { if (!(await cdn.match(u))) await cdn.add(u); }));
-    await self.skipWaiting();
+    // Sin skipWaiting: la versión nueva espera a que la app la active (mensaje «activar»)
   })());
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data?.tipo === 'activar') self.skipWaiting();
+  if (e.data?.tipo === 'version') e.source?.postMessage({ tipo: 'version', version: VERSION });
 });
 
 self.addEventListener('activate', (e) => {
@@ -50,6 +58,14 @@ function conTimeout(promesa, ms) {
     const t = setTimeout(() => ko(new Error('timeout')), ms);
     promesa.then(v => { clearTimeout(t); ok(v); }, err => { clearTimeout(t); ko(err); });
   });
+}
+
+// Archivos de la versión: copia guardada primero; si faltara alguno, red (y se guarda)
+async function cachePrimero(req, clave) {
+  const c = await caches.open(CACHE);
+  const guardado = await c.match(clave || req, { ignoreSearch: true });
+  if (guardado) return guardado;
+  return redPrimero(req, clave);
 }
 
 async function redPrimero(req, clave) {
@@ -70,7 +86,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
-    e.respondWith(redPrimero(req, req.mode === 'navigate' ? './index.html' : undefined));
+    // sw.js nunca pasa por aquí (el navegador lo pide directamente). El resto, de la caché de la versión.
+    e.respondWith(cachePrimero(req, req.mode === 'navigate' ? './index.html' : undefined));
     return;
   }
   if (CDN.includes(url.href)) {

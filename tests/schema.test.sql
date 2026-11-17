@@ -244,3 +244,24 @@ INSERT INTO solicitudes (id, usuario_id, animales, telefono, estado, fecha_visit
  ON CONFLICT (id) DO UPDATE SET usuario_id = EXCLUDED.usuario_id, animales = EXCLUDED.animales, estado = EXCLUDED.estado, fecha_visita = EXCLUDED.fecha_visita;
 SELECT right(id::text, 1) AS sol, estado, usuario_id = '00000000-0000-0000-0000-00000000000a' AS del_criador, animales = '["10000000-0000-0000-0000-000000000050"]'::jsonb AS intactos FROM solicitudes ORDER BY id;
 RESET ROLE;
+
+\echo '== 17. Sincronización incremental: sello del servidor y registro de borrados'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+\echo '   17a el móvil manda una fecha antigua: el servidor pone la suya (sync_ts reciente)'
+INSERT INTO huevos (id, animal_id, usuario_id, fecha, peso_g, cascara, created_at) VALUES
+ ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000050', auth.uid(), current_date - 30, 61, 'Blanco crema', now() - interval '30 days');
+SELECT sync_ts > now() - interval '1 minute' AS sello_del_servidor, created_at < now() - interval '29 days' AS fecha_del_movil FROM huevos WHERE id = '60000000-0000-0000-0000-000000000001';
+\echo '   17b una edición renueva el sello'
+SELECT sync_ts AS antes FROM animales WHERE id = '10000000-0000-0000-0000-000000000050' \gset
+SELECT pg_sleep(0.01);
+UPDATE animales SET nombre = 'Lola' WHERE id = '10000000-0000-0000-0000-000000000050';
+SELECT sync_ts > :'antes' AS sello_renovado FROM animales WHERE id = '10000000-0000-0000-0000-000000000050';
+\echo '   17c borrar un huevo queda anotado para los demás dispositivos'
+DELETE FROM huevos WHERE id = '60000000-0000-0000-0000-000000000001';
+SELECT tabla, registro = '60000000-0000-0000-0000-000000000001' AS es_el_huevo FROM borrados;
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+\echo '   17d otro criador no ve los borrados ajenos (0) y el censo público trae sync_ts'
+SELECT count(*) AS borrados_ajenos FROM borrados;
+SELECT count(*) > 0 AS con_sync_ts FROM censo_publico WHERE sync_ts IS NOT NULL;
+RESET ROLE;

@@ -209,11 +209,7 @@ CREATE TRIGGER trg_validar_animal BEFORE INSERT OR UPDATE ON public.animales
   FOR EACH ROW EXECUTE FUNCTION public.validar_animal();
 
 -- Censo público: sin titular, REGA, coordenadas ni notas (RGPD)
-CREATE OR REPLACE VIEW public.censo_publico WITH (security_invoker = false) AS
-  SELECT id, anilla, sexo, variedad, fecha_nacimiento, seccion, padre_id, madre_id, familia, nombre,
-         peso_g, municipio, provincia, estado, fotos, fotos_fecha, created_at, updated_at
-  FROM public.animales
-  WHERE estado = 'activo' OR id IN (SELECT padre_id FROM public.animales UNION SELECT madre_id FROM public.animales);
+-- (la vista se crea en el apartado 4f, cuando ya existe la columna sync_ts)
 
 -- ----------------------------------------------------------------------------
 -- 3. Calificaciones: baremo de 100 puntos en las 12 regiones del Estándar (PROPUESTA)
@@ -515,6 +511,61 @@ CREATE TRIGGER trg_validar_solicitud BEFORE INSERT OR UPDATE ON public.solicitud
   FOR EACH ROW EXECUTE FUNCTION public.validar_solicitud();
 
 -- ----------------------------------------------------------------------------
+-- 4f. Sincronización incremental
+--   · sync_ts: momento en que el SERVIDOR guardó la fila (no la hora del móvil:
+--     un registro hecho sin cobertura y subido días después tendría una fecha
+--     antigua y los demás dispositivos no lo descargarían nunca).
+--   · borrados: lo eliminado en el servidor, para quitarlo también en los móviles.
+--   La app descarga por páginas lo que tenga sync_ts posterior a su última marca.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.marcar_sync() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.sync_ts := clock_timestamp();
+  RETURN NEW;
+END $$;
+
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS sync_ts timestamptz NOT NULL DEFAULT clock_timestamp()', t);
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (sync_ts, id)', t || '_sync_ts', t);
+    -- «zz_»: los BEFORE triggers se ejecutan por orden alfabético; este, el último
+    EXECUTE format('DROP TRIGGER IF EXISTS zz_marcar_sync ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER zz_marcar_sync BEFORE INSERT OR UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.marcar_sync()', t);
+  END LOOP;
+END $$;
+
+-- Censo público: sin datos personales (ni titular, ni REGA, ni ubicación). Incluye las bajas
+-- para que una baja llegue a todos los dispositivos (el pedigrí las necesita igualmente).
+DROP VIEW IF EXISTS public.censo_publico;
+CREATE VIEW public.censo_publico WITH (security_invoker = false) AS
+  SELECT id, anilla, sexo, variedad, fecha_nacimiento, seccion, padre_id, madre_id, familia, nombre,
+         peso_g, municipio, provincia, estado, fotos, fotos_fecha, created_at, updated_at, sync_ts
+  FROM public.animales;
+
+CREATE TABLE IF NOT EXISTS public.borrados (
+  id          bigserial PRIMARY KEY,
+  tabla       text NOT NULL,
+  registro    uuid NOT NULL,
+  usuario_id  uuid,
+  sync_ts     timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS borrados_sync_ts ON public.borrados (sync_ts, id);
+
+CREATE OR REPLACE FUNCTION public.anotar_borrado() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.borrados (tabla, registro, usuario_id) VALUES (TG_TABLE_NAME, OLD.id, OLD.usuario_id);
+  RETURN OLD;
+END $$;
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['huevos', 'campanas', 'lotes', 'incubaciones'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado()', t);
+  END LOOP;
+END $$;
+
+-- ----------------------------------------------------------------------------
 -- 4c. Historial de cambios del Libro (para el control oficial: quién, cuándo, qué)
 --     Solo lo escriben los triggers; lo leen la administración y la inspección.
 -- ----------------------------------------------------------------------------
@@ -558,10 +609,11 @@ ALTER TABLE public.historial      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lotes          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incubaciones   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.solicitudes    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.borrados       ENABLE ROW LEVEL SECURITY;
 
 DO $$ DECLARE r record; BEGIN
   FOR r IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
-           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial', 'lotes', 'incubaciones', 'solicitudes') LOOP
+           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial', 'lotes', 'incubaciones', 'solicitudes', 'borrados') LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
 END $$;
@@ -627,10 +679,13 @@ CREATE POLICY solicitudes_crear ON public.solicitudes FOR INSERT TO authenticate
 CREATE POLICY solicitudes_editar ON public.solicitudes FOR UPDATE TO authenticated
   USING (usuario_id = auth.uid() OR public.es_auditor()) WITH CHECK (usuario_id = auth.uid() OR public.es_auditor());
 
+CREATE POLICY borrados_ver ON public.borrados FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor());
+
 CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
 
 GRANT SELECT ON public.censo_publico TO anon, authenticated;
-GRANT SELECT ON public.historial TO authenticated;
+GRANT SELECT ON public.historial, public.borrados TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas, public.lotes, public.incubaciones TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.solicitudes TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.perfiles, public.animales TO authenticated;

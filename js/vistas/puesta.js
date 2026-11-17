@@ -15,6 +15,7 @@ export default function (main) {
 
   const gallinas = () => datos.censo().filter(a => a.sexo === 'H' && (a.usuario_id === p.id));
 
+  const MAX_REJILLA = 36;
   const conChip = () => gallinas().some(a => a.rfid);
   const corto = (a) => String(a.anilla).slice(-4).replace(/^0+(?=\d)/, '');
 
@@ -26,7 +27,9 @@ export default function (main) {
         <input id="pu-chip" inputmode="numeric" autocomplete="off" placeholder="Leer chip o escribir 15 dígitos">
         <p class="ayuda">Con el lector en modo teclado, acerca la gallina y lee.</p></div>` : ''}
       <div class="campo"><label id="pu-gallina-et">Gallina *</label>
+        <input id="pu-buscar" type="search" inputmode="numeric" autocomplete="off" placeholder="Buscar: últimas cifras de la anilla" style="margin-bottom:.5rem" hidden aria-label="Buscar gallina por anilla">
         <div id="pu-rejilla" class="rejilla-gallinas" role="group" aria-labelledby="pu-gallina-et"></div>
+        <p id="pu-rejilla-nota" class="peq muted" hidden></p>
         <label for="pu-gallina" class="peq muted" style="margin-top:.5rem;font-weight:500">o elige en la lista completa</label>
         <select id="pu-gallina"></select></div>
       <div class="campo"><label for="pu-peso">Peso del huevo (g)</label>
@@ -57,15 +60,30 @@ export default function (main) {
   const pintarSelect = () => {
     const lista = gallinas();
     const dia = $('#pu-fecha', f)?.value || hoyISO();
-    const conHuevo = new Set(datos.estado.huevos.filter(x => x.fecha === dia).map(x => x.animal_id));
+    const conHuevo = new Set();
+    for (const x of datos.estado.huevos) if (x.fecha === dia) conHuevo.add(x.animal_id);
     const camp = datos.campanaEnCurso();
     const enCampana = new Set(camp ? camp.gallinas : []);
     pintar(sel, h`<option value="">${lista.length ? 'Elegir gallina…' : 'No tienes gallinas activas'}</option>
       ${lista.map(a => h`<option value="${a.id}">${a.anilla}${a.nombre ? ` · ${a.nombre}` : ''}</option>`)}`);
     sel.value = lista.some(a => a.id === seleccion) ? seleccion : '';
-    // Rejilla: primero las de la campaña en curso que aún no tienen huevo hoy
-    const orden = [...lista].sort((x, y) => (enCampana.has(y.id) && !conHuevo.has(y.id)) - (enCampana.has(x.id) && !conHuevo.has(x.id)) || x.anilla.localeCompare(y.anilla));
-    pintar($('#pu-rejilla', f), h`${orden.map(a => h`<button type="button" class="boton-gallina ${conHuevo.has(a.id) ? 'hecha' : enCampana.has(a.id) ? 'pendiente' : ''}"
+    // Rejilla: primero las de la campaña en curso que aún no tienen huevo hoy; luego las que
+    // han puesto en el último mes. Con muchas gallinas se muestran unas pocas y se busca por anilla.
+    const hace30 = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    const ponedora = (a) => (datos.estado.huevosPorAnimal?.get(a.id) || []).some(x => x.fecha >= hace30);
+    const prio = new Map(lista.map(a => [a.id, (enCampana.has(a.id) && !conHuevo.has(a.id) ? 2 : 0) + (ponedora(a) ? 1 : 0)]));
+    let orden = [...lista].sort((x, y) => prio.get(y.id) - prio.get(x.id) || (x.anilla < y.anilla ? -1 : x.anilla > y.anilla ? 1 : 0));
+    const grande = lista.length > MAX_REJILLA;
+    const buscar = $('#pu-buscar', f);
+    buscar.hidden = !grande;
+    const q = grande ? buscar.value.trim().toLowerCase() : '';
+    if (q) orden = orden.filter(a => a.anilla.toLowerCase().includes(q) || (a.nombre || '').toLowerCase().includes(q));
+    const total = orden.length;
+    orden = orden.slice(0, MAX_REJILLA);
+    const nota = $('#pu-rejilla-nota', f);
+    nota.hidden = total <= MAX_REJILLA;
+    nota.textContent = `Se muestran ${MAX_REJILLA} de ${total}${q ? ' que coinciden' : ' (primero las de la campaña y las que ponen)'}: escribe más cifras de la anilla para encontrar otra.`;
+    pintar($('#pu-rejilla', f), h`${q && !total ? h`<p class="muted peq">Ninguna gallina con «${q}».</p>` : ''}${orden.map(a => h`<button type="button" class="boton-gallina ${conHuevo.has(a.id) ? 'hecha' : enCampana.has(a.id) ? 'pendiente' : ''}"
         data-gallina="${a.id}" aria-pressed="${a.id === seleccion ? 'true' : 'false'}" title="${a.anilla}${conHuevo.has(a.id) ? ' · ya tiene huevo este día' : ''}">
         <b>${corto(a)}</b><small>${a.nombre || a.anilla}</small></button>`)}`);
   };
@@ -100,8 +118,10 @@ export default function (main) {
     const lista = gallinas();
     const filas = lista.map(a => ({ a, r: datos.resumenPuesta(a.id, desde) })).filter(x => x.r.n > 0);
     const total = datos.resumenPuesta(null, desde);
-    const recientes = datos.estado.huevos.filter(x => lista.some(a => a.id === x.animal_id))
-      .sort((x, y) => (y.fecha + y.created_at).localeCompare(x.fecha + x.created_at)).slice(0, 15);
+    const mias = new Set(lista.map(a => a.id));
+    // Últimos 15 registros: solo se ordenan los del último mes
+    const recientes = datos.estado.huevos.filter(x => x.fecha >= desde && mias.has(x.animal_id))
+      .sort((x, y) => (x.fecha < y.fecha ? 1 : x.fecha > y.fecha ? -1 : String(y.created_at).localeCompare(String(x.created_at)))).slice(0, 15);
     pintar($('#pu-resumen', main), h`
       <div class="tarjeta"><h2>Últimos 30 días</h2>
         ${total.n ? h`<div class="kpis">
@@ -149,6 +169,7 @@ export default function (main) {
   sel.addEventListener('change', () => elegir(sel.value, false));
   $('#pu-rejilla', f).addEventListener('click', e => { const b = e.target.closest('[data-gallina]'); if (b) elegir(b.dataset.gallina, true); });
   $('#pu-fecha', f).addEventListener('change', () => { resumenMas(); pintarSelect(); });
+  $('#pu-buscar', f).addEventListener('input', pintarSelect);
   $('#pu-chip', f)?.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     e.preventDefault();

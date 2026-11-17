@@ -69,12 +69,23 @@ function crearParentesco(raices, idx, maxGen) {
   return a;
 }
 
+// Memoria de resultados por índice genealógico. Si la genealogía no cambia entre dos
+// cargas (p. ej. al guardar un huevo), datos.js pasa la memoria al índice nuevo.
+const memorias = new WeakMap();
+const memoria = (idx) => { let m = memorias.get(idx); if (!m) { m = new Map(); memorias.set(idx, m); } return m; };
+export function heredarMemoria(idxViejo, idxNuevo) { if (idxViejo && memorias.has(idxViejo)) memorias.set(idxNuevo, memorias.get(idxViejo)); }
+
 /** Fx del descendiente de padreId × madreId: Fx = a(P,M)/2 (Wright, 5 generaciones por defecto). */
 export function fxDescendencia(padreId, madreId, animalesOIndice, maxGen = REGLAS.generacionesWright) {
   if (!padreId || !madreId || padreId === madreId) return 0;
-  const idx = animalesOIndice instanceof Map ? animalesOIndice : indice(animalesOIndice);
+  const conMemoria = animalesOIndice instanceof Map;
+  const idx = conMemoria ? animalesOIndice : indice(animalesOIndice);
+  const clave = `fx|${padreId}|${madreId}|${maxGen}`;
+  if (conMemoria && memoria(idx).has(clave)) return memoria(idx).get(clave);
   const a = crearParentesco([padreId, madreId], idx, maxGen);
-  return Math.min(1, Math.max(0, a(padreId, madreId) / 2));
+  const fx = Math.min(1, Math.max(0, a(padreId, madreId) / 2));
+  if (conMemoria) memoria(idx).set(clave, fx);
+  return fx;
 }
 
 export const fxAnimal = (animal, idx, maxGen) =>
@@ -111,7 +122,12 @@ export function ancestrosComunes(idA, idB, idx, maxGen = REGLAS.generacionesWrig
  * Σ (1/2)^g sobre todos los ancestros conocidos hasta maxGen.
  */
 export function generacionesEquivalentes(animalId, idx, maxGen = REGLAS.generacionesWright) {
-  return ancestros(animalId, idx, maxGen).reduce((s, x) => s + Math.pow(0.5, x.generacion), 0);
+  const clave = `ge|${animalId}|${maxGen}`;
+  const m = idx instanceof Map ? memoria(idx) : null;
+  if (m?.has(clave)) return m.get(clave);
+  const ge = ancestros(animalId, idx, maxGen).reduce((s, x) => s + Math.pow(0.5, x.generacion), 0);
+  m?.set(clave, ge);
+  return ge;
 }
 
 /**
@@ -183,6 +199,28 @@ export function ordenTopologico(animales) {
   }
   if (out.length !== animales.length) animales.forEach(a => { if (!out.includes(a)) out.push(a); });
   return out;
+}
+
+/**
+ * Animales que forman parte de un ciclo genealógico, en una sola pasada por todo el Libro.
+ * Lo que sobra al ordenar de padres a hijos son los ciclos y sus descendientes; lo que sobra
+ * al ordenar de hijos a padres, los ciclos y sus ancestros. Lo común a ambos: los ciclos.
+ */
+export function animalesEnCiclo(animales) {
+  const porId = indice(animales);
+  const sobrantes = (aristas) => {
+    const sig = new Map(), grado = new Map(animales.map(a => [a.id, 0]));
+    for (const [de, a] of aristas) { if (!sig.has(de)) sig.set(de, []); sig.get(de).push(a); grado.set(a, grado.get(a) + 1); }
+    const cola = [...grado].filter(([, g]) => g === 0).map(([id]) => id);
+    for (let i = 0; i < cola.length; i++) for (const h of sig.get(cola[i]) || []) { grado.set(h, grado.get(h) - 1); if (grado.get(h) === 0) cola.push(h); }
+    const fuera = new Set(cola);
+    return new Set(animales.map(a => a.id).filter(id => !fuera.has(id)));
+  };
+  const aristas = animales.flatMap(a => [a.padre_id, a.madre_id].filter(p => p && porId.has(p)).map(p => [p, a.id]));
+  const haciaAbajo = sobrantes(aristas);
+  if (!haciaAbajo.size) return haciaAbajo;
+  const haciaArriba = sobrantes(aristas.map(([p, h]) => [h, p]));
+  return new Set([...haciaAbajo].filter(id => haciaArriba.has(id)));
 }
 
 /** Detecta ciclos genealógicos (un animal que es ancestro de sí mismo). */

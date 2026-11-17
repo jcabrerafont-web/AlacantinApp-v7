@@ -280,3 +280,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .peso-grande { font-size: 1.6rem !important; font-weight: 700; text-align: center; min-height: 56px !important; }
 .btn-grande { min-height: 56px; min-width: 96px; font-size: 1.05rem; }
 .acciones-una-fila { flex-wrap: nowrap; } .acciones-una-fila .btn { flex: 1 1 0; padding-inline: .5rem; }
+/* Aviso de versión nueva: persistente hasta que el usuario actualiza */
+.banner-actualizar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--barra-alto) + 12px + env(safe-area-inset-bottom)); z-index: 60;
+  display: flex; align-items: center; gap: .75rem; padding: .55rem .6rem .55rem 1rem; border-radius: 12px; background: #0f172a; color: #fff; font-weight: 600;
+  box-shadow: var(--sombra); max-width: min(94vw, 520px); }
+@media (min-width: 900px) { .banner-actualizar { bottom: 16px; } }
+body.escribiendo .banner-actualizar { display: none; }

@@ -5,6 +5,7 @@ import { ESTANDAR, nombreVariedad, tramoEdad } from '../estandar.js';
 import { nivelFx } from '../genetica.js';
 import { h, pintar, $, pct } from '../ui.js';
 import { copiaPendiente } from '../respaldo.js';
+import * as instalacion from '../instalacion.js';
 import { supabaseConfigurado } from '../config.js';
 
 const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -19,6 +20,7 @@ export default function (main) {
       ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">➕ Alta</a>` : ''}</div>
     ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
+    <div id="censo-riesgo"></div>
     <div id="censo-copia"></div>
     ${p && !esAuditor(p.rol) && !datos.solicitudAbierta() && datos.porCalificar(p.id).some(x => x.listo) ? h`<a id="censo-insp" class="aviso-caja info peq" href="#/inspeccion" style="display:block;text-decoration:none">🔎 Tienes ${datos.porCalificar(p.id).filter(x => x.listo).length} ejemplar(es) con un año sin calificar. <strong>Solicitar inspección →</strong></a>` : ''}
     <div id="censo-kpis" class="kpis"></div>
@@ -40,6 +42,13 @@ export default function (main) {
   // Recordatorio de copia de seguridad (sobre todo en modo dispositivo)
   if (p) {
     const propios = datos.estado.todos.filter(a => a.usuario_id === p.id).length;
+    instalacion.riesgo().then(r => {
+      const caja = $('#censo-riesgo', main);
+      if (!r || !caja) return;
+      pintar(caja, h`<a class="aviso-caja aviso peq" href="#/herramientas" style="display:block;text-decoration:none">⚠️ ${r === 'ios'
+        ? 'En iPhone, si no instalas la app, Safari puede borrar tus datos tras 7 días sin abrirla.'
+        : 'El navegador podría borrar los datos de este móvil si le falta espacio.'} <strong>Ver cómo evitarlo →</strong></a>`);
+    });
     copiaPendiente(p, propios).then(r => {
       const caja = $('#censo-copia', main);
       if (!r || !caja) return;
@@ -49,6 +58,8 @@ export default function (main) {
   for (const [id, k] of [['#f-sexo', 'sexo'], ['#f-var', 'variedad'], ['#f-sec', 'seccion']]) $(id, main).value = filtros[k];
   if ($('#f-bajas', main)) $('#f-bajas', main).checked = filtros.bajas;
 
+  const PAGINA = 60;
+  let mostrar = PAGINA;   // se pintan por tandas: con cientos de aves, la lista abre al instante
   const dibujar = () => {
     const todos = datos.censo({ incluirBajas: filtros.bajas });
     const q = normal(filtros.q);
@@ -65,7 +76,7 @@ export default function (main) {
       ? h`<li class="muted" style="padding:1rem 0">${todos.length === 0
         ? (p ? h`Aún no hay ejemplares. Empieza con <a href="#/alta">Alta Rápida</a>.` : 'Todavía no hay ejemplares publicados.')
         : 'Ningún ejemplar coincide con los filtros.'}</li>`
-      : h`${lista.map(a => {
+      : h`${lista.slice(0, mostrar).map(a => {
         const f = datos.fx(datos.animal(a.id) || a);
         const nf = nivelFx(f);
         const t = tramoEdad(a.fecha_nacimiento);
@@ -80,14 +91,16 @@ export default function (main) {
             ${a.estado === 'baja' ? h`<span class="chip chip-alerta">Baja</span>` :
               (f > 0 ? h`<span class="chip ${nf.nivel === 'alerta' ? 'chip-alerta' : nf.nivel === 'precaucion' ? 'chip-aviso' : ''}">Fx ${pct(f, 1)}</span>` : '')}
           </span></a></li>`;
-      })}`);
+      })}${lista.length > mostrar ? h`<li style="padding:.75rem 0"><button class="btn btn-bloque" id="censo-mas" type="button">Ver más (${lista.length - mostrar} restantes)</button></li>` : ''}`);
+    $('#censo-mas', main)?.addEventListener('click', () => { mostrar += PAGINA * 2; dibujar(); });
   };
+  const filtrar = (fn) => (e) => { fn(e); mostrar = PAGINA; dibujar(); };
 
-  $('#f-q', main).addEventListener('input', e => { filtros.q = e.target.value; dibujar(); });
-  $('#f-sexo', main).addEventListener('change', e => { filtros.sexo = e.target.value; dibujar(); });
-  $('#f-var', main).addEventListener('change', e => { filtros.variedad = e.target.value; dibujar(); });
-  $('#f-sec', main).addEventListener('change', e => { filtros.seccion = e.target.value; dibujar(); });
-  $('#f-bajas', main)?.addEventListener('change', e => { filtros.bajas = e.target.checked; dibujar(); });
+  $('#f-q', main).addEventListener('input', filtrar(e => { filtros.q = e.target.value; }));
+  $('#f-sexo', main).addEventListener('change', filtrar(e => { filtros.sexo = e.target.value; }));
+  $('#f-var', main).addEventListener('change', filtrar(e => { filtros.variedad = e.target.value; }));
+  $('#f-sec', main).addEventListener('change', filtrar(e => { filtros.seccion = e.target.value; }));
+  $('#f-bajas', main)?.addEventListener('change', filtrar(e => { filtros.bajas = e.target.checked; }));
   dibujar();
   return datos.suscribir(dibujar);
 }

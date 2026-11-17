@@ -485,6 +485,11 @@ await ir('#/censo');
 
 // 6j. Uso en campo con una mano: puesta con un toque por gallina, botón fijo, alta en serie
 await cambiarRolLocal('criador');
+await ir('#/herramientas'); await page.waitForTimeout(300);
+const movil = await page.$eval('#h-movil', e => e.textContent.replace(/\s+/g, ' '));
+ok(movil.includes('Aún no está instalada') && movil.includes('Espacio usado') && /protegidos|sin proteger/.test(movil), `Herramientas: estado de la app en el móvil (instalación, datos protegidos y espacio) (${movil.slice(0, 90)})`);
+const persist = await page.evaluate(async () => (await import('./js/instalacion.js')).pedirPersistencia());
+ok(persist !== undefined, `Se pide al navegador que conserve los datos (respuesta: ${persist})`);
 await ir('#/puesta');
 const botonesG = await page.$$eval('#pu-rejilla .boton-gallina', bs => bs.map(b => ({ txt: b.textContent.trim(), alto: b.getBoundingClientRect().height })));
 ok(botonesG.length >= 3 && botonesG.every(b => b.alto >= 60), `Puesta: rejilla de gallinas con botones grandes (${botonesG.length}, ${Math.round(botonesG[0]?.alto)} px)`);
@@ -536,6 +541,43 @@ const res = await page.evaluate(async () => {
 });
 ok(res.antes > 0 && res.tras1 === 1 && res.errorGuardado === 'fallo simulado' && res.tras2 === 0,
   `Cola: ${res.antes} pendientes → 1 retenida con error tras el fallo → 0 al reintentar`);
+
+// 7b. Descarga paginada e incremental (servidor simulado con 2.500 aves ajenas y un borrado)
+const bajada = await page.evaluate(async () => {
+  const sync = await import('./js/sync.js'); const db = await import('./js/db.js'); const d = await import('./js/datos.js');
+  const hace = (min) => new Date(Date.now() - min * 60000).toISOString();
+  const tablas = { censo_publico: [], animales: [], calificaciones: [], huevos: [], perfiles: [], campanas: [], lotes: [], incubaciones: [], solicitudes: [], borrados: [] };
+  for (let i = 0; i < 2500; i++) tablas.censo_publico.push({ id: `ajeno-${i}`, anilla: `E2320${String(500000 + i)}`, sexo: i % 2 ? 'H' : 'M', variedad: 'blanca', fecha_nacimiento: '2023-05-01', seccion: 'RN', estado: 'activo', sync_ts: hace(600 - i / 10) });
+  const consultas = [];
+  const fake = {
+    auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
+    from: (t) => { const st = { t, desde: null }; const b = {
+      select: () => b, gte: (c, v) => { st.desde = v; return b; }, order: () => b,
+      range: async (a, z) => { consultas.push(`${t}:${a}`); let f = [...tablas[t]].sort((x, y) => x.sync_ts.localeCompare(y.sync_ts));
+        if (st.desde) f = f.filter(x => x.sync_ts >= st.desde); return { data: f.slice(a, z + 1), error: null }; } }; return b; }
+  };
+  sync.usarCliente(fake);
+  const uid = d.estado.perfil.id;
+  await sync.reiniciarMarcas(uid);
+  const r1 = await sync.descargar(uid);
+  const paginas1 = consultas.filter(c => c.startsWith('censo_publico')).length;
+  const enMovil1 = (await db.todos('animales')).filter(a => a.id.startsWith('ajeno-')).length;
+  // Cambios en el servidor: un ave nueva y el borrado de un huevo propio
+  const huevo = (await db.todos('huevos'))[0];
+  tablas.censo_publico.push({ id: 'ajeno-nuevo', anilla: 'E2420777777', sexo: 'M', variedad: 'pinta', fecha_nacimiento: '2024-05-01', seccion: 'RN', estado: 'activo', sync_ts: hace(0) });
+  tablas.borrados.push({ id: 1, tabla: 'huevos', registro: huevo.id, sync_ts: hace(0) });
+  consultas.length = 0;
+  const r2 = await sync.descargar(uid);
+  const huevoSigue = Boolean(await db.obtener('huevos', huevo.id));
+  const enMovil2 = (await db.todos('animales')).filter(a => a.id.startsWith('ajeno-')).length;
+  // limpieza
+  for (const a of await db.todos('animales')) if (a.id.startsWith('ajeno-')) await db.borrar('animales', a.id);
+  await d.cargar();
+  return { r1, paginas1, enMovil1, r2, enMovil2, huevoSigue };
+});
+ok(bajada.enMovil1 === 2500 && bajada.paginas1 === 3, `Descarga por páginas: 2.500 aves en ${bajada.paginas1} páginas de 1.000 (antes se perdían las que pasaban de 1.000)`);
+ok(bajada.r2.filas < 30 && bajada.enMovil2 === 2501, `Segunda descarga: solo lo cambiado (${bajada.r2.filas} filas, no 2.500)`);
+ok(bajada.r2.borradas === 1 && !bajada.huevoSigue, 'Lo borrado en el servidor se borra también en el móvil');
 
 // 8. Offline tras la primera visita (Service Worker)
 await page.waitForTimeout(1500);

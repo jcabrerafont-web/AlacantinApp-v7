@@ -20,6 +20,35 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - Los roles **Inspector** y **Administrador** solo los asigna un administrador; el servidor rechaza cualquier otro intento.
 - Cada alta **hereda** del aviario del criador el REGA, el municipio, la provincia y la ubicación GPS.
 
+## Sin cobertura, con mucho Libro y sin perder datos
+
+- **Arranque:** el Service Worker sirve primero la copia guardada de la versión instalada. Con cobertura muy mala (4 s por petición), la app abre en 1,4 s (antes, 15,4 s).
+- **Actualizaciones:** la versión nueva se descarga entera en segundo plano y espera. Si la app se acaba de abrir y no hay nada a medias, se aplica sola; si no, aparece «Hay una versión nueva · Actualizar». Nunca se mezclan archivos de dos versiones.
+- **Sincronización:**
+  - Por páginas de 1.000 filas: es el límite de Supabase por consulta; antes, lo que pasaba de 1.000 no llegaba.
+  - Incremental: solo lo cambiado desde la última vez. Se compara con `sync_ts`, la hora del servidor; la del móvil no sirve, porque un registro hecho sin cobertura llega días después.
+  - Lo borrado en el servidor (tabla `borrados`) se borra también en el móvil.
+  - Marcas por usuario y tabla; «Volver a descargar todo» en Sincronización.
+- **Conservar los datos:** se pide almacenamiento persistente al iniciar sesión. En Herramientas se ve si la app está instalada, si los datos están protegidos y el espacio usado; hay botón «Instalar» (Android y ordenador) e instrucciones para iPhone. Mi censo avisa si los datos corren peligro (iPhone sin instalar: Safari borra las webs no instaladas tras 7 días sin uso).
+- **Rendimiento** con 1.500 aves en un móvil medio (procesador 4× más lento que un ordenador):
+
+| Pantalla | v7.9.0 | v7.10.0 |
+|---|---|---|
+| Mi censo | 1,56 s | 0,19 s |
+| Puesta | 1,18 s | 0,21 s |
+| Informes | 1,05 s | 0,24 s |
+| Acta anual | 2,07 s | 0,25 s |
+| Auditoría | 1,00 s | 0,26 s |
+| Herramientas | 0,71 s | 0,11 s |
+
+  Cómo se ha conseguido:
+  - consanguinidad con memoria, que se conserva si la genealogía no cambia y se precalcula en ratos libres;
+  - índices de huevos, calificaciones e hijos por animal;
+  - un solo comparador para ordenar anillas;
+  - ciclos genealógicos detectados en una pasada;
+  - censo en tandas de 60;
+  - en Puesta con muchas gallinas, 36 botones y un buscador por anilla.
+
 ## Uso en campo (móvil, con una mano)
 
 - **Puesta:** cada gallina es un botón grande (últimas cifras de la anilla); un toque la elige y pone el cursor en el peso. Las de la campaña en curso sin huevo hoy salen primero, con borde discontinuo; las ya anotadas, con ✓. Fecha, cáscara y chip quedan plegados («Hoy · cáscara blanco crema · cambiar») salvo que haya gallinas con chip.
@@ -171,9 +200,10 @@ docs/                 Estándar oficial en PDF
 ## Pruebas
 
 ```bash
-node tests/genetica.test.mjs                  # 27 pruebas: Wright, Ne, Gobe, Estándar
+node tests/genetica.test.mjs                  # 28 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 112 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 117 comprobaciones en Chrome (Playwright)
+node tests/pwa.mjs                            # Service Worker: arranque con mala cobertura y actualización de versión
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 

@@ -1,6 +1,6 @@
 // Pruebas unitarias: node tests/genetica.test.mjs
 import assert from 'node:assert/strict';
-import { purezaVariedad, fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
+import { animalesEnCiclo, purezaVariedad, fxDescendencia, ordenTopologico, neDemografico, familiaGalloGobe, generacionesEquivalentes, indice, creaCiclo, ancestrosComunes } from '../js/genetica.js';
 import { componerAnilla, parsearAnilla, comprobarAnilla, anillaLegible, evaluarCalificacion, claseDe, puntoValido, BAREMO, huevoApto, pesoConforme, tramoEdad, ESTANDAR } from '../js/estandar.js';
 
 let ok = 0;
@@ -162,5 +162,11 @@ t('Pureza de variedad: padres desconocidos o no visibles', () => {
   const r = purezaVariedad('h', idx);
   assert.equal(r.generacionesPuras, 0); cerca(r.conocidos, 0.5 / 5); cerca(r.misma, 1);
   assert.equal(purezaVariedad('solo', indice([A('solo', null, null, { variedad: 'blanca' })])).misma, null);
+});
+t('Ciclos genealógicos de todo el Libro en una pasada', () => {
+  // a → b → c → a es un ciclo; d es hijo de c (descendiente, no forma parte); e es ancestro limpio de a
+  const lista = [A('e'), A('a', 'c', 'e'), A('b', 'a'), A('c', 'b'), A('d', 'c'), A('x'), A('y', 'x')];
+  assert.deepEqual([...animalesEnCiclo(lista)].sort(), ['a', 'b', 'c']);
+  assert.equal(animalesEnCiclo([A('p'), A('h', 'p')]).size, 0);
 });
 console.log(`\n${ok} pruebas superadas`);

@@ -6,7 +6,7 @@
 import * as db from './db.js';
 import * as sync from './sync.js';
 import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
-import { indice, fxAnimal, creaCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes } from './genetica.js';
+import { indice, fxAnimal, creaCiclo, animalesEnCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes, heredarMemoria } from './genetica.js';
 import { esAuditor, actualizarPerfil } from './auth.js';
 import { uuid } from './ui.js';
 
@@ -36,11 +36,32 @@ export const esVisitante = () => !estado.perfil;
 const PRIVADOS = ['usuario_id', 'rega', 'latitud', 'longitud', 'notas', 'baja_causa'];
 export const versionPublica = (a) => Object.fromEntries(Object.entries(a).filter(([k]) => !PRIVADOS.includes(k)));
 
+// Calcula en segundo plano, a ratos libres, la consanguinidad de todo el Libro: así Informes,
+// Auditoría y el Acta abren con los cálculos ya hechos. Se abandona si cambia la genealogía.
+function calentarFx(idx) {
+  const libre = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ timeRemaining: () => 8 }), 30));
+  const ids = [...idx.keys()];
+  let i = 0;
+  const paso = (plazo) => {
+    if (estado.idx !== idx) return;
+    while (i < ids.length && plazo.timeRemaining() > 2) fxAnimal(idx.get(ids[i++]), idx);
+    if (i < ids.length) libre(paso);
+  };
+  libre(paso);
+}
+
 export async function cargar() {
   const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes] = await Promise.all(
     ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes'].map(s => db.todos(s)));
   estado.todos = animales;
+  // Si la genealogía no ha cambiado (lo normal al guardar un huevo o una calificación),
+  // se conservan los cálculos de consanguinidad ya hechos.
+  const idxViejo = estado.idx;
   estado.idx = indice(animales);
+  const firma = animales.map(a => `${a.id}:${a.padre_id || ''}:${a.madre_id || ''}`).join('|');
+  if (firma === estado.firmaGenealogia) heredarMemoria(idxViejo, estado.idx);
+  else calentarFx(estado.idx);
+  estado.firmaGenealogia = firma;
   const p = estado.perfil;
   if (!p) {
     estado.calificaciones = [];
@@ -68,9 +89,19 @@ export async function cargar() {
     estado.incubaciones = incubaciones.filter(i => i.usuario_id === p.id);
     estado.solicitudes = solicitudes.filter(x => x.usuario_id === p.id);
   }
+  // Huevos por gallina (evita recorrer todos los huevos para cada gallina)
+  estado.huevosPorAnimal = new Map();
+  for (const x of estado.huevos) { const l = estado.huevosPorAnimal.get(x.animal_id); if (l) l.push(x); else estado.huevosPorAnimal.set(x.animal_id, [x]); }
+  estado.hijosPorAnimal = new Map();
+  for (const a of estado.todos) for (const pr of [a.padre_id, a.madre_id]) if (pr) { const l = estado.hijosPorAnimal.get(pr); if (l) l.push(a); else estado.hijosPorAnimal.set(pr, [a]); }
+  estado.califPorAnimal = new Map();
+  for (const c of estado.calificaciones) { const l = estado.califPorAnimal.get(c.animal_id); if (l) l.push(c); else estado.califPorAnimal.set(c.animal_id, [c]); }
   estado.pendientes = await sync.pendientes();
   notificar();
 }
+
+// Un solo comparador para ordenar por anilla (crear uno en cada comparación es muy lento)
+const ORDEN_ANILLA = new Intl.Collator('es', { numeric: true });
 
 /** Animales visibles en "Mi censo" (o en el censo público para visitantes). */
 export function censo({ incluirBajas = false, todos = false } = {}) {
@@ -80,7 +111,7 @@ export function censo({ incluirBajas = false, todos = false } = {}) {
   else if (esAuditor(p.rol)) lista = [...lista];                      // inspector/administrador: todo
   else lista = todos ? lista.map(versionPublica) : lista.filter(a => a.usuario_id === p.id); // criador
   if (!incluirBajas) lista = lista.filter(a => a.estado !== 'baja');
-  return lista.sort((a, b) => String(a.anilla).localeCompare(String(b.anilla), 'es', { numeric: true }));
+  return lista.sort((a, b) => ORDEN_ANILLA.compare(String(a.anilla), String(b.anilla)));
 }
 
 export const animal = (id) => estado.idx.get(id) || null;
@@ -258,8 +289,8 @@ export async function borrarHuevo(id) {
 }
 
 export function resumenPuesta(animalId, desde = null, hasta = null) {
-  const lista = estado.huevos.filter(h => (!animalId || h.animal_id === animalId) &&
-    (!desde || h.fecha >= desde) && (!hasta || h.fecha <= hasta));
+  const base = animalId ? (estado.huevosPorAnimal?.get(animalId) || []) : estado.huevos;
+  const lista = base.filter(h => (!desde || h.fecha >= desde) && (!hasta || h.fecha <= hasta));
   const n = lista.length;
   const pesos = lista.map(h => h.peso_g);
   const media = n ? pesos.reduce((s, x) => s + x, 0) / n : null;
@@ -459,7 +490,7 @@ export function faseIncubacion(inc, dia = hoyIso()) {
 export function huevosDisponibles(madreId, dia = hoyIso()) {
   const usados = new Set(estado.incubaciones.flatMap(i => i.filas.flatMap(f => f.huevos || [])));
   const desde = sumaDias(dia, -RP().diasMaxHuevo);
-  return estado.huevos.filter(x => x.animal_id === madreId && x.apto && x.fecha >= desde && x.fecha <= dia && !usados.has(x.id));
+  return (estado.huevosPorAnimal?.get(madreId) || []).filter(x => x.apto && x.fecha >= desde && x.fecha <= dia && !usados.has(x.id));
 }
 
 export async function crearIncubacion({ entrada, filas, notas = '' }) {
@@ -563,7 +594,7 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
 }
 
 export const calificacionesDe = (animalId) =>
-  estado.calificaciones.filter(c => c.animal_id === animalId).sort((x, y) => y.created_at.localeCompare(x.created_at));
+  [...(estado.califPorAnimal?.get(animalId) || [])].sort((x, y) => y.created_at.localeCompare(x.created_at));
 
 // ---------------------------------------------------------------------------
 // Registro de Méritos (RM)
@@ -574,7 +605,7 @@ export function meritosRM(a) {
   if (!req) return null;
   const califs = calificacionesDe(a.id).filter(c => c.clase !== 'D');
   const mejorPuntos = califs.length ? Math.max(...califs.map(c => Number(c.total) || 0)) : null;
-  const hijosRD = estado.todos.filter(x => (x.padre_id === a.id || x.madre_id === a.id) && ['RD', 'RM'].includes(x.seccion)).length;
+  const hijosRD = (estado.hijosPorAnimal?.get(a.id) || []).filter(x => ['RD', 'RM'].includes(x.seccion)).length;
   const origenValido = REGLAS.rm.seccionesOrigen.includes(a.seccion);
   const cumplePuntos = mejorPuntos !== null && mejorPuntos >= req.puntos;
   const cumpleHijos = hijosRD >= req.hijosRD;
@@ -642,6 +673,7 @@ export function auditarLibro({ hoy = hoyIso() } = {}) {
   estado.todos.forEach(a => { const k = normalizarAnilla(a.anilla); porAnilla.set(k, (porAnilla.get(k) || 0) + 1); });
   const diasEntre = (x, y) => Math.round((new Date(`${y}T12:00:00Z`) - new Date(`${x}T12:00:00Z`)) / 864e5);
   const aptos = new Set(estado.calificaciones.filter(c => c.resultado === 'Apto').map(c => c.animal_id));
+  const enCiclo = animalesEnCiclo(estado.todos);
   for (const a of lista) {
     if (porAnilla.get(normalizarAnilla(a.anilla)) > 1) anotar('anilla_duplicada', a, `La anilla ${a.anilla} está registrada más de una vez.`);
     const an = comprobarAnilla(a.anilla, { sexo: a.sexo, fechaNacimiento: a.fecha_nacimiento });
@@ -659,7 +691,7 @@ export function auditarLibro({ hoy = hoyIso() } = {}) {
       anotar('baja_progenitor', a, `La madre ${madre.anilla} se dio de baja el ${madre.baja_fecha.split('-').reverse().join('/')}, antes de poder poner el huevo.`);
     if (padre?.baja_fecha && a.fecha_nacimiento && diasEntre(padre.baja_fecha, a.fecha_nacimiento) > AU.margenBajaPadre_dias)
       anotar('baja_progenitor', a, `El padre ${padre.anilla} se dio de baja el ${padre.baja_fecha.split('-').reverse().join('/')}, antes de poder fecundar el huevo.`);
-    if ((a.padre_id || a.madre_id) && creaCiclo(a.id, a.padre_id, a.madre_id, estado.idx)) anotar('ciclo', a, 'El ejemplar aparece como ancestro de sí mismo.');
+    if (enCiclo.has(a.id)) anotar('ciclo', a, 'El ejemplar aparece como ancestro de sí mismo.');
     if (a.estado === 'baja') continue;
     if (['RD', 'RM'].includes(a.seccion)) {
       if (!aptos.has(a.id)) anotar('rd_sin_apto', a, `Está en ${a.seccion} sin ninguna calificación Apto registrada.`);

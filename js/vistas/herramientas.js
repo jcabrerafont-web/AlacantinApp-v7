@@ -3,7 +3,8 @@ import * as datos from '../datos.js';
 import { ROLES, esAuditor } from '../auth.js';
 import { CONFIG, supabaseConfigurado } from '../config.js';
 import { cerrarSesion } from '../app.js';
-import { h, pintar, $, confirmar } from '../ui.js';
+import { h, pintar, $, confirmar, aviso } from '../ui.js';
+import * as instalacion from '../instalacion.js';
 
 export default function (main) {
   const p = datos.estado.perfil;
@@ -20,7 +21,7 @@ export default function (main) {
       ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],
       ['#/reproduccion', '🐣', 'Reproducción e incubación', 'Lotes gallo + gallinas, incubadora y alta de pollitos con sus padres'],
       ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
-      ['#/auditoria', '🩺', esAuditor(r) ? 'Auditoría del Libro' : 'Revisar mi censo', (() => { const x = datos.auditarLibro(); const e = x.filter(y => y.nivel === 'error').length; return x.length ? `${e} error(es) y ${x.length - e} aviso(s) · pureza de variedad` : 'Sin incoherencias · pureza de variedad'; })()],
+      ['#/auditoria', '🩺', esAuditor(r) ? 'Auditoría del Libro' : 'Revisar mi censo', 'Incoherencias por corregir y pureza de variedad'],
       ['#/acta', '📄', esAuditor(r) ? 'Acta anual de cierre censal' : 'Resumen anual de mi aviario', 'Balance del año para imprimir y firmar: censo, movimientos, Ne, reproducción y puesta'],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],
@@ -38,15 +39,45 @@ export default function (main) {
       <div><strong>${p.nombre || p.email}</strong><div class="muted peq">${ROLES[r]} · ${p.email || ''}</div></div>
       <button class="btn" id="b-salir">Cerrar sesión</button>
     </div>
+    <div class="tarjeta" id="h-movil"></div>
     ${grupos.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">
       ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span style="font-size:1.4rem" aria-hidden="true">${ico}</span>
         <span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}
     </ul></div>`)}
     <p class="muted peq">AlacantinApp ${CONFIG.version} · ${supabaseConfigurado() ? 'Conectada al Libro central' : 'Modo dispositivo (sin servidor)'}</p>`);
 
+  // La app en este móvil: instalación y conservación de los datos
+  const pintarMovil = async () => {
+    const caja = $('#h-movil', main);
+    if (!caja) return;
+    const a = await instalacion.estadoAlmacen();
+    const inst = instalacion.instalada();
+    pintar(caja, h`<h2 id="instalar">📲 La app en este dispositivo</h2>
+      <p>${inst ? '✓ Instalada: se abre desde su icono, a pantalla completa y sin conexión.' : 'Aún no está instalada.'}
+        ${a.persistente === true ? h`<br>✓ Datos protegidos: el navegador no los borrará para liberar espacio.` : a.persistente === false ? h`<br><strong>Datos sin proteger:</strong> el navegador podría borrarlos si le falta espacio.` : ''}
+        ${a.usoMB != null ? h`<br><span class="peq muted">Espacio usado: ${a.usoMB < 1 ? '< 1' : Math.round(a.usoMB)} MB${a.cuotaMB ? ` de ${Math.round(a.cuotaMB / 1024 * 10) / 10} GB disponibles` : ''} (las fotos son lo que más ocupa).</span>` : ''}</p>
+      ${!inst && instalacion.puedeInstalar() ? h`<button class="btn btn-primario" id="h-instalar">📲 Instalar AlacantinApp</button>` : ''}
+      ${!inst && instalacion.esIOS() ? h`<div class="aviso-caja aviso peq"><strong>En iPhone, instálala:</strong> si no, Safari borra los datos de la web tras 7 días sin abrirla.
+        <ol class="pasos" style="margin:.4rem 0 0"><li>Ábrela en <strong>Safari</strong>.</li><li>Pulsa <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba).</li><li>Elige <strong>«Añadir a pantalla de inicio»</strong> y luego «Añadir».</li></ol></div>`
+        : !inst && !instalacion.puedeInstalar() ? h`<p class="peq muted">Para instalarla, abre el menú del navegador (⋮) y elige «Instalar aplicación» o «Añadir a pantalla de inicio».</p>` : ''}
+      ${a.persistente === false && inst ? h`<button class="btn" id="h-proteger">Proteger los datos</button>` : ''}`);
+    $('#h-instalar', caja)?.addEventListener('click', async () => { if (await instalacion.instalar()) aviso('App instalada. Ábrela desde su icono.', 'ok'); });
+    $('#h-proteger', caja)?.addEventListener('click', async () => { const ok = await instalacion.pedirPersistencia(); aviso(ok ? 'Datos protegidos.' : 'El navegador no lo ha permitido. Instala la app y vuelve a probar.', ok ? 'ok' : 'error'); pintarMovil(); });
+  };
+  pintarMovil();
+  // El resumen de la auditoría se calcula después de pintar: la pantalla abre al instante
+  const tAud = setTimeout(() => {
+    const sub = main.querySelector('a[href="#/auditoria"] .item-sub');
+    if (!sub) return;
+    const x = datos.auditarLibro(); const e = x.filter(y => y.nivel === 'error').length;
+    sub.textContent = x.length ? `${e} error(es) y ${x.length - e} aviso(s) · pureza de variedad` : 'Sin incoherencias · pureza de variedad';
+  }, 60);
+  const quitar = instalacion.alCambiar(pintarMovil);
+
   $('#b-salir', main).addEventListener('click', async () => {
     const pend = datos.estado.pendientes;
     if (pend && !(await confirmar('Cerrar sesión', `Hay ${pend} operación(es) sin sincronizar. Se conservarán en este dispositivo y se enviarán cuando vuelvas a entrar.`, 'Cerrar sesión'))) return;
     await cerrarSesion();
   });
+  return () => { clearTimeout(tAud); quitar(); };
 }

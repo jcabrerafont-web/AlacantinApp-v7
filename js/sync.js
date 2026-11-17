@@ -92,28 +92,68 @@ export function drenar() {
 
 export const sincronizando = () => Boolean(enCurso);
 
+// Descarga por páginas (Supabase devuelve como máximo 1.000 filas por consulta) y solo
+// lo cambiado desde la última vez (sync_ts lo pone el servidor). El margen cubre filas
+// guardadas en transacciones que terminaron un poco después de la última descarga.
+export const TAM_PAGINA = 1000;
+const MARGEN_MS = 2 * 60 * 1000;
+const TABLAS_DESCARGA = [
+  ['censo_publico', 'animales'], ['animales', 'animales'], ['calificaciones', 'calificaciones'], ['huevos', 'huevos'],
+  ['perfiles', 'perfiles'], ['campanas', 'campanas'], ['lotes', 'lotes'], ['incubaciones', 'incubaciones'], ['solicitudes', 'solicitudes']
+];
+// Marca por usuario y tabla: si otra persona inicia sesión en el mismo móvil, descarga lo suyo completo
+const claveMarca = (usuarioId, tabla) => `sync:${usuarioId || 'visitante'}:${tabla}`;
+
+async function bajarPaginas(usuarioId, tabla, alPagina) {
+  const marca = await db.metaGet(claveMarca(usuarioId, tabla), null);
+  const desde = marca ? new Date(Date.parse(marca) - MARGEN_MS).toISOString() : null;
+  let max = marca, total = 0;
+  for (let pagina = 0; ; pagina++) {
+    let q = cliente.from(tabla).select('*');
+    if (desde) q = q.gte('sync_ts', desde);
+    const r = await q.order('sync_ts', { ascending: true }).order('id', { ascending: true })
+      .range(pagina * TAM_PAGINA, pagina * TAM_PAGINA + TAM_PAGINA - 1);
+    if (r.error) throw new Error(`${tabla}: ${r.error.message || r.error}`);
+    const filas = r.data || [];
+    await alPagina(filas);
+    total += filas.length;
+    for (const f of filas) if (f.sync_ts && (!max || Date.parse(f.sync_ts) > Date.parse(max))) max = f.sync_ts;
+    if (filas.length < TAM_PAGINA) break;
+  }
+  if (max && max !== marca) await db.metaSet(claveMarca(usuarioId, tabla), max);
+  return total;
+}
+
 /**
  * Descarga datos del servidor sin pisar cambios locales pendientes.
  * El alcance lo decide RLS: cada usuario recibe solo lo que puede ver.
+ * Devuelve { filas, borradas } o false si no hay servidor o cobertura.
  */
 export async function descargar(usuarioId) {
   if (!cliente || !navigator.onLine) return false;
   const pend = new Set((await db.todos('cola')).map(i => i.id));
-  const fusionar = async (store, filas) => {
-    const validas = (filas || []).filter(f => !pend.has(f.id));
-    if (validas.length) await db.guardarVarios(store, validas);
-  };
-  // Censo público completo (sin datos personales): base del pedigrí y del Fx
-  const pub = await cliente.from('censo_publico').select('*');
-  if (!pub.error) {
-    const propios = new Set((await db.todos('animales')).filter(a => a.usuario_id === usuarioId).map(a => a.id));
-    await fusionar('animales', pub.data.filter(a => !propios.has(a.id)));
+  const propios = new Set((await db.todos('animales')).filter(a => a.usuario_id === usuarioId).map(a => a.id));
+  let filas = 0, borradas = 0;
+  for (const [tabla, store] of TABLAS_DESCARGA) {
+    if (tabla !== 'censo_publico' && !usuarioId) continue;
+    filas += await bajarPaginas(usuarioId, tabla, async (lote) => {
+      // Del censo público solo lo ajeno: lo propio llega completo (con datos privados) desde «animales»
+      const validas = lote.filter(f => !pend.has(f.id) && !(tabla === 'censo_publico' && propios.has(f.id)));
+      if (validas.length) await db.guardarVarios(store, validas);
+    });
   }
   if (usuarioId) {
-    for (const [tabla, store] of [['animales', 'animales'], ['calificaciones', 'calificaciones'], ['huevos', 'huevos'], ['perfiles', 'perfiles'], ['campanas', 'campanas'], ['lotes', 'lotes'], ['incubaciones', 'incubaciones'], ['solicitudes', 'solicitudes']]) {
-      const r = await cliente.from(tabla).select('*');
-      if (!r.error) await fusionar(store, r.data);
-    }
+    const store = { huevos: 'huevos', campanas: 'campanas', lotes: 'lotes', incubaciones: 'incubaciones' };
+    await bajarPaginas(usuarioId, 'borrados', async (lote) => {
+      for (const b of lote) if (store[b.tabla] && !pend.has(b.registro)) { await db.borrar(store[b.tabla], b.registro); borradas++; }
+    });
   }
-  return true;
+  await db.metaSet(`sync:${usuarioId || 'visitante'}:ultima`, new Date().toISOString());
+  return { filas, borradas };
 }
+
+/** Olvida las marcas: la próxima descarga trae todo de nuevo (p. ej. tras un error). */
+export async function reiniciarMarcas(usuarioId) {
+  for (const [tabla] of [...TABLAS_DESCARGA, ['borrados']]) await db.metaSet(claveMarca(usuarioId, tabla), null);
+}
+export const ultimaDescarga = (usuarioId) => db.metaGet(`sync:${usuarioId || 'visitante'}:ultima`, null);
