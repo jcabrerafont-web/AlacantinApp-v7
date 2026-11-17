@@ -24,7 +24,7 @@ const NORMAS = [
   ['Base de datos de la asociación', 'RD 45/2019, art. 14.1 y 14.5', 'Libro con identificación y genealogías, resultados del programa, criadores con sus efectivos y explotaciones (CSV en Informes).'],
   ['Acceso a los datos y protección de datos personales', 'RD 45/2019, art. 14.6; RGPD', 'Cada criador ve lo suyo; la inspección y la administración, todo; el público, el censo sin titular, REGA ni ubicación.'],
   ['Información pública sobre el programa de cría', 'RD 45/2019, art. 14.7', 'El Estándar y esta Guía son públicos, sin necesidad de registrarse.'],
-  ['Datos para el Catálogo y el Sistema Nacional de Información (ARCA)', 'RD 45/2019, art. 12; Protocolo CNZ 2025, 3.1 f, j, l', 'Informes de censo por sexo y edad, criadores, distribución territorial, Ne y endogamia.'],
+  ['Datos para el Catálogo y el Sistema Nacional de Información (ARCA)', 'RD 45/2019, art. 12; Protocolo CNZ 2025, 3.1 f, j, l', 'Informes de censo por sexo y edad, criadores, distribución territorial, Ne y endogamia, y acta anual de cierre censal.'],
   ['Certificado zootécnico', 'Reg. (UE) 2016/1012, anexo V (por analogía)', 'Especie, libro, sección, identificación, fecha y país de nacimiento, criador y propietario, genealogía, resultados de calificación y puesta, lugar, fecha y firma.'],
   ['Trazabilidad ante el control oficial', 'RD 45/2019, arts. 14.2 y 29', 'Historial de cambios en el servidor (quién, cuándo y qué) y actas de calificación firmadas.'],
   ['Cambio de propietario sin perder el Libro', 'Reg. (UE) 2016/1012, anexo V j-k (por analogía)', 'La administración cambia el titular; el criador de origen se conserva siempre.']
@@ -128,6 +128,7 @@ export default function (main) {
         <tr><th>Febrero – junio</th><td>${CP.ciclos} campañas de control de puesta. Incubar huevos identificados (padre y madre conocidos).</td></tr>
         <tr><th>Primavera – verano</th><td>Anillar los pollitos y darlos de alta en la app (RN) con sus padres.</td></tr>
         <tr><th>Otoño</th><td>Elegir la reposición (un hijo de cada gallo, una hija de cada gallina). Calificar los animales que ya tienen un año.</td></tr>
+        <tr><th>Diciembre – enero</th><td>Revisar el censo (${enlace('#/auditoria', 'Revisar mi censo')}), dar de baja los animales que ya no están y hacer la copia de seguridad. El Club cierra el año con el ${enlace('#/acta', 'acta de cierre censal')}.</td></tr>
       </tbody></table></div>
       <p class="peq muted">Orientativo: cada aviario y cada año pueden necesitar ajustes. Ante cualquier duda, consulta a la Dirección Técnica del Club.</p>`)}
 

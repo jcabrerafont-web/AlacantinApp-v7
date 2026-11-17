@@ -458,6 +458,31 @@ await ir(`#/animal/${idHija3}`);
 ok(await page.$eval('#ficha-pureza', e => e.textContent.includes('0 de 5') && e.textContent.includes('Negra moteada (padres)')), 'Ficha: pureza de variedad (hija blanca de padres negra moteada: 0 de 5 generaciones)');
 await ir('#/censo');
 
+// 6i. Acta anual de cierre censal (inspección: todo el Libro) y resumen anual del criador
+const anioActual = new Date().getFullYear();
+await ir(`#/acta?anio=${anioActual}`);
+const acta = await page.evaluate(async (y) => {
+  const d = await import('./js/datos.js');
+  const r = d.resumenAnual(y);
+  const t = document.querySelector('#acta-anual')?.textContent.replace(/\s+/g, ' ') || '';
+  return { t, total: r.censo.total, vivos: d.censo().filter(a => a.estado !== 'baja').length, nac: r.movimientos.nacidos.total, rep: r.reproduccion, firmas: document.querySelectorAll('#acta-anual .doc-firmas div').length };
+}, anioActual);
+ok(acta.t.includes(`Acta de cierre censal ${anioActual}`) && acta.total === acta.vivos && acta.firmas === 3, `Acta anual: censo a la fecha (${acta.total} ejemplares) y tres firmas (Dirección Técnica, Secretaría, Presidencia)`);
+ok(acta.rep.incubaciones === 1 && acta.rep.puestos === 6 && acta.rep.nacidos === 4 && Math.round(acta.rep.fertilidad * 100) === 83, `Acta anual: reproducción del año (1 incubación, 6 huevos, 4 nacidos, fertilidad ${Math.round(acta.rep.fertilidad * 100)} %)`);
+ok(acta.t.includes('Variabilidad genética') && acta.t.includes('Control de puesta') && acta.t.includes('Criadores y distribución'), 'Acta anual: genética, puesta y distribución territorial');
+await page.selectOption('#ac-anio', String(anioActual - 1)); await page.waitForTimeout(300);
+const acta2 = await page.evaluate(async (y) => { const r = (await import('./js/datos.js')).resumenAnual(y); return { corte: r.corte, pollito: r.censo.total, t: document.querySelector('#acta-anual').textContent }; }, anioActual - 1);
+ok(acta2.corte === `${anioActual - 1}-12-31` && acta2.t.includes(`31/12/${anioActual - 1}`) && acta2.pollito < acta.total, `Año anterior: censo a 31 de diciembre, sin los nacidos después (${acta2.pollito} ejemplares)`);
+if (process.env.CAPTURAS) { await page.selectOption('#ac-anio', String(anioActual)); await page.waitForTimeout(300); await page.screenshot({ path: `${process.env.CAPTURAS}/acta-anual.png`, fullPage: true }); }
+await page.evaluate(() => { window.__impreso = false; window.print = () => { window.__impreso = true; }; });
+await page.click('#ac-imprimir'); await page.waitForTimeout(200);
+ok(await page.evaluate(() => window.__impreso && document.querySelector('#impresion').textContent.includes('Acta de cierre censal')), 'Acta anual: se imprime o se guarda en PDF');
+await cambiarRolLocal('criador');
+await ir('#/acta');
+ok(await page.$eval('#acta-anual', e => e.textContent.includes('Resumen anual') && e.textContent.includes('Titular') && !e.textContent.includes('Criadores y distribución') && e.querySelectorAll('.doc-firmas div').length === 2), 'Criador: resumen anual de su aviario, con su firma y la de la Dirección Técnica');
+await cambiarRolLocal('inspector');
+await ir('#/censo');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');

@@ -97,6 +97,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Cada hallazgo enlaza a la ficha y a «Corregir»; nunca se corrige solo. Exportación en CSV.
   - **Pureza de variedad** (RD 45/2019 art. 3 b; Protocolo CNZ 2025): generaciones seguidas con todos los ancestros conocidos y de la misma variedad (objetivo: 5), pedigrí conocido y parte de los ancestros de la misma variedad. Por ejemplar en la ficha y resumen por variedad en la auditoría.
   - `rm_origen` (RF o RD) guarda de dónde viene cada ejemplar del RM.
+- **Acta anual de cierre censal** (`#/acta`; para el criador, «Resumen anual de mi aviario»):
+  - Censo de ejemplares vivos a 31 de diciembre (o a hoy, si el año está en curso) por sección, tramo de edad y variedad, por sexo.
+  - Movimientos del año: nacimientos, bajas por causa, calificaciones por clase, inscripciones en el RM y solicitudes de inspección.
+  - Variabilidad genética (reproductores, Ne demográfico y realizado, Fx media, generaciones equivalentes, filiación completa), reproducción (lotes, incubaciones, fertilidad, nacimiento) y puesta (huevos, peso medio y máximo, aptos).
+  - Libro completo: criadores, explotaciones y distribución por municipio; firmas de Dirección Técnica, Secretaría y Presidencia. Criador: firma del titular y recibí de la Dirección Técnica.
+  - Se ve en pantalla, se imprime o se guarda en PDF, con código de referencia. Avisa si la auditoría tiene errores sin corregir.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.
@@ -157,7 +163,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 27 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 99 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 105 comprobaciones en Chrome (Playwright)
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 

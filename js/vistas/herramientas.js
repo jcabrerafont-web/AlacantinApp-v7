@@ -21,6 +21,7 @@ export default function (main) {
       ['#/reproduccion', '🐣', 'Reproducción e incubación', 'Lotes gallo + gallinas, incubadora y alta de pollitos con sus padres'],
       ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
       ['#/auditoria', '🩺', esAuditor(r) ? 'Auditoría del Libro' : 'Revisar mi censo', (() => { const x = datos.auditarLibro(); const e = x.filter(y => y.nivel === 'error').length; return x.length ? `${e} error(es) y ${x.length - e} aviso(s) · pureza de variedad` : 'Sin incoherencias · pureza de variedad'; })()],
+      ['#/acta', '📄', esAuditor(r) ? 'Acta anual de cierre censal' : 'Resumen anual de mi aviario', 'Balance del año para imprimir y firmar: censo, movimientos, Ne, reproducción y puesta'],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],
     ['Consulta', [

@@ -5,8 +5,8 @@
 // ============================================================================
 import * as db from './db.js';
 import * as sync from './sync.js';
-import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla } from './estandar.js';
-import { indice, fxAnimal, creaCiclo, nivelFx } from './genetica.js';
+import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
+import { indice, fxAnimal, creaCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes } from './genetica.js';
 import { esAuditor, actualizarPerfil } from './auth.js';
 import { uuid } from './ui.js';
 
@@ -680,6 +680,70 @@ export function auditarLibro({ hoy = hoyIso() } = {}) {
   }
   const orden = Object.keys(TIPOS_AUDITORIA);
   return hallazgos.sort((x, y) => orden.indexOf(x.tipo) - orden.indexOf(y.tipo) || x.animal.anilla.localeCompare(y.animal.anilla));
+}
+
+// ---------------------------------------------------------------------------
+// Acta anual de cierre censal: foto del Libro a 31 de diciembre (o a hoy, si el año
+// está en curso) y balance del año. Inspección y administración: todo el Libro;
+// criador: su aviario.
+// ---------------------------------------------------------------------------
+export function resumenAnual(anio) {
+  const p = estado.perfil;
+  const hoy = hoyIso();
+  const enCurso = String(anio) === hoy.slice(0, 4);
+  const corte = enCurso ? hoy : `${anio}-12-31`;
+  const delAnio = (f) => Boolean(f) && String(f).slice(0, 4) === String(anio);
+  const todos = censo({ incluirBajas: true });
+  const vivos = todos.filter(a => a.fecha_nacimiento <= corte && (a.estado !== 'baja' || (a.baja_fecha && a.baja_fecha > corte)));
+  const ids = new Set(todos.map(a => a.id));
+  const dCorte = new Date(`${corte}T12:00:00`);
+  const porSexo = (lista) => ({ M: lista.filter(a => a.sexo === 'M').length, H: lista.filter(a => a.sexo === 'H').length, total: lista.length });
+  const agrupar = (claves, f) => claves.map(([id, nombre]) => ({ id, nombre, ...porSexo(vivos.filter(a => f(a) === id)) })).filter(x => x.total);
+
+  const adultos = vivos.filter(a => tramoEdad(a.fecha_nacimiento, dCorte)?.id === 'adulto');
+  const nm = adultos.filter(a => a.sexo === 'M').length, nf = adultos.filter(a => a.sexo === 'H').length;
+  const neR = neRealizado(vivos, estado.idx);
+  const media = (lista, f) => (lista.length ? lista.reduce((s, a) => s + f(a), 0) / lista.length : null);
+
+  const bajas = todos.filter(a => a.estado === 'baja' && delAnio(a.baja_fecha));
+  const causas = {};
+  bajas.forEach(a => { const k = a.baja_causa || 'Sin indicar'; causas[k] = (causas[k] || 0) + 1; });
+  const califs = estado.calificaciones.filter(c => ids.has(c.animal_id) && delAnio(c.fecha));
+  const porClase = Object.fromEntries(BAREMO.clases.map(c => [c.id, 0]).concat([['D', 0]]));
+  califs.forEach(c => { if (c.clase in porClase) porClase[c.clase]++; });
+  const huevos = estado.huevos.filter(x => ids.has(x.animal_id) && delAnio(x.fecha));
+  const pesos = huevos.map(x => Number(x.peso_g)).filter(Number.isFinite);
+  const incs = estado.incubaciones.filter(i => delAnio(i.entrada)).map(resultadoIncubacion);
+  const rep = incs.reduce((t, r) => ({ puestos: t.puestos + r.puestos, claros: t.claros + r.claros, nacidos: t.nacidos + r.nacidos, conMiraje: t.conMiraje + (r.fertilidad !== null ? r.puestos : 0), fertConMiraje: t.fertConMiraje + (r.fertilidad !== null ? r.fertiles : 0) }),
+    { puestos: 0, claros: 0, nacidos: 0, conMiraje: 0, fertConMiraje: 0 });
+  const lotes = estado.lotes.filter(l => delAnio(l.inicio));
+  const sols = estado.solicitudes.filter(x => delAnio(x.created_at));
+  const titulares = new Set(vivos.map(a => a.usuario_id).filter(Boolean));
+  const regas = new Set(vivos.map(a => a.rega).filter(Boolean));
+  const municipios = {};
+  vivos.forEach(a => { const k = [a.municipio, a.provincia].filter(Boolean).join(' · ') || 'Sin municipio'; municipios[k] = (municipios[k] || 0) + 1; });
+  const au = auditarLibro();
+
+  return {
+    anio: Number(anio), corte, enCurso, ambito: esAuditor(p?.rol) ? 'libro' : 'aviario', perfil: p,
+    censo: {
+      ...porSexo(vivos),
+      secciones: agrupar(Object.entries(ESTANDAR.secciones), a => a.seccion),
+      variedades: agrupar(ESTANDAR.variedades.map(v => [v.id, v.nombre + (v.oficial ? '' : ' (en proceso)')]), a => a.variedad),
+      edades: agrupar(REGLAS.tramosEdadMeses.map(t => [t.id, t.nombre]), a => tramoEdad(a.fecha_nacimiento, dCorte)?.id)
+    },
+    genetica: { nm, nf, neDem: neDemografico(nm, nf), neReal: neR, fxMedio: media(vivos, a => fxAnimal(a, estado.idx)),
+      geMedio: media(vivos, a => generacionesEquivalentes(a.id, estado.idx)), conPadres: vivos.length ? vivos.filter(a => a.padre_id && a.madre_id).length / vivos.length : null },
+    movimientos: { nacidos: porSexo(todos.filter(a => delAnio(a.fecha_nacimiento))), bajas: bajas.length, causas,
+      calificaciones: califs.length, ejemplaresCalificados: new Set(califs.map(c => c.animal_id)).size, aptos: califs.filter(c => c.resultado === 'Apto').length, porClase,
+      rm: todos.filter(a => a.seccion === 'RM' && delAnio(a.rm_fecha)).length, solicitudes: sols.length, visitas: sols.filter(x => x.estado === 'realizada').length },
+    reproduccion: { lotes: lotes.length, gallos: new Set(lotes.map(l => l.gallo_id)).size, incubaciones: incs.length, ...rep,
+      fertilidad: rep.conMiraje ? rep.fertConMiraje / rep.conMiraje : null, nacimiento: rep.puestos - rep.claros > 0 && incs.length && incs.every(r => r.nacimiento !== null) ? rep.nacidos / (rep.puestos - rep.claros) : null },
+    puesta: { huevos: huevos.length, gallinas: new Set(huevos.map(x => x.animal_id)).size, pesoMedio: pesos.length ? pesos.reduce((s, x) => s + x, 0) / pesos.length : null,
+      pesoMax: pesos.length ? Math.max(...pesos) : null, aptos: huevos.filter(x => x.apto).length, campanas: estado.campanas.filter(c => c.temporada === Number(anio)).length },
+    territorio: { titulares: titulares.size, explotaciones: regas.size, municipios: Object.entries(municipios).sort((x, y) => y[1] - x[1]) },
+    calidad: { errores: au.filter(x => x.nivel === 'error').length, avisos: au.filter(x => x.nivel === 'aviso').length }
+  };
 }
 
 // ---------------------------------------------------------------------------

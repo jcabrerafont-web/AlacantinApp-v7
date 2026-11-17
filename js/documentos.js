@@ -106,3 +106,72 @@ export function acta(a, c, titular) {
     <div class="doc-firmas"><div>Firma del inspector: ${c.inspector_nombre}</div><div>Enterado, el titular: ${titular?.nombre || ''}</div></div>
     <p class="doc-pie">${BAREMO.fuente}. El peso se registra y se contrasta con el Estándar, pero no puntúa. Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Apto con ${REGLAS.puntosMinimosApto.H} puntos o más las gallinas y ${REGLAS.puntosMinimosApto.M} los gallos, sin descalificación. El acceso al Registro Definitivo exige además variedad oficial y un año de edad.</p>`);
 }
+
+// Acta anual de cierre censal (Libro completo) o resumen anual del aviario (criador).
+// La misma plantilla se ve en pantalla y se imprime.
+export function plantillaActaAnual(r) {
+  const libro = r.ambito === 'libro';
+  const n = (x, d = 0) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : x.toFixed(d).replace('.', ','));
+  const ref = `CC-${ESTANDAR.codigo}-${r.anio}-${huella(JSON.stringify([r.corte, r.censo, r.movimientos, r.puesta, r.reproduccion, r.perfil?.id || '']))}`;
+  const tabla = (titulo, filas) => h`<table><thead><tr><th>${titulo}</th><th class="num">Gallos</th><th class="num">Gallinas</th><th class="num">Total</th></tr></thead><tbody>
+    ${filas.map(f => h`<tr><td>${f.nombre}</td><td class="num">${f.M}</td><td class="num">${f.H}</td><td class="num">${f.total}</td></tr>`)}
+    <tr><th>Total</th><th class="num">${r.censo.M}</th><th class="num">${r.censo.H}</th><th class="num">${r.censo.total}</th></tr></tbody></table>`;
+  const m = r.movimientos, g = r.genetica, rp = r.reproduccion, pu = r.puesta;
+  return h`
+    ${cabecera(libro ? `Acta de cierre censal ${r.anio}` : `Resumen anual ${r.anio} del aviario`, ref)}
+    <p>${libro ? 'Libro Genealógico de la raza Gallina Alacantina, todas las explotaciones.' : h`Titular: <strong>${r.perfil?.nombre || r.perfil?.email || ''}</strong>${r.perfil?.numero_socio ? ` · socio nº ${r.perfil.numero_socio}` : ''} · REGA ${r.perfil?.rega || '—'}${r.perfil?.municipio ? ` · ${r.perfil.municipio}` : ''}`}
+      Censo a <strong>${fecha(r.corte)}</strong>${r.enCurso ? ' (año en curso: datos a la fecha de emisión)' : ''}; movimientos del 1 de enero al ${fecha(r.corte)}.</p>
+
+    <h2>1. Censo de ejemplares vivos a ${fecha(r.corte)}</h2>
+    <div class="doc-col2">${tabla('Sección del Libro', r.censo.secciones)}${tabla('Tramo de edad', r.censo.edades)}</div>
+    ${tabla('Variedad', r.censo.variedades)}
+    <p class="doc-nota">La sección es la actual de cada ejemplar. El tramo de edad se calcula a la fecha de corte.</p>
+
+    <h2>2. Movimientos del año</h2>
+    <table><tbody>
+      <tr><th>Nacimientos registrados</th><td>${m.nacidos.total} (${m.nacidos.M} ♂ · ${m.nacidos.H} ♀)</td></tr>
+      <tr><th>Bajas</th><td>${m.bajas}${m.bajas ? ` · ${Object.entries(m.causas).map(([k, v]) => `${k}: ${v}`).join(' · ')}` : ''}</td></tr>
+      <tr><th>Calificaciones morfológicas</th><td>${m.calificaciones} (${m.ejemplaresCalificados} ejemplares) · Apto ${m.aptos} · ${Object.entries(m.porClase).map(([k, v]) => `${k} ${v}`).join(' · ')}</td></tr>
+      <tr><th>Inscripciones en el Registro de Méritos</th><td>${m.rm}</td></tr>
+      <tr><th>Solicitudes de inspección</th><td>${m.solicitudes} (visitas realizadas: ${m.visitas})</td></tr>
+    </tbody></table>
+
+    <h2>3. Variabilidad genética</h2>
+    <table><tbody>
+      <tr><th>Reproductores adultos</th><td>gallos: ${g.nm} · gallinas: ${g.nf}</td></tr>
+      <tr><th>Tamaño efectivo demográfico (4·Nm·Nf / (Nm+Nf))</th><td>${n(g.neDem, 1)}</td></tr>
+      <tr><th>Tamaño efectivo realizado (ΔF individual)</th><td>${g.neReal ? `${Number.isFinite(g.neReal.ne) ? n(g.neReal.ne, 1) : '∞'} (n = ${g.neReal.n})` : '— (pedigrí insuficiente)'}</td></tr>
+      <tr><th>Consanguinidad media (Wright, ${REGLAS.generacionesWright} generaciones)</th><td>${g.fxMedio === null ? '—' : pct(g.fxMedio, 2)}</td></tr>
+      <tr><th>Generaciones equivalentes conocidas (media)</th><td>${n(g.geMedio, 2)}</td></tr>
+      <tr><th>Ejemplares con padre y madre registrados</th><td>${g.conPadres === null ? '—' : pct(g.conPadres, 0)}</td></tr>
+    </tbody></table>
+
+    <h2>4. Reproducción e incubación</h2>
+    <table><tbody>
+      <tr><th>Lotes de reproducción formados</th><td>${rp.lotes} (gallos: ${rp.gallos})</td></tr>
+      <tr><th>Incubaciones</th><td>${rp.incubaciones} · ${rp.puestos} huevos · ${rp.nacidos} nacidos</td></tr>
+      <tr><th>Fertilidad (fértiles ÷ huevos)</th><td>${rp.fertilidad === null ? '—' : pct(rp.fertilidad, 0)}</td></tr>
+      <tr><th>Nacimiento (nacidos ÷ fértiles)</th><td>${rp.nacimiento === null ? '—' : pct(rp.nacimiento, 0)}</td></tr>
+    </tbody></table>
+
+    <h2>5. Control de puesta</h2>
+    <table><tbody>
+      <tr><th>Campañas de control</th><td>${pu.campanas}</td></tr>
+      <tr><th>Huevos pesados</th><td>${pu.huevos} de ${pu.gallinas} gallinas</td></tr>
+      <tr><th>Peso medio / máximo</th><td>${pu.pesoMedio === null ? '—' : `${n(pu.pesoMedio, 1)} g / ${pu.pesoMax} g`}</td></tr>
+      <tr><th>Aptos para incubar (desde ${ESTANDAR.huevo.min} g, cáscara ${ESTANDAR.huevo.cascara.toLowerCase()})</th><td>${pu.huevos ? `${pu.aptos} (${pct(pu.aptos / pu.huevos, 0)})` : '—'}</td></tr>
+    </tbody></table>
+
+    ${libro ? h`<h2>6. Criadores y distribución</h2>
+      <p>${r.territorio.titulares} criadores titulares · ${r.territorio.explotaciones} explotaciones con REGA.</p>
+      <table><thead><tr><th>Municipio</th><th class="num">Ejemplares</th></tr></thead><tbody>
+        ${r.territorio.municipios.map(([k, v]) => h`<tr><td>${k}</td><td class="num">${v}</td></tr>`)}</tbody></table>` : ''}
+
+    <h2>${libro ? '7' : '6'}. Calidad de los datos</h2>
+    <p>Auditoría a la fecha de emisión: <strong>${r.calidad.errores} errores</strong> y ${r.calidad.avisos} avisos pendientes de revisar${r.calidad.errores ? ' (ver Auditoría del Libro en la app)' : ''}.</p>
+
+    ${libro ? h`<div class="doc-firmas doc-firmas-3"><div>El/La Director/a Técnico/a del Libro</div><div>El/La Secretario/a</div><div>Vº Bº El/La Presidente/a</div></div>`
+      : h`<div class="doc-firmas"><div>El/La titular: ${r.perfil?.nombre || ''}</div><div>Recibido, la Dirección Técnica</div></div>`}
+    <p class="doc-pie">Datos del Libro Genealógico gestionado con AlacantinApp ${libro ? '(todas las explotaciones)' : '(aviario del titular)'}. Base normativa: RD 45/2019, arts. 14 y 26; Protocolo CNZ de 5/6/2025, apdo. 3.1 f, j y l (censos, criadores, Ne y endogamia). El código de referencia cambia si cambia cualquier dato del acta.</p>`;
+}
+export const actaAnual = (r) => imprimir(plantillaActaAnual(r));
