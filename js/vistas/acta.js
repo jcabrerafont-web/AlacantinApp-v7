@@ -26,6 +26,9 @@ export default function (main) {
       </div>
       ${r.calidad.errores ? h`<div class="aviso-caja aviso peq">La auditoría tiene ${r.calidad.errores} error(es) sin corregir: conviene revisarlos antes de firmar el acta. <a href="#/auditoria">Ver auditoría →</a></div>` : ''}
       <div class="doc-pantalla" id="acta-anual">${docs.plantillaActaAnual(r)}</div>`);
+    // En pantalla, el título del documento es un subtítulo (la página ya tiene su h1)
+    const t = main.querySelector('#acta-anual h1');
+    if (t) { const h2 = document.createElement('h2'); h2.innerHTML = t.innerHTML; t.replaceWith(h2); }
     $('#ac-anio', main).addEventListener('change', e => { anio = Number(e.target.value); dibujar(); });
     $('#ac-imprimir', main).addEventListener('click', () => docs.actaAnual(r));
   };

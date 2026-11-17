@@ -47,6 +47,25 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Intro abre la ficha; también busca por nombre.
 - **Fecha de hoy** en la hora del móvil, no en UTC. En el servidor, `public.hoy()` usa la hora de España: antes, entre la medianoche y la 1:00 (2:00 en verano), un huevo de hoy se habría guardado con la fecha de ayer o se habría rechazado.
 
+## Pulido (v7.12.0)
+
+- **Pantalla:** Herramientas → Pantalla: Automático, Claro, Oscuro o **☀️ Sol**. El modo sol tiene máximo contraste, letra un 12,5 % mayor y bordes gruesos. Se guarda en el dispositivo y se aplica antes de pintar, sin parpadeo.
+- **Fotos sin cobertura:** el Service Worker guarda las fotos del servidor al verlas (las últimas 600), las sirve sin cobertura y las actualiza por detrás. No se borran al actualizar la app. Se piden en modo CORS, porque una respuesta «opaca» ocuparía varios MB de cuota cada una. Botón para borrarlas en Herramientas.
+- **Informar de un problema** (Herramientas):
+  - El criador describe qué pasó y lo envía por WhatsApp o correo, o lo copia.
+  - Incluye la versión, la conexión, el espacio y los últimos 20 errores registrados en el móvil (errores de la app y de sincronización), sin nombre, correo ni ubicación.
+  - Destinatarios en `CONFIG.soporteEmail` y `CONFIG.soporteWhatsApp`.
+- **Accesibilidad** (`tests/accesibilidad.mjs`, 21 pantallas en los temas claro, oscuro y sol):
+  - nombres accesibles, etiquetas, `alt`, ids únicos, un `h1` por pantalla, foco al contenido tras navegar;
+  - contraste de texto WCAG AA. En oscuro hay colores de texto propios (`--azul-t`, `--verde-t`, `--rojo-t`, `--ambar-t`); antes, los enlaces y las etiquetas no llegaban al mínimo.
+- **Manifest:**
+  - capturas de pantalla para la ficha de instalación (3 de móvil y 1 de ordenador);
+  - icono enmascarable de 192 px;
+  - `orientation: any`.
+- **Pruebas automáticas en GitHub** (`.github/workflows/pruebas.yml`) en cada subida:
+  - unitarias, navegador, Service Worker, accesibilidad;
+  - SQL en PostgreSQL 16 (`tests/sql.sh`: carga el esquema dos veces y compara la salida con `tests/schema.test.esperado.txt`, revisada a mano).
+
 ## Sin cobertura, con mucho Libro y sin perder datos
 
 - **Arranque:** el Service Worker sirve primero la copia guardada de la versión instalada. Con cobertura muy mala (4 s por petición), la app abre en 1,4 s (antes, 15,4 s).
@@ -229,7 +248,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 28 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 126 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 130 comprobaciones en Chrome (Playwright)
 node tests/pwa.mjs                            # Service Worker: arranque con mala cobertura y actualización de versión
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```

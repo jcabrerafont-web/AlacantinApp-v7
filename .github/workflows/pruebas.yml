@@ -1,0 +1,56 @@
+# Pruebas automáticas en cada subida y en cada propuesta de cambio (pull request).
+name: Pruebas
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  app:
+    name: Unidad, navegador, PWA y accesibilidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Pruebas unitarias (Wright, Ne, Gobe, Estándar, pureza)
+        run: npm run test:unidad
+      - name: Servir la app
+        run: |
+          python3 -m http.server 8820 &
+          sleep 1
+      - name: Pruebas en el navegador (flujo completo)
+        run: npm run test:e2e
+      - name: Service Worker (cobertura mala y actualizaciones)
+        run: npm run test:pwa
+      - name: Accesibilidad (temas claro, oscuro y sol)
+        run: npm run test:accesibilidad
+
+  sql:
+    name: Esquema de Supabase (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargar el esquema y comparar la salida de las pruebas
+        run: bash tests/sql.sh

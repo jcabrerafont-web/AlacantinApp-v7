@@ -6,6 +6,7 @@ import * as auth from './auth.js';
 import * as sync from './sync.js';
 import * as datos from './datos.js';
 import * as instalacion from './instalacion.js';
+import * as diagnostico from './diagnostico.js';
 import { $, aviso, esc } from './ui.js';
 
 // Rutas: [patrón, módulo, roles permitidos ('*' = todos, 'usuario' = cualquier sesión)]
@@ -33,6 +34,7 @@ const RUTAS = [
   ['hoy', 'hoy', 'usuario'],
   ['inspeccion', 'inspeccion', 'usuario'],
   ['auditoria', 'auditoria', 'usuario'],
+  ['problema', 'problema', 'usuario'],
   ['acta', 'acta', 'usuario'],
   ['calificar/:id', 'calificacion', ['inspector', 'administrador']],
   ['dossier', 'dossier', ['inspector', 'administrador']],
@@ -160,6 +162,7 @@ export async function cerrarSesion() {
 
 async function arrancar() {
   instalacion.vigilar();
+  diagnostico.vigilar();
   // Espera breve al cliente Supabase (script diferido); si no carga, modo dispositivo
   for (let i = 0; i < 20 && !window.supabase && navigator.onLine; i++) await new Promise(r => setTimeout(r, 50));
   const cliente = auth.crearCliente();

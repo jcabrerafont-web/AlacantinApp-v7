@@ -556,6 +556,22 @@ ok(page.url().includes('#/animal/') && !(await page.$('#buscador')), 'Intro abre
 await page.keyboard.press('/'); await page.waitForTimeout(200);
 ok(!!(await page.$('#buscador[open]')), 'En el ordenador, la tecla «/» abre el buscador');
 await page.keyboard.press('Escape');
+// Modo sol: se elige en Herramientas, se aplica al momento y se recuerda al volver a abrir
+await ir('#/herramientas');
+await page.click('input[name=h-tema][value=sol] + span');
+const sol1 = await page.evaluate(() => ({ tema: document.documentElement.dataset.tema, letra: getComputedStyle(document.documentElement).fontSize }));
+await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#barra a');
+const sol2 = await page.evaluate(() => document.documentElement.dataset.tema);
+ok(sol1.tema === 'sol' && sol1.letra === '18px' && sol2 === 'sol', `Modo sol: alto contraste y letra mayor (${sol1.letra}), recordado al volver a abrir`);
+await ir('#/herramientas'); await page.click('input[name=h-tema][value=auto] + span');
+ok(await page.evaluate(() => !document.documentElement.dataset.tema), 'Volver al tema automático');
+// Informe de problemas: los errores quedan anotados sin datos personales
+await page.evaluate(async () => { const d = await import('./js/diagnostico.js'); d.borrarErrores(); d.anotarError('Fallo de prueba con criadora@ejemplo.es', 'prueba.js:1'); });
+await ir('#/problema'); await page.waitForTimeout(300);
+const inf = await page.$eval('.pre-informe', e => e.textContent);
+ok(inf.includes('Fallo de prueba con [correo]') && !inf.includes('criadora@ejemplo.es') && !inf.includes('Criadora') && inf.includes('AlacantinApp 7.'), 'Informe de problemas: versión, conexión y últimos errores, sin nombre ni correo');
+ok(!!(await page.$('#pr-wa')) && !!(await page.$('#pr-mail')) && !!(await page.$('#pr-copiar')), 'Informe de problemas: enviar por WhatsApp, por correo o copiar');
+await page.evaluate(async () => (await import('./js/diagnostico.js')).borrarErrores());
 await cambiarRolLocal('inspector');
 await ir('#/censo');
 

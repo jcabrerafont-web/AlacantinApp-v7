@@ -1,0 +1,269 @@
+== 1. Rol inicial ignora metadata (esperado: aspirante, inspector, aspirante)
+     email      |    rol    
+----------------+-----------
+ criador@x.es   | aspirante
+ inspector@x.es | inspector
+ otro@x.es      | aspirante
+
+== 2. Autoescalada bloqueada (esperado: aspirante) y REGA promociona (esperado: criador)
+ tras_autoescalada 
+-------------------
+ aspirante
+
+ tras_rega 
+-----------
+ criador
+
+== 3. Altas del criador (sección forzada a RN, titular = él mismo)
+   anilla    | seccion | es_mio 
+-------------+---------+--------
+ E2418000002 | RN      | t
+ E2420000001 | RN      | t
+ E2518000003 | RN      | t
+
+== 4. Rechazos esperados: padre hembra, variedad no reconocida, anilla duplicada, RFID inválido, anilla no EE, año de anilla distinto del de nacimiento, diámetro no admitido
+psql:tests/schema.test.sql:30: ERROR:  El padre debe ser un gallo registrado
+CONTEXT:  PL/pgSQL function validar_animal() line 6 at RAISE
+psql:tests/schema.test.sql:31: ERROR:  new row for relation "animales" violates check constraint "animales_variedad_check"
+psql:tests/schema.test.sql:32: ERROR:  duplicate key value violates unique constraint "animales_anilla_activa"
+psql:tests/schema.test.sql:33: ERROR:  new row for relation "animales" violates check constraint "animales_rfid_check"
+psql:tests/schema.test.sql:34: ERROR:  new row for relation "animales" violates check constraint "anilla_anio"
+psql:tests/schema.test.sql:35: ERROR:  new row for relation "animales" violates check constraint "anilla_anio"
+psql:tests/schema.test.sql:36: ERROR:  new row for relation "animales" violates check constraint "anilla_diametro"
+== 5. El criador no puede subirse de sección (esperado: RN)
+   anilla    | seccion 
+-------------+---------
+ E2518000003 | RN
+
+== 6. Puesta: apto calculado en servidor; huevo de gallo rechazado
+ peso_g |   cascara    | apto 
+--------+--------------+------
+   60.0 | Tostada      | f
+   61.5 | Blanco crema | t
+   72.0 | Blanco crema | t
+
+== 7. El criador no puede calificar (esperado: error 42501)
+psql:tests/schema.test.sql:48: ERROR:  Solo un inspector acreditado puede registrar calificaciones
+CONTEXT:  PL/pgSQL function procesar_calificacion() line 5 at RAISE
+== 8. Otro criador: no ve animales ajenos en la tabla (0), sí en el censo público, y no los edita
+ animales_ajenos_visibles 
+--------------------------
+                        0
+
+ en_censo_publico 
+------------------
+                3
+
+ nombre_h1_tras_intento 
+------------------------
+ 
+
+== 9. Anónimo: censo público sin datos personales; sin acceso a tablas
+   anilla    | seccion 
+-------------+---------
+ E2418000002 | RN
+ E2420000001 | RN
+ E2518000003 | RN
+
+psql:tests/schema.test.sql:62: ERROR:  permission denied for table animales
+   (columnas del censo público)
+                                                                                      string_agg                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ id, anilla, sexo, variedad, fecha_nacimiento, seccion, padre_id, madre_id, familia, nombre, peso_g, municipio, provincia, estado, fotos, fotos_fecha, created_at, updated_at, sync_ts
+
+== 10. Inspector: 12 regiones obligatorias y en rango; el servidor recalcula total/clase/resultado; Apto promociona RN->RD (>= 1 año; gallina >= 65)
+   10a incompleto (esperado: error 23514)
+psql:tests/schema.test.sql:71: ERROR:  Puntuación incompleta o fuera de rango (12 regiones, de 0 al máximo, pasos de 0,5)
+CONTEXT:  PL/pgSQL function procesar_calificacion() line 8 at RAISE
+   10b apartado por encima del máximo (esperado: error 23514)
+psql:tests/schema.test.sql:74: ERROR:  Puntuación incompleta o fuera de rango (12 regiones, de 0 al máximo, pasos de 0,5)
+CONTEXT:  PL/pgSQL function procesar_calificacion() line 8 at RAISE
+   10c cliente miente (100 con 58 puntos reales) -> servidor guarda 58 / I / No apto
+   10d 100 puntos con defecto grave -> D / No apto
+   anilla    | seccion_tras_no_aptos 
+-------------+-----------------------
+ E2418000002 | RN
+
+   10e 82,5 puntos -> MB / Apto, pero SIN padres en el Libro ni REGA: sigue en RN
+   10f sin peso (esperado: error de NOT NULL)
+psql:tests/schema.test.sql:87: ERROR:  null value in column "peso_g" of relation "calificaciones" violates not-null constraint
+ total | clase | resultado | peso_g | peso_conforme 
+-------+-------+-----------+--------+---------------
+  58.0 | I     | No apto   |   2400 | t
+ 100.0 | D     | No apto   |   2400 | t
+  82.5 | MB    | Apto      |   2400 | t
+
+   anilla    | seccion 
+-------------+---------
+ E2418000002 | RN
+
+   10e2 la Dirección Técnica (inspector) inscribe a los fundadores G1 y H1 en el RF
+   anilla    | seccion 
+-------------+---------
+ E2418000002 | RF
+ E2420000001 | RF
+
+   10g hijo de fundadores, gallo con 67 puntos -> R pero No apto (gallos >= 70); sigue en RN
+   10h el mismo gallo con 72 puntos -> B / Apto y promoción a RD (padres en RF, REGA, 1 año)
+ total | clase | resultado 
+-------+-------+-----------
+  67.0 | R     | No apto
+  72.0 | B     | Apto
+
+   anilla    | seccion 
+-------------+---------
+ E2520000050 | RD
+
+   10i hija de menos de un año, 82,5 puntos -> Apto pero sigue en RN
+ seccion | total | resultado 
+---------+-------+-----------
+ RN      |  82.5 | Apto
+
+== 11. Calificación cerrada no modificable (esperado: 0 filas)
+psql:tests/schema.test.sql:111: ERROR:  permission denied for table calificaciones
+ calificaciones 
+----------------
+              6
+
+== 12. Registro de Méritos
+   12a inspector no puede inscribir en RM (esperado: error 42501)
+psql:tests/schema.test.sql:118: ERROR:  La inscripción en el Registro de Méritos la acuerda la administración del Libro
+CONTEXT:  PL/pgSQL function comprobar_rm(animales,text,text) line 7 at RAISE
+SQL statement "SELECT public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo)"
+PL/pgSQL function validar_animal() line 34 at PERFORM
+   12a2 el criador titular tampoco: la sección no cambia (esperado: RF)
+ seccion 
+---------
+ RF
+
+   12b admin, gallina con 82,5 puntos pero 0 descendientes en RD (esperado: error 23514)
+psql:tests/schema.test.sql:131: ERROR:  El RM exige 3 descendientes en el Registro Definitivo (tiene 1)
+CONTEXT:  PL/pgSQL function comprobar_rm(animales,text,text) line 20 at RAISE
+SQL statement "SELECT public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo)"
+PL/pgSQL function validar_animal() line 34 at PERFORM
+   12c alta directa en RM (esperado: error 23514)
+psql:tests/schema.test.sql:134: ERROR:  El Registro de Méritos se alcanza desde el RF o el RD, no en el alta
+CONTEXT:  PL/pgSQL function validar_animal() line 17 at RAISE
+   12d con 3 hijas en RD -> inscrita en RM
+   anilla    | seccion |   rm_via   |              rm_motivo              | rm_origen 
+-------------+---------+------------+-------------------------------------+-----------
+ E2418000002 | RM      | requisitos | 82,5 puntos · 3 descendientes en RD | RF
+
+   12e gallo fundador (RF) sin calificación, por premio: no llega a 85 (esperado: error 23514)
+psql:tests/schema.test.sql:143: ERROR:  El RM exige una calificación de 85 puntos o más
+CONTEXT:  PL/pgSQL function comprobar_rm(animales,text,text) line 14 at RAISE
+SQL statement "SELECT public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo)"
+PL/pgSQL function validar_animal() line 34 at PERFORM
+   12f hija en RD sin calificación suficiente (esperado: error 23514)
+psql:tests/schema.test.sql:145: ERROR:  El RM exige una calificación de 80 puntos o más
+CONTEXT:  PL/pgSQL function comprobar_rm(animales,text,text) line 14 at RAISE
+SQL statement "SELECT public.comprobar_rm(OLD, NEW.rm_via, NEW.rm_motivo)"
+PL/pgSQL function validar_animal() line 34 at PERFORM
+== 13. Campañas de control de puesta
+   13a campaña con gallina propia -> OK
+   13b mismo ciclo y temporada (esperado: error unique)
+psql:tests/schema.test.sql:155: ERROR:  duplicate key value violates unique constraint "un_ciclo_por_temporada"
+   13c con un gallo (esperado: error 23514)
+psql:tests/schema.test.sql:158: ERROR:  La campaña solo puede incluir gallinas del propio criador
+CONTEXT:  PL/pgSQL function validar_campana() line 7 at RAISE
+   13d otro criador no la ve (esperado: 0)
+ campanas_ajenas 
+-----------------
+               0
+
+== 14. Criador de origen inmutable e historial de cambios
+   14a la administración cambia el titular de H2 (venta a otro socio): el criador de origen se conserva
+   anilla    | nuevo_titular | criador_origen 
+-------------+---------------+----------------
+ E2518000003 | t             | t
+
+   14b el historial registra los cambios y solo lo leen inspección y administración
+ operacion | count 
+-----------+-------
+ INSERT    |     1
+ UPDATE    |     2
+
+ historial_visible_para_criador 
+--------------------------------
+                              0
+
+== 15. Reproducción: lotes e incubaciones
+   15a lote con gallo y gallina propios -> OK
+   15b gallina como gallo (esperado: error 23514)
+psql:tests/schema.test.sql:184: ERROR:  El gallo del lote debe ser un macho del propio criador
+CONTEXT:  PL/pgSQL function validar_lote() line 5 at RAISE
+   15c gallina ya vendida a otro criador (esperado: error 23514)
+psql:tests/schema.test.sql:187: ERROR:  El lote solo puede incluir gallinas del propio criador
+CONTEXT:  PL/pgSQL function validar_lote() line 10 at RAISE
+   15d incubación coherente -> OK
+   15e más nacidos que huevos fértiles (esperado: error 23514)
+psql:tests/schema.test.sql:193: ERROR:  Huevos, claros y nacidos incoherentes (nacidos ≤ huevos − claros)
+CONTEXT:  PL/pgSQL function validar_incubacion() line 14 at RAISE
+   15f pollito que no es hijo de esa gallina (esperado: error 23514)
+psql:tests/schema.test.sql:195: ERROR:  Un pollito vinculado no es hijo de esa gallina
+CONTEXT:  PL/pgSQL function validar_incubacion() line 19 at RAISE
+   15g otro criador no ve lotes ni incubaciones ajenos (esperado: 0 0)
+ lotes_ajenos | incubaciones_ajenas 
+--------------+---------------------
+            0 |                   0
+
+== 16. Solicitudes de inspección
+   16a solicitud con un ejemplar propio en RN -> OK
+   16b segunda solicitud abierta (esperado: error unique)
+psql:tests/schema.test.sql:211: ERROR:  duplicate key value violates unique constraint "solicitud_abierta_unica"
+   16c el criador intenta programarse la visita (esperado: error 42501)
+psql:tests/schema.test.sql:213: ERROR:  Solo la inspección programa o cierra una solicitud
+CONTEXT:  PL/pgSQL function validar_solicitud() line 26 at RAISE
+   16d otro criador con un ejemplar ajeno (esperado: error 23514) y sin ver la ajena (0)
+psql:tests/schema.test.sql:218: ERROR:  La solicitud solo puede incluir ejemplares activos del criador en RN o RA
+CONTEXT:  PL/pgSQL function validar_solicitud() line 13 at RAISE
+ solicitudes_ajenas 
+--------------------
+                  0
+
+   16e el inspector la ve y programa la visita; no puede cambiar los ejemplares
+   estado   | inspector | ejemplares_intactos 
+------------+-----------+---------------------
+ programada | t         | t
+
+   16f programada sin fecha (esperado: error check)
+psql:tests/schema.test.sql:226: ERROR:  new row for relation "solicitudes" violates check constraint "visita_con_fecha"
+   16g una solicitud realizada no se reabre (esperado: error 23514)
+psql:tests/schema.test.sql:229: ERROR:  La solicitud ya está cerrada
+CONTEXT:  PL/pgSQL function validar_solicitud() line 19 at RAISE
+   16h sincronización por upsert: el criador anula la suya y el inspector cierra otra
+ sol |   estado   | del_criador | intactos 
+-----+------------+-------------+----------
+ 1   | realizada  | t           | t
+ 2   | anulada    | t           | t
+ 3   | programada | t           | t
+
+== 17. Sincronización incremental: sello del servidor y registro de borrados
+   17a el móvil manda una fecha antigua: el servidor pone la suya (sync_ts reciente)
+ sello_del_servidor | fecha_del_movil 
+--------------------+-----------------
+ t                  | t
+
+   17b una edición renueva el sello
+ pg_sleep 
+----------
+ 
+
+ sello_renovado 
+----------------
+ t
+
+   17c borrar un huevo queda anotado para los demás dispositivos
+ tabla  | es_el_huevo 
+--------+-------------
+ huevos | t
+
+   17d otro criador no ve los borrados ajenos (0) y el censo público trae sync_ts
+ borrados_ajenos 
+-----------------
+               0
+
+ con_sync_ts 
+-------------
+ t
+

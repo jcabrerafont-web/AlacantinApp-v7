@@ -6,6 +6,7 @@
 // ============================================================================
 import * as db from './db.js';
 import { CONFIG, supabaseConfigurado } from './config.js';
+import { anotarError } from './diagnostico.js';
 
 let cliente = null;
 let enCurso = null;
@@ -80,6 +81,7 @@ export function drenar() {
         ok++;
       } catch (e) {
         fallidos++;
+        anotarError(`Sincronización (${item.tabla}, ${item.op}): ${e?.message || e}`, 'sync');
         await db.guardar('cola', { ...item, intentos: item.intentos + 1, error: String(e?.message || e), ultimo: Date.now() });
         if (!navigator.onLine) break;
       }

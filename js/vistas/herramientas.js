@@ -5,6 +5,7 @@ import { CONFIG, supabaseConfigurado } from '../config.js';
 import { cerrarSesion } from '../app.js';
 import { h, pintar, $, confirmar, aviso } from '../ui.js';
 import * as instalacion from '../instalacion.js';
+import * as tema from '../tema.js';
 
 export default function (main) {
   const p = datos.estado.perfil;
@@ -13,6 +14,7 @@ export default function (main) {
     ['Mi cuenta', [
       ['#/perfil', '🏡', 'Mi aviario', 'Nombre, REGA, municipio y ubicación que heredan las altas'],
       ['#/copia', '💾', 'Copia de seguridad', supabaseConfigurado() ? 'Descargar o restaurar tus datos' : 'Imprescindible: tus datos solo están en este dispositivo'],
+      ['#/problema', '🐞', 'Informar de un problema', 'Cuenta qué ha pasado y envíalo por WhatsApp o correo'],
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],
     ['Cría', [
@@ -41,6 +43,9 @@ export default function (main) {
       <button class="btn" id="b-salir">Cerrar sesión</button>
     </div>
     <div class="tarjeta" id="h-movil"></div>
+    <div class="tarjeta"><h2 id="h-pantalla-et">Pantalla</h2>
+      <div class="opciones" role="radiogroup" aria-labelledby="h-pantalla-et">${Object.entries(tema.TEMAS).map(([k, v]) => h`<label><input type="radio" name="h-tema" value="${k}" ${tema.actual() === k ? h`checked` : ''}><span>${v}</span></label>`)}</div>
+      <p class="ayuda">«Sol»: máximo contraste y letra más grande, para leer al aire libre. Se guarda en este dispositivo.</p></div>
     ${grupos.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">
       ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span style="font-size:1.4rem" aria-hidden="true">${ico}</span>
         <span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}
@@ -52,6 +57,7 @@ export default function (main) {
     const caja = $('#h-movil', main);
     if (!caja) return;
     const a = await instalacion.estadoAlmacen();
+    const fotos = await (async () => { try { return (await (await caches.open('alacantinapp-fotos')).keys()).length; } catch { return 0; } })();
     const inst = instalacion.instalada();
     pintar(caja, h`<h2 id="instalar">📲 La app en este dispositivo</h2>
       <p>${inst ? '✓ Instalada: se abre desde su icono, a pantalla completa y sin conexión.' : 'Aún no está instalada.'}
@@ -61,10 +67,13 @@ export default function (main) {
       ${!inst && instalacion.esIOS() ? h`<div class="aviso-caja aviso peq"><strong>En iPhone, instálala:</strong> si no, Safari borra los datos de la web tras 7 días sin abrirla.
         <ol class="pasos" style="margin:.4rem 0 0"><li>Ábrela en <strong>Safari</strong>.</li><li>Pulsa <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba).</li><li>Elige <strong>«Añadir a pantalla de inicio»</strong> y luego «Añadir».</li></ol></div>`
         : !inst && !instalacion.puedeInstalar() ? h`<p class="peq muted">Para instalarla, abre el menú del navegador (⋮) y elige «Instalar aplicación» o «Añadir a pantalla de inicio».</p>` : ''}
-      ${a.persistente === false && inst ? h`<button class="btn" id="h-proteger">Proteger los datos</button>` : ''}`);
+      ${a.persistente === false && inst ? h`<button class="btn" id="h-proteger">Proteger los datos</button>` : ''}
+      ${fotos ? h`<p class="peq muted" style="margin-top:.5rem">Fotos guardadas para verlas sin cobertura: ${fotos}. <button class="enlace" type="button" id="h-fotos">Borrarlas para liberar espacio</button></p>` : ''}`);
+    $('#h-fotos', caja)?.addEventListener('click', async () => { await caches.delete('alacantinapp-fotos'); aviso('Fotos guardadas borradas. Se volverán a guardar al verlas con cobertura.', 'ok'); pintarMovil(); });
     $('#h-instalar', caja)?.addEventListener('click', async () => { if (await instalacion.instalar()) aviso('App instalada. Ábrela desde su icono.', 'ok'); });
     $('#h-proteger', caja)?.addEventListener('click', async () => { const ok = await instalacion.pedirPersistencia(); aviso(ok ? 'Datos protegidos.' : 'El navegador no lo ha permitido. Instala la app y vuelve a probar.', ok ? 'ok' : 'error'); pintarMovil(); });
   };
+  main.querySelectorAll('input[name=h-tema]').forEach(r => r.addEventListener('change', () => tema.aplicar(r.value)));
   pintarMovil();
   // El resumen de la auditoría se calcula después de pintar: la pantalla abre al instante
   const tAud = setTimeout(() => {

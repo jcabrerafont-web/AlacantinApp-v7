@@ -9,7 +9,11 @@ export const CONFIG = Object.freeze({
   supabaseUrl: '',
   supabaseAnonKey: '',
   bucketFotos: 'fotos-alacantina',
-  version: '7.11.0'
+  // Dónde llegan los informes de problemas (Herramientas → Informar de un problema).
+  // Vacíos: el criador elige a quién enviarlo (WhatsApp o correo).
+  soporteEmail: '',
+  soporteWhatsApp: '',   // con prefijo, solo cifras: p. ej. 34600000000
+  version: '7.12.0'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

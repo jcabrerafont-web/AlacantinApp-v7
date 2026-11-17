@@ -28,7 +28,7 @@ export default function (main) {
 
       <div class="tarjeta"><h2>2. Restaurar una copia</h2>
         <p class="peq">Para recuperar los datos en un móvil nuevo o después de un borrado. ${supabaseConfigurado() ? '' : 'Si la copia es de otra cuenta de este modo (por ejemplo, de tu móvil anterior), sus ejemplares pasarán a tu cuenta actual.'}</p>
-        <input type="file" id="cp-archivo" accept=".json,application/json">
+        <input type="file" id="cp-archivo" aria-label="Archivo de copia de seguridad (.json)" accept=".json,application/json">
         <div id="cp-vista"></div>
       </div>`);
 

@@ -98,7 +98,7 @@ export default function (main) {
         const nf = nivelFx(f);
         const t = tramoEdad(a.fecha_nacimiento);
         return h`<li><a class="item" href="#/animal/${encodeURIComponent(a.id)}">
-          <span class="sexo sexo-${a.sexo}" aria-label="${a.sexo === 'M' ? 'Gallo' : 'Gallina'}">${a.sexo === 'M' ? '♂' : '♀'}</span>
+          <span class="sexo sexo-${a.sexo}" role="img" aria-label="${a.sexo === 'M' ? 'Gallo' : 'Gallina'}">${a.sexo === 'M' ? '♂' : '♀'}</span>
           <span class="item-principal">
             <span class="item-titulo">${a.anilla}${a.nombre ? h` · ${a.nombre}` : ''}</span>
             <span class="item-sub">${nombreVariedad(a.variedad)} · ${t ? t.nombre : 'Edad desconocida'}</span>

@@ -25,7 +25,7 @@ export default async function (main) {
       ${cola.length ? h`<div class="tarjeta"><ul class="lista">${cola.map(i => h`<li class="item"><div class="item-principal">
         <div class="item-titulo">${NOMBRES[i.tabla] || i.tabla} · ${i.op === 'delete' ? 'borrado' : (i.registro.anilla || i.registro.fecha || '')}</div>
         <div class="item-sub">${new Date(i.creado).toLocaleString('es-ES')}${i.intentos ? ` · ${i.intentos} intento(s)` : ''}</div>
-        ${i.error ? h`<div class="peq" style="color:var(--rojo)">${i.error}</div>` : ''}</div></li>`)}</ul></div>`
+        ${i.error ? h`<div class="peq" style="color:var(--rojo-t)">${i.error}</div>` : ''}</div></li>`)}</ul></div>`
         : h`<p class="muted">Todo está sincronizado.</p>`}
       ${supabaseConfigurado() ? h`<div class="tarjeta"><p class="peq">Si sospechas que falta algo en este móvil, puedes volver a descargar todo el Libro (gasta más datos).</p>
         <button class="btn" id="s-todo" ${!puede ? h`disabled` : ''}>Volver a descargar todo</button></div>` : ''}`);
