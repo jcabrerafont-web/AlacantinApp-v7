@@ -20,6 +20,33 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - Los roles **Inspector** y **Administrador** solo los asigna un administrador; el servidor rechaza cualquier otro intento.
 - Cada alta **hereda** del aviario del criador el REGA, el municipio, la provincia y la ubicación GPS.
 
+## La app guía al criador
+
+- **Hoy** (`#/hoy`, y resumido arriba en Mi censo):
+  - **Incubaciones:** miraje (día 7, o atrasado), pasar a la nacedora (día 18), anotar nacimientos (día 21), con aviso del día anterior.
+  - **Pollitos** por anillar.
+  - **Campaña de puesta:** día y gallinas sin huevo; aviso si empieza en 3 días.
+  - **Lotes:** desde cuándo valen sus huevos.
+  - **Inspección:** visita programada, o ejemplares con un año sin calificar.
+  - **Errores** de la auditoría.
+  - **Para inspección:** solicitudes por llamar y visitas de la semana.
+  - **«Este mes»:** la tarea de la temporada, sacada del calendario de la Guía.
+- **Primeros pasos** para el criador nuevo, con su estado:
+  1. Mi aviario;
+  2. instalar la app;
+  3. leer la Guía;
+  4. primeras altas;
+  5. lotes;
+  6. primera copia (en modo dispositivo).
+
+  Se oculta al completarse o a mano.
+- **Deshacer:** borrar un huevo o separar un lote ya no pregunta «¿Seguro?»; el mensaje trae un botón «Deshacer». La descarga aplica los borrados antes que las tablas, para que lo recuperado se quede.
+- **Buscar por anilla:**
+  - botón 🔍 en la cabecera, o tecla «/» en el ordenador;
+  - con cifras solo mira el número grabado, sin confundir el año ni el diámetro;
+  - Intro abre la ficha; también busca por nombre.
+- **Fecha de hoy** en la hora del móvil, no en UTC. En el servidor, `public.hoy()` usa la hora de España: antes, entre la medianoche y la 1:00 (2:00 en verano), un huevo de hoy se habría guardado con la fecha de ayer o se habría rechazado.
+
 ## Sin cobertura, con mucho Libro y sin perder datos
 
 - **Arranque:** el Service Worker sirve primero la copia guardada de la versión instalada. Con cobertura muy mala (4 s por petición), la app abre en 1,4 s (antes, 15,4 s).
@@ -202,7 +229,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 28 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 117 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 126 comprobaciones en Chrome (Playwright)
 node tests/pwa.mjs                            # Service Worker: arranque con mala cobertura y actualización de versión
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```

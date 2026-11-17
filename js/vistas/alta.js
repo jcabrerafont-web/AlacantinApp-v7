@@ -3,7 +3,7 @@ import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
-import { h, pintar, $, aviso, pct, hoyISO, comprimirFoto } from '../ui.js';
+import { h, pintar, $, aviso, pct, hoyISO, fechaLocal, comprimirFoto } from '../ui.js';
 
 const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
 
@@ -188,7 +188,7 @@ export default function (main, params) {
     try {
       fotos[inp.dataset.foto] = await comprimirFoto(archivo);
       // Fecha de la foto (la del archivo, si es coherente): sirve para saber la edad del animal en ella
-      const f0 = new Date(archivo.lastModified || Date.now()).toISOString().slice(0, 10);
+      const f0 = fechaLocal(new Date(archivo.lastModified || Date.now()));
       const nac = $('#a-fecha', f).value;
       fotosFecha[inp.dataset.foto] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
       pintarFoto(inp.dataset.foto);

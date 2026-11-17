@@ -8,7 +8,7 @@ import * as sync from './sync.js';
 import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
 import { indice, fxAnimal, creaCiclo, animalesEnCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes, heredarMemoria } from './genetica.js';
 import { esAuditor, actualizarPerfil } from './auth.js';
-import { uuid } from './ui.js';
+import { uuid, hoyISO } from './ui.js';
 
 export const estado = {
   perfil: null,         // null = visitante
@@ -129,7 +129,7 @@ export function validarAnimal(a, { esNuevo }) {
   if (!['M', 'H'].includes(a.sexo)) errores.push('Indica el sexo.');
   if (!variedadPorId(a.variedad)) errores.push('Elige una variedad.');
   if (!a.fecha_nacimiento) errores.push('La fecha de nacimiento es obligatoria.');
-  else if (a.fecha_nacimiento > new Date().toISOString().slice(0, 10)) errores.push('La fecha de nacimiento no puede ser futura.');
+  else if (a.fecha_nacimiento > hoyISO()) errores.push('La fecha de nacimiento no puede ser futura.');
   if (!ESTANDAR.secciones[a.seccion]) errores.push('Sección del libro no válida.');
   if (a.seccion === 'RD' && esNuevo) errores.push('El Registro Definitivo solo se alcanza tras una calificación Apto.');
   if (a.seccion === 'RD' && !variedadPorId(a.variedad)?.oficial) errores.push('Las variedades en proceso de reconocimiento no acceden al Registro Definitivo.');
@@ -286,6 +286,22 @@ export async function borrarHuevo(id) {
   await db.borrar('huevos', id);
   await sync.encolar('huevos', 'delete', { id });
   await cargar();
+  return h; // para poder deshacer
+}
+
+// Deshacer un borrado: el huevo vuelve con el mismo id (la cola envía el borrado y luego esto)
+export async function restaurarHuevo(h) {
+  if (!h || !puedeEditar(estado.idx.get(h.animal_id))) throw new Error('No autorizado.');
+  await db.guardar('huevos', h);
+  await sync.encolar('huevos', 'upsert', h);
+  await cargar();
+}
+
+// Deshacer «Separar»: el lote vuelve a estar activo
+export async function reabrirLote(id) {
+  const l = estado.lotes.find(x => x.id === id);
+  if (!l) throw new Error('Lote no encontrado.');
+  return guardarLote({ ...l, fin: null });
 }
 
 export function resumenPuesta(animalId, desde = null, hasta = null) {
@@ -304,9 +320,9 @@ export function resumenPuesta(animalId, desde = null, hasta = null) {
 // ---------------------------------------------------------------------------
 const masDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const finCampana = (c) => masDias(c.inicio, c.dias - 1);
-export const diaCampana = (c, hoy = new Date().toISOString().slice(0, 10)) =>
+export const diaCampana = (c, hoy = hoyISO()) =>
   hoy < c.inicio ? 0 : Math.min(c.dias, Math.round((Date.parse(`${hoy}T12:00:00Z`) - Date.parse(`${c.inicio}T12:00:00Z`)) / 86400000) + 1);
-export const estadoCampana = (c, hoy = new Date().toISOString().slice(0, 10)) =>
+export const estadoCampana = (c, hoy = hoyISO()) =>
   hoy < c.inicio ? 'programada' : hoy > finCampana(c) ? 'terminada' : 'en curso';
 export const misCampanas = () => [...estado.campanas].sort((a, b) => b.inicio.localeCompare(a.inicio));
 export const campanaEnCurso = () => misCampanas().find(c => estadoCampana(c) === 'en curso') || null;
@@ -382,7 +398,7 @@ const conIndicadores = (f, dias, inicio) => {
 };
 
 // Resultados de una campaña por gallina
-export function resultadosCampana(c, hoy = new Date().toISOString().slice(0, 10)) {
+export function resultadosCampana(c, hoy = hoyISO()) {
   const fin = finCampana(c);
   const transcurridos = estadoCampana(c, hoy) === 'terminada' ? c.dias : diaCampana(c, hoy);
   const filas = c.gallinas.map(id => {
@@ -426,7 +442,7 @@ export function temporadaPuesta(temporada) {
 // ---------------------------------------------------------------------------
 const RP = () => REGLAS.reproduccion;
 const sumaDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const hoyIso = () => new Date().toISOString().slice(0, 10);
+const hoyIso = () => hoyISO();
 export const misLotes = () => [...estado.lotes].sort((a, b) => b.inicio.localeCompare(a.inicio));
 export const loteActivo = (l, dia = hoyIso()) => l.inicio <= dia && (!l.fin || l.fin >= dia);
 // Desde qué día los huevos del lote se atribuyen al gallo (fecundidad residual del anterior)
@@ -574,7 +590,7 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
   const limpios = Object.fromEntries(BAREMO.apartados.map(x => [x.id, puntoValido(puntos[x.id], x.max)]));
   const c = {
     id: uuid(), animal_id: a.id, inspector_id: p.id, inspector_nombre: p.nombre || p.email,
-    fecha: new Date().toISOString().slice(0, 10), puntos: limpios, total: ev.total, clase: ev.clase,
+    fecha: hoyISO(), puntos: limpios, total: ev.total, clase: ev.clase,
     defectos: ev.defectosGraves,
     peso_g: pesoG ? Math.round(Number(pesoG)) : null, peso_conforme: ev.pesoConforme,
     resultado: ev.resultado, observaciones: observaciones || '',
@@ -776,6 +792,105 @@ export function resumenAnual(anio) {
     territorio: { titulares: titulares.size, explotaciones: regas.size, municipios: Object.entries(municipios).sort((x, y) => y[1] - x[1]) },
     calidad: { errores: au.filter(x => x.nivel === 'error').length, avisos: au.filter(x => x.nivel === 'aviso').length }
   };
+}
+
+// ---------------------------------------------------------------------------
+// «Hoy»: lo que toca hacer, reunido de todas partes (incubaciones, campaña, pollitos,
+// lotes, inspección, auditoría) y lo propio del mes. nivel: 'hoy' | 'pronto' | 'info'.
+// ---------------------------------------------------------------------------
+const fechaCorta = (iso) => iso.split('-').reverse().slice(0, 2).join('/');
+const ORDEN_NIVEL = { hoy: 0, pronto: 1, info: 2 };
+export const TAREAS_DEL_MES = {
+  1: ['🧬', 'Forma las familias y los lotes de la temporada, mirando la consanguinidad de cada cruce. Cierra el año anterior con el acta.', '#/reproduccion'],
+  2: ['🥚', 'Junta gallos y gallinas al menos 15 días antes de incubar. Organiza la primera campaña de puesta.', '#/campanas'],
+  3: ['🐣', 'Temporada de puesta e incubación: campañas de 15 días e incubar huevos identificados.', '#/reproduccion'],
+  4: ['🐣', 'Temporada de puesta e incubación. Anilla los pollitos en cuanto la anilla pase por el pie.', '#/reproduccion'],
+  5: ['🐣', 'Última campaña de puesta. Anilla y da de alta los pollitos con sus padres.', '#/reproduccion'],
+  6: ['🐣', 'Cierra las campañas de puesta: mira qué gallina de cada familia da la reposición.', '#/campanas'],
+  7: ['🐥', 'Anilla y da de alta los pollitos que falten. Separa machos y hembras cuando se distingan.', '#/alta'],
+  8: ['🐥', 'Recría: revisa que todos los pollitos estén dados de alta y con su anilla.', '#/censo'],
+  9: ['🔎', 'Elige la reposición: un hijo de cada gallo y una hija de cada gallina.', '#/apareamientos'],
+  10: ['🔎', 'Pide las anillas a FESACOCUR. Solicita la inspección de los ejemplares que ya tienen un año.', '#/inspeccion'],
+  11: ['🔎', 'Calificaciones: solicita la inspección de los ejemplares con un año. Pide las anillas si aún no lo has hecho.', '#/inspeccion'],
+  12: ['📄', 'Revisa tu censo, da de baja los que ya no están y haz la copia de seguridad. El Club cierra el año con el acta.', '#/auditoria']
+};
+
+export function agendaHoy(dia = hoyIso()) {
+  const p = estado.perfil;
+  if (!p) return [];
+  const t = [];
+  const add = (nivel, icono, texto, href, sub = '') => t.push({ nivel, icono, texto, href, sub });
+  const manana = sumaDias(dia, 1);
+  // Incubaciones
+  for (const inc of misIncubaciones().filter(i => !i.cerrada)) {
+    const c = calendarioIncubacion(inc.entrada);
+    const href = `#/incubacion/${inc.id}`;
+    const sinClaros = inc.filas.some(f => f.claros === null || f.claros === undefined);
+    const sinNacidos = inc.filas.some(f => f.nacidos === null || f.nacidos === undefined);
+    const de = `la incubación del ${fechaCorta(inc.entrada)}`;
+    if (dia >= c.eclosion && sinNacidos) add('hoy', '🐣', `Anota los nacimientos de ${de}`, href, 'Nacidos por gallina; después, dalos de alta.');
+    else if (dia >= c.miraje && sinClaros) add('hoy', '🔦', `Miraje de ${de}${dia > c.miraje ? ` (tocaba el ${fechaCorta(c.miraje)})` : ''}`, href, 'Al trasluz, retira y anota los huevos claros.');
+    else if (dia === c.nacedora) add('hoy', '🧺', `Pasa a la nacedora ${de}`, href, 'Deja de voltear y separa los huevos de cada gallina.');
+    else if (manana === c.miraje) add('pronto', '🔦', `Mañana: miraje de ${de}`, href);
+    else if (manana === c.nacedora) add('pronto', '🧺', `Mañana: pasar a la nacedora ${de}`, href);
+    else if (manana === c.eclosion) add('pronto', '🐣', `Mañana nacen los pollitos de ${de}`, href);
+    else if (dia < c.eclosion) add('info', '🥚', `Incubando: ${de}`, href, `Nacimiento previsto el ${fechaCorta(c.eclosion)}.`);
+  }
+  // Pollitos por dar de alta
+  const pend = pollitosPendientes().reduce((n, x) => n + x.pendientes, 0);
+  if (pend) add('hoy', '🐥', `${pend} pollito(s) por anillar y dar de alta`, '#/reproduccion', 'Padre, madre y fecha ya puestos desde la incubación.');
+  // Campaña de puesta
+  const camp = campanaEnCurso();
+  if (camp) {
+    const faltan = resultadosCampana(camp, dia).filas.filter(x => !x.hoy).length;
+    add(faltan ? 'hoy' : 'info', '⚖️', `Campaña de puesta: día ${diaCampana(camp, dia)} de ${camp.dias}`, '#/puesta',
+      faltan ? `${faltan} gallina(s) sin huevo anotado hoy.` : 'Hoy ya están anotadas todas las gallinas.');
+  } else {
+    const prox = misCampanas().find(c => estadoCampana(c, dia) === 'programada' && c.inicio <= sumaDias(dia, 3));
+    if (prox) add('pronto', '⚖️', `La campaña ${prox.ciclo} empieza el ${fechaCorta(prox.inicio)}`, `#/campana/${prox.id}`, 'Prepara las jaulas o los ponederos y la báscula.');
+  }
+  // Lotes recién formados: desde cuándo valen sus huevos
+  for (const l of misLotes().filter(l => loteActivo(l, dia) && dia < fechaFiable(l))) {
+    add('info', '⏳', `Lote${l.familia ? ` de la familia ${l.familia}` : ''}: sus huevos valen para incubar desde el ${fechaCorta(fechaFiable(l))}`, '#/reproduccion');
+  }
+  // Inspección
+  const sol = solicitudAbierta();
+  if (sol?.estado === 'programada' && sol.fecha_visita >= dia) add(sol.fecha_visita === dia ? 'hoy' : 'pronto', '🔎', `Visita del inspector ${sol.fecha_visita === dia ? 'hoy' : `el ${fechaCorta(sol.fecha_visita)}`}`, '#/inspeccion', sol.respuesta || 'Ten los animales a mano, con la anilla legible.');
+  else if (sol?.estado === 'pendiente') add('info', '🔎', 'Solicitud de inspección enviada', '#/inspeccion', 'El inspector te llamará para concertar la visita.');
+  else if (!sol) {
+    const listos = porCalificar(p.id).filter(x => x.listo).length;
+    if (listos) add('pronto', '🔎', `${listos} ejemplar(es) con un año sin calificar`, '#/inspeccion', 'Solicita la inspección: es la llave del Registro Definitivo.');
+  }
+  // Inspección y administración: solicitudes de los criadores
+  if (esAuditor(p.rol)) {
+    const abiertas = solicitudesTodas().filter(solicitudAbiertaEs);
+    const porLlamar = abiertas.filter(x => x.estado === 'pendiente').length;
+    if (porLlamar) add('hoy', '📞', `${porLlamar} solicitud(es) de inspección por llamar`, '#/inspecciones');
+    const visitas = abiertas.filter(x => x.estado === 'programada' && x.fecha_visita >= dia && x.fecha_visita <= sumaDias(dia, 7));
+    for (const v of visitas) {
+      const c = estado.perfiles.find(x => x.id === v.usuario_id);
+      add(v.fecha_visita === dia ? 'hoy' : 'pronto', '🚗', `Visita ${v.fecha_visita === dia ? 'hoy' : `el ${fechaCorta(v.fecha_visita)}`}: ${c?.nombre || 'criador'}${c?.municipio ? ` (${c.municipio})` : ''}`, '#/inspecciones', `${v.animales.length} ejemplar(es).`);
+    }
+  }
+  // Calidad del censo
+  const errores = auditarLibro().filter(x => x.nivel === 'error').length;
+  if (errores) add('pronto', '🩺', `${errores} error(es) en ${esAuditor(p.rol) ? 'el Libro' : 'tu censo'}`, '#/auditoria', 'Corrígelos antes de la inspección o del cierre del año.');
+  return t.sort((x, y) => ORDEN_NIVEL[x.nivel] - ORDEN_NIVEL[y.nivel]);
+}
+
+// Primeros pasos del criador nuevo. Lo asíncrono (instalación, copia, guía) se pasa desde la vista.
+export function primerosPasos({ instalada = false, copiaHecha = false, guiaVista = false, conServidor = false } = {}) {
+  const p = estado.perfil;
+  if (!p) return [];
+  const propios = estado.todos.filter(a => a.usuario_id === p.id);
+  return [
+    { id: 'aviario', texto: 'Completa Mi aviario: REGA, municipio y ubicación', href: '#/perfil', hecho: Boolean(p.rega && p.municipio && p.latitud != null) },
+    { id: 'instalar', texto: 'Instala la app en el móvil', href: '#/herramientas', hecho: instalada },
+    { id: 'guia', texto: 'Lee la Guía del criador (10 minutos)', href: '#/programa', hecho: guiaVista },
+    { id: 'altas', texto: 'Da de alta tus gallos y gallinas', href: '#/alta', hecho: propios.length > 0 },
+    { id: 'lotes', texto: 'Forma tus lotes de reproducción (gallo + gallinas)', href: '#/reproduccion', hecho: estado.lotes.length > 0 },
+    ...(conServidor ? [] : [{ id: 'copia', texto: 'Haz tu primera copia de seguridad', href: '#/copia', hecho: copiaHecha }])
+  ];
 }
 
 // ---------------------------------------------------------------------------

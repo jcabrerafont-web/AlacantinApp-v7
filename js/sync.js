@@ -134,18 +134,20 @@ export async function descargar(usuarioId) {
   const pend = new Set((await db.todos('cola')).map(i => i.id));
   const propios = new Set((await db.todos('animales')).filter(a => a.usuario_id === usuarioId).map(a => a.id));
   let filas = 0, borradas = 0;
+  // Primero los borrados y después las tablas: si algo se borró y se recuperó («Deshacer»),
+  // la versión recuperada (más reciente) es la que queda.
+  if (usuarioId) {
+    const store = { huevos: 'huevos', campanas: 'campanas', lotes: 'lotes', incubaciones: 'incubaciones' };
+    await bajarPaginas(usuarioId, 'borrados', async (lote) => {
+      for (const b of lote) if (store[b.tabla] && !pend.has(b.registro)) { await db.borrar(store[b.tabla], b.registro); borradas++; }
+    });
+  }
   for (const [tabla, store] of TABLAS_DESCARGA) {
     if (tabla !== 'censo_publico' && !usuarioId) continue;
     filas += await bajarPaginas(usuarioId, tabla, async (lote) => {
       // Del censo público solo lo ajeno: lo propio llega completo (con datos privados) desde «animales»
       const validas = lote.filter(f => !pend.has(f.id) && !(tabla === 'censo_publico' && propios.has(f.id)));
       if (validas.length) await db.guardarVarios(store, validas);
-    });
-  }
-  if (usuarioId) {
-    const store = { huevos: 'huevos', campanas: 'campanas', lotes: 'lotes', incubaciones: 'incubaciones' };
-    await bajarPaginas(usuarioId, 'borrados', async (lote) => {
-      for (const b of lote) if (store[b.tabla] && !pend.has(b.registro)) { await db.borrar(store[b.tabla], b.registro); borradas++; }
     });
   }
   await db.metaSet(`sync:${usuarioId || 'visitante'}:ultima`, new Date().toISOString());

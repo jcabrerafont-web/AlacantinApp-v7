@@ -6,6 +6,7 @@ import { nivelFx } from '../genetica.js';
 import { h, pintar, $, pct } from '../ui.js';
 import { copiaPendiente } from '../respaldo.js';
 import * as instalacion from '../instalacion.js';
+import { estadoPasos, itemTarea, fechaLarga } from './hoy.js';
 import { supabaseConfigurado } from '../config.js';
 
 const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -13,6 +14,7 @@ const filtros = { q: '', sexo: '', variedad: '', seccion: '', bajas: false };
 
 export default function (main) {
   const p = datos.estado.perfil;
+  const limpiar = [];
   const titulo = !p ? 'Censo público' : esAuditor(p.rol) ? 'Censo del Libro' : 'Mi censo';
 
   pintar(main, h`
@@ -22,7 +24,7 @@ export default function (main) {
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
     <div id="censo-riesgo"></div>
     <div id="censo-copia"></div>
-    ${p && !esAuditor(p.rol) && !datos.solicitudAbierta() && datos.porCalificar(p.id).some(x => x.listo) ? h`<a id="censo-insp" class="aviso-caja info peq" href="#/inspeccion" style="display:block;text-decoration:none">🔎 Tienes ${datos.porCalificar(p.id).filter(x => x.listo).length} ejemplar(es) con un año sin calificar. <strong>Solicitar inspección →</strong></a>` : ''}
+    ${p ? h`<div id="censo-hoy"></div>` : ''}
     <div id="censo-kpis" class="kpis"></div>
     <div class="tarjeta">
       <label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Anilla o nombre" value="${filtros.q}">
@@ -42,6 +44,21 @@ export default function (main) {
   // Recordatorio de copia de seguridad (sobre todo en modo dispositivo)
   if (p) {
     const propios = datos.estado.todos.filter(a => a.usuario_id === p.id).length;
+    // «Hoy» resumido: lo urgente y lo próximo, y los primeros pasos si faltan. Se calcula
+    // después de pintar la lista para que el censo abra al instante.
+    const tHoy = setTimeout(async () => {
+      const caja = $('#censo-hoy', main);
+      if (!caja) return;
+      const tareas = datos.agendaHoy().filter(x => x.nivel !== 'info');
+      const pasos = await estadoPasos();
+      if (!tareas.length && pasos.ocultos) { pintar(caja, ''); return; }
+      pintar(caja, h`<div class="tarjeta tarjeta-hoy"><div class="fila entre"><h2 style="margin:0">Hoy <span class="muted peq" style="font-weight:500">· ${fechaLarga()}</span></h2>
+          <a class="peq" href="#/hoy">Ver todo ›</a></div>
+        ${tareas.length ? h`<ul class="lista">${tareas.slice(0, 3).map(itemTarea)}</ul>${tareas.length > 3 ? h`<p class="peq" style="margin:.25rem 0 0"><a href="#/hoy">y ${tareas.length - 3} más →</a></p>` : ''}` : ''}
+        ${pasos.ocultos ? '' : h`<a class="item tarea" href="#/hoy"><span class="tarea-ico" aria-hidden="true">🚀</span><span class="item-principal"><span class="item-titulo">Primeros pasos: ${pasos.hechos} de ${pasos.pasos.length}</span><span class="item-sub">${pasos.pasos.find(x => !x.hecho)?.texto || ''}</span></span><span aria-hidden="true">›</span></a>`}
+      </div>`);
+    }, 0);
+    limpiar.push(() => clearTimeout(tHoy));
     instalacion.riesgo().then(r => {
       const caja = $('#censo-riesgo', main);
       if (!r || !caja) return;
@@ -102,5 +119,6 @@ export default function (main) {
   $('#f-sec', main).addEventListener('change', filtrar(e => { filtros.seccion = e.target.value; }));
   $('#f-bajas', main)?.addEventListener('change', filtrar(e => { filtros.bajas = e.target.checked; }));
   dibujar();
-  return datos.suscribir(dibujar);
+  const quitar = datos.suscribir(dibujar);
+  return () => { quitar(); limpiar.forEach(fn => fn()); };
 }

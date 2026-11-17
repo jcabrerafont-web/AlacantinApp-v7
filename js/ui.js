@@ -32,14 +32,31 @@ export function pintar(el, plantilla) {
 }
 
 let temporizador = null;
-export function aviso(texto, tipo = 'info') {
+// Mensaje breve. Con { accion: { texto, fn } } lleva un botón (p. ej. «Deshacer») y dura más:
+// para lo que tiene arreglo es mejor deshacer que preguntar «¿seguro?» antes.
+export function aviso(texto, tipo = 'info', { accion = null, ms = null } = {}) {
   const el = $('#aviso');
   if (!el) return;
-  el.textContent = texto;
-  el.className = `toast toast-${tipo} visible`;
+  el.textContent = '';
+  const t = document.createElement('span');
+  t.textContent = texto;
+  el.appendChild(t);
+  if (accion) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'toast-accion';
+    b.textContent = accion.texto;
+    b.addEventListener('click', async () => {
+      el.classList.remove('visible');
+      clearTimeout(temporizador);
+      try { await accion.fn(); } catch (e) { aviso(e.message || String(e), 'error'); }
+    }, { once: true });
+    el.appendChild(b);
+  }
+  el.className = `toast toast-${tipo} visible${accion ? ' con-accion' : ''}`;
   el.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
   clearTimeout(temporizador);
-  temporizador = setTimeout(() => el.classList.remove('visible'), tipo === 'error' ? 6000 : 3500);
+  temporizador = setTimeout(() => el.classList.remove('visible'), ms ?? (accion ? 7000 : tipo === 'error' ? 6000 : 3500));
 }
 
 // Diálogo modal accesible (<dialog>). Devuelve el valor con que se cierra.
@@ -71,7 +88,10 @@ export const fecha = (iso) => {
 };
 export const kg = (g) => (Number.isFinite(Number(g)) && g ? `${(Number(g) / 1000).toFixed(3).replace('.', ',')} kg` : '—');
 export const pct = (x, dec = 2) => `${(Number(x || 0) * 100).toFixed(dec).replace('.', ',')} %`;
-export const hoyISO = () => new Date().toISOString().slice(0, 10);
+// Fecha de hoy en la hora del móvil (no en UTC: en España, entre la medianoche y la 1:00
+// o las 2:00, la fecha UTC todavía es ayer).
+export const fechaLocal = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const hoyISO = () => fechaLocal();
 
 export function descargar(contenido, nombre, tipo = 'text/csv;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));

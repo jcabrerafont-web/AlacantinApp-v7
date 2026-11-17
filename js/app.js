@@ -30,6 +30,7 @@ const RUTAS = [
   ['copia', 'copia', 'usuario'],
   ['reproduccion', 'reproduccion', 'usuario'],
   ['incubacion/:id', 'incubacion', 'usuario'],
+  ['hoy', 'hoy', 'usuario'],
   ['inspeccion', 'inspeccion', 'usuario'],
   ['auditoria', 'auditoria', 'usuario'],
   ['acta', 'acta', 'usuario'],
@@ -194,6 +195,12 @@ async function arrancar() {
     location.hash = datos.estado.perfil ? '#/herramientas' : '#/acceso';
   });
   $('#estado-cola').addEventListener('click', () => { location.hash = '#/sincronizacion'; });
+  // Buscar por anilla desde cualquier pantalla (y con la tecla «/» en el ordenador)
+  const buscar = () => import('./buscar.js').then(m => m.abrirBuscador());
+  $('#boton-buscar').addEventListener('click', buscar);
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '') && !document.querySelector('dialog[open]')) { e.preventDefault(); buscar(); }
+  });
 
   // Teclado abierto (campo de texto o número con foco): en el móvil se oculta la barra inferior
   const conTeclado = (e) => e && (e.tagName === 'TEXTAREA' || (e.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'button', 'submit', 'date', 'range', 'color'].includes(e.type)));

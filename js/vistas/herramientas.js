@@ -16,6 +16,7 @@ export default function (main) {
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],
     ['Cría', [
+      ['#/hoy', '📅', 'Hoy', 'Qué toca hacer hoy y esta semana, y los primeros pasos'],
       ['#/inspeccion', '🔎', 'Solicitar inspección', (() => { const s = datos.solicitudAbierta(); if (s) return s.estado === 'programada' ? `Visita el ${s.fecha_visita.split('-').reverse().join('/')}` : 'Solicitud enviada: pendiente de llamada'; const n = datos.porCalificar(p.id).filter(x => x.listo).length; return n ? `${n} ejemplar(es) con un año listos para calificar` : 'Calificación por un inspector del Club: la llave del Registro Definitivo'; })()],
       ['#/programa', '🧭', 'Guía del criador', 'Qué hacer y cuándo: Libro, anillas, calificación, familias, puesta'],
       ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],

@@ -194,9 +194,10 @@ export default function (main) {
   main.addEventListener('click', async e => {
     const id = e.target.closest('[data-borrar]')?.dataset.borrar;
     if (!id) return;
-    if (await confirmar('Borrar registro', '¿Eliminar este huevo del control de puesta?', 'Borrar', true)) {
-      try { await datos.borrarHuevo(id); } catch (err) { aviso(err.message, 'error'); }
-    }
+    try {
+      const borrado = await datos.borrarHuevo(id);
+      aviso(`Huevo de ${String(borrado.peso_g).replace('.', ',')} g borrado.`, 'ok', { accion: { texto: 'Deshacer', fn: async () => { await datos.restaurarHuevo(borrado); aviso('Huevo recuperado.', 'ok'); } } });
+    } catch (err) { aviso(err.message, 'error'); }
   });
 
   main.addEventListener('click', e => {

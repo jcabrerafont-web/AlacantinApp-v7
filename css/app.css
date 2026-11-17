@@ -286,3 +286,28 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   box-shadow: var(--sombra); max-width: min(94vw, 520px); }
 @media (min-width: 900px) { .banner-actualizar { bottom: 16px; } }
 body.escribiendo .banner-actualizar { display: none; }
+/* Mensaje con acción («Deshacer»): se puede pulsar */
+.toast.con-accion { display: flex; align-items: center; gap: .75rem; pointer-events: auto; }
+.toast-accion { background: transparent; border: 2px solid currentColor; color: inherit; border-radius: 10px; min-height: 44px; padding: 0 .9rem; font: inherit; font-weight: 800; cursor: pointer; flex-shrink: 0; }
+/* Buscador por anilla */
+.boton-icono { min-width: 44px; padding: 0 .5rem; font-size: 1.1rem; }
+.buscador { width: min(94vw, 480px); }
+.buscador input { font-size: 1.4rem !important; text-align: center; margin-top: .4rem; }
+.buscador .lista { max-height: 50vh; overflow-y: auto; margin-top: .5rem; }
+.enlace { background: none; border: 0; padding: 0; color: var(--azul-2); text-decoration: underline; font: inherit; cursor: pointer; min-height: 32px; }
+/* Cabecera estrecha: el estado de la red se reduce a un punto de color */
+@media (max-width: 420px) {
+  #estado-red { font-size: 0; padding: 0; width: 14px; height: 14px; min-width: 14px; border-radius: 50%; }
+  #estado-red.chip-ok { background: var(--verde); } #estado-red.chip-aviso { background: var(--ambar); }
+}
+/* «Hoy» */
+.tarea { align-items: center; }
+.tarea-ico { font-size: 1.35rem; width: 2rem; text-align: center; flex-shrink: 0; }
+.tarea-hoy { border-left: 4px solid var(--azul-2); padding-left: .5rem; }
+.tarea-pronto { border-left: 4px solid var(--ambar); padding-left: .5rem; }
+.tarjeta-hoy { border-color: var(--azul-2); }
+.tarjeta-hoy .lista { margin-top: .5rem; }
+.lista-pasos { padding-left: 1.3rem; margin: .5rem 0; }
+.lista-pasos li { padding: .35rem 0; }
+.lista-pasos li a { display: inline-block; min-height: 32px; }
+.lista-pasos li.hecho a { color: var(--texto-2); text-decoration: line-through; }

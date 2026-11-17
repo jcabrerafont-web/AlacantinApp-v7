@@ -7,6 +7,11 @@
 
 -- ----------------------------------------------------------------------------
 -- 1. Perfiles y roles
+-- Fecha de hoy en España. El servidor de Supabase funciona en UTC: entre la medianoche y la
+-- 1:00 (2:00 en verano) su «current_date» todavía es ayer y rechazaría un huevo de hoy.
+CREATE OR REPLACE FUNCTION public.hoy() RETURNS date
+LANGUAGE sql STABLE AS $$ SELECT (now() AT TIME ZONE 'Europe/Madrid')::date $$;
+
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.perfiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -82,7 +87,7 @@ CREATE TABLE IF NOT EXISTS public.animales (
   anilla           text NOT NULL,
   sexo             char(1) NOT NULL CHECK (sexo IN ('M', 'H')),
   variedad         text NOT NULL CHECK (variedad IN ('negra-moteada', 'pinta', 'blanca', 'arminada', 'milflores')),
-  fecha_nacimiento date NOT NULL CHECK (fecha_nacimiento <= current_date),
+  fecha_nacimiento date NOT NULL CHECK (fecha_nacimiento <= public.hoy()),
   seccion          text NOT NULL DEFAULT 'RN' CHECK (seccion IN ('RN', 'RF', 'RA', 'RD', 'RM')),
   padre_id         uuid REFERENCES public.animales(id) ON DELETE SET NULL,
   madre_id         uuid REFERENCES public.animales(id) ON DELETE SET NULL,
@@ -248,7 +253,7 @@ CREATE TABLE IF NOT EXISTS public.calificaciones (
   animal_id        uuid NOT NULL REFERENCES public.animales(id) ON DELETE CASCADE,
   inspector_id     uuid NOT NULL REFERENCES public.perfiles(id),
   inspector_nombre text NOT NULL,
-  fecha            date NOT NULL DEFAULT current_date,
+  fecha            date NOT NULL DEFAULT public.hoy(),
   puntos           jsonb NOT NULL,
   total            numeric(4,1) NOT NULL,
   clase            text NOT NULL CHECK (clase IN ('EX', 'MB', 'B', 'R', 'I', 'D')),
@@ -290,7 +295,7 @@ BEGIN
   NEW.peso_conforme := CASE a.sexo WHEN 'M' THEN NEW.peso_g BETWEEN 3000 AND 3500
                                    WHEN 'H' THEN NEW.peso_g BETWEEN 2200 AND 2600 END;
   IF NEW.resultado = 'Apto' AND a.seccion = 'RN'
-     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND a.fecha_nacimiento + interval '1 year' <= current_date
+     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND a.fecha_nacimiento + interval '1 year' <= public.hoy()
      AND coalesce(a.rega, '') <> ''
      -- filiación establecida: padre y madre inscritos en el Libro (Reg. UE 2016/1012, anexo II, por analogía)
      AND EXISTS (SELECT 1 FROM public.animales p WHERE p.id = a.padre_id AND p.seccion IN ('RF', 'RA', 'RD', 'RM'))
@@ -312,7 +317,7 @@ CREATE TABLE IF NOT EXISTS public.huevos (
   id          uuid PRIMARY KEY,
   animal_id   uuid NOT NULL REFERENCES public.animales(id) ON DELETE CASCADE,
   usuario_id  uuid NOT NULL REFERENCES public.perfiles(id),
-  fecha       date NOT NULL CHECK (fecha <= current_date),
+  fecha       date NOT NULL CHECK (fecha <= public.hoy()),
   peso_g      numeric(5,1) NOT NULL CHECK (peso_g BETWEEN 20 AND 120),
   cascara     text NOT NULL,
   -- Apto desde 55 g con cáscara blanco crema; sin límite superior (criterio del Club)

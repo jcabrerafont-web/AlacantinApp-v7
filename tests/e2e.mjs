@@ -394,7 +394,10 @@ await ir('#/censo'); await ir('#/alta');
 await page.fill('#a-num', '41'); await page.click('#form-alta label[data-sexo="H"]'); await page.selectOption('#a-variedad', 'blanca'); await page.fill('#a-fecha', '2025-05-01');
 await page.click('#form-alta button[type=submit]'); await page.waitForTimeout(700);
 await ir('#/censo');
-ok(!!(await page.$('#censo-insp')), `Mi censo invita a solicitar la inspección de los ejemplares con un año (${(await page.$eval('#censo-insp', e => e.textContent).catch(() => '—')).trim().slice(0, 70)})`);
+await page.waitForSelector('#censo-hoy .tarjeta-hoy', { timeout: 3000 }).catch(() => {});
+const hoyCenso = await page.$eval('#censo-hoy', e => e.textContent.replace(/\s+/g, ' ')).catch(() => '—');
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/censo-hoy.png` });
+ok(hoyCenso.includes('con un año sin calificar') && hoyCenso.includes('Hoy'), `Mi censo («Hoy»): invita a solicitar la inspección de los ejemplares con un año (${hoyCenso.slice(0, 90)})`);
 await ir('#/inspeccion');
 const idSol41 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E2518000041').id);
 ok(!!(await page.$(`#f-sol input[value="${idSol41}"]:checked`)), 'Solicitud: el ejemplar de un año sin calificar aparece marcado');
@@ -512,6 +515,47 @@ await page.click('#a-otro'); await page.waitForTimeout(900);
 const serie = await page.evaluate(() => ({ num: document.querySelector('#a-num').value, fecha: document.querySelector('#a-fecha').value, variedad: document.querySelector('#a-variedad').value, madre: document.querySelector('#a-madre').value, sexo: document.querySelector('#a-sexo').value, existe: !!document.querySelector('#form-alta') }));
 ok(serie.existe && serie.num === '61' && serie.fecha === '2025-04-02' && serie.variedad === 'blanca' && serie.madre && serie.sexo === '', `«Guardar y otro»: siguiente anilla (${serie.num}) con la misma madre, fecha y variedad; el sexo se elige de nuevo (${(await aviso()).slice(0, 80)})`);
 await page.evaluate(async () => { const d = await import('./js/datos.js'); const db = await import('./js/db.js'); const x = d.estado.todos.find(a => a.anilla === 'E2518000060'); if (x) await db.borrar('animales', x.id); await d.cargar(); });
+await cambiarRolLocal('inspector');
+await ir('#/censo');
+
+// 6k. «Hoy», primeros pasos, «Deshacer» y buscador por anilla
+await cambiarRolLocal('criador');
+const agenda = await page.evaluate(async () => {
+  const d = await import('./js/datos.js');
+  const ent = new Date(Date.now() - 7 * 864e5); const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const g = d.estado.todos.find(a => a.anilla === 'E2418000002');
+  const inc = await d.crearIncubacion({ entrada: iso(ent), filas: [{ madre_id: g.id, puestos: 4 }] });
+  const t = d.agendaHoy();
+  return { inc: inc.id, textos: t.map(x => `${x.nivel}:${x.texto}`) };
+});
+ok(agenda.textos.some(x => x.startsWith('hoy:Miraje')), `«Hoy»: la incubación de hace 7 días pide el miraje (${agenda.textos.slice(0, 3).join(' | ')})`);
+await ir('#/hoy'); await page.waitForTimeout(300);
+const pHoy = await page.evaluate(() => ({ t: document.querySelector('main').textContent.replace(/\s+/g, ' '), pasos: document.querySelectorAll('#primeros-pasos li').length, hechos: document.querySelectorAll('#primeros-pasos li.hecho').length }));
+ok(pHoy.t.includes('Miraje') && pHoy.t.includes('Este mes') && pHoy.t.includes('Próximos días'), 'Pantalla «Hoy»: tareas de hoy, próximos días y lo propio del mes');
+ok(pHoy.pasos === 6 && pHoy.hechos >= 3 && pHoy.hechos < 6, `Primeros pasos con su estado (${pHoy.hechos} de ${pHoy.pasos} hechos)`);
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/hoy.png`, fullPage: true });
+await page.click('#pasos-ocultar'); await page.waitForTimeout(300);
+ok(!(await page.$('#primeros-pasos')), 'Los primeros pasos se pueden ocultar');
+await page.evaluate(async (id) => { const d = await import('./js/datos.js'); const db = await import('./js/db.js'); await db.borrar('incubaciones', id); await d.cargar(); }, agenda.inc);
+// Deshacer: borrar un huevo sin preguntar y recuperarlo con un toque
+await ir('#/puesta'); await page.waitForTimeout(300);
+const nHuevos = await page.evaluate(async () => (await import('./js/datos.js')).estado.huevos.length);
+await page.click('[data-borrar] >> nth=0'); await page.waitForTimeout(400);
+const trasBorrar = await page.evaluate(async () => ({ n: (await import('./js/datos.js')).estado.huevos.length, dialogo: !!document.querySelector('dialog[open]'), boton: document.querySelector('#aviso .toast-accion')?.textContent }));
+ok(trasBorrar.n === nHuevos - 1 && !trasBorrar.dialogo && trasBorrar.boton === 'Deshacer', 'Borrar un huevo: sin «¿Seguro?», con «Deshacer» en el mensaje');
+await page.click('#aviso .toast-accion'); await page.waitForTimeout(400);
+ok(await page.evaluate(async () => (await import('./js/datos.js')).estado.huevos.length) === nHuevos, '«Deshacer» recupera el huevo');
+// Buscador por anilla en la cabecera
+await page.click('#boton-buscar');
+await page.fill('#buscar-q', '41');
+const resBusca = await page.$$eval('#buscar-res .item-titulo', xs => xs.map(x => x.textContent));
+ok(resBusca.length === 1 && resBusca[0].startsWith('E2518000041'), `Buscar «41» encuentra solo la anilla E2518000041, sin confundir el año ni el diámetro (${resBusca.join(', ')})`);
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/buscar.png` });
+await page.press('#buscar-q', 'Enter'); await page.waitForTimeout(400);
+ok(page.url().includes('#/animal/') && !(await page.$('#buscador')), 'Intro abre la ficha y cierra el buscador');
+await page.keyboard.press('/'); await page.waitForTimeout(200);
+ok(!!(await page.$('#buscador[open]')), 'En el ordenador, la tecla «/» abre el buscador');
+await page.keyboard.press('Escape');
 await cambiarRolLocal('inspector');
 await ir('#/censo');
 

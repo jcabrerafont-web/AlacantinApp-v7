@@ -79,8 +79,12 @@ export default function (main) {
     $('#r-nuevo-lote', main)?.addEventListener('click', () => { formLote = !formLote; dibujar(); });
     $('#r-nueva-inc', main)?.addEventListener('click', () => { formInc = !formInc; dibujar(); });
     main.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', async () => {
-      if (!(await confirmar('Separar el lote', 'Se anota hoy como fin del lote: el gallo y las gallinas dejan de estar juntos.', 'Separar'))) return;
-      try { await datos.cerrarLote(b.dataset.cerrar); aviso('Lote cerrado.', 'ok'); } catch (e) { aviso(e.message, 'error'); }
+      const id = b.dataset.cerrar;
+      try {
+        await datos.cerrarLote(id);
+        dibujar();
+        aviso('Lote separado: termina hoy.', 'ok', { accion: { texto: 'Deshacer', fn: async () => { await datos.reabrirLote(id); dibujar(); aviso('Lote activo de nuevo.', 'ok'); } } });
+      } catch (e) { aviso(e.message, 'error'); }
     }));
 
     // Formulario de lote: gallinas con la consanguinidad esperada con el gallo elegido

@@ -41,6 +41,8 @@ const CLUB = [
 ];
 
 export default function (main) {
+  // Para «Primeros pasos»: la guía ya se ha abierto
+  if (datos.estado.perfil) import('../db.js').then(db => db.metaSet(`guia:${datos.estado.perfil.id}`, true));
   const R = REGLAS, E = ESTANDAR, CP = REGLAS.controlPuesta, RP = REGLAS.reproduccion;
   const usuario = !datos.esVisitante();
   const enlace = (href, texto) => (usuario ? h`<a href="${href}">${texto}</a>` : h`<span>${texto}</span>`);
