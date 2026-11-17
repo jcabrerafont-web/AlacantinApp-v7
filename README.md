@@ -20,6 +20,16 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - Los roles **Inspector** y **Administrador** solo los asigna un administrador; el servidor rechaza cualquier otro intento.
 - Cada alta **hereda** del aviario del criador el REGA, el municipio, la provincia y la ubicación GPS.
 
+## Uso en campo (móvil, con una mano)
+
+- **Puesta:** cada gallina es un botón grande (últimas cifras de la anilla); un toque la elige y pone el cursor en el peso. Las de la campaña en curso sin huevo hoy salen primero, con borde discontinuo; las ya anotadas, con ✓. Fecha, cáscara y chip quedan plegados («Hoy · cáscara blanco crema · cambiar») salvo que haya gallinas con chip.
+- **Alta:** sexo con dos botones grandes; madre antes que padre (el padre se propone por el lote); «Registrar y otro» para anillar una pollada seguida (misma madre, padre, fecha y variedad; anilla siguiente).
+- **Botón principal fijo** encima de la barra inferior (`.acciones-fijas`), siempre al alcance del pulgar.
+- **Teclado abierto:** se oculta la barra inferior; al tocar un botón se espera a que termine el toque para que no se mueva.
+- **Mensajes** arriba en el móvil (abajo tapaban el campo y el pulgar).
+- **Objetivos táctiles** de 44 px como mínimo en pantallas táctiles; campos a 16 px (sin zoom automático en iPhone); teclado numérico o decimal en anilla, peso, teléfono, claros y nacidos.
+- **Ordenador:** barra lateral a partir de 900 px y contenido centrado.
+
 ## Criterios normativos aplicados
 
 - **Variedades:**
@@ -163,7 +173,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 27 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 105 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 112 comprobaciones en Chrome (Playwright)
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 

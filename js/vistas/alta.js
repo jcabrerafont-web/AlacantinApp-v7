@@ -37,9 +37,12 @@ export default function (main, params) {
               ${[18, 20, 22].map(d => h`<option value="${d}">${d} mm</option>`)}</select>
           </div>
           <p class="ayuda" id="a-anilla-ayuda">Anilla oficial EE de FESACOCUR. El año lo pone la fecha de nacimiento.</p></div>
-        <div class="campo"><label for="a-sexo">Sexo *</label>
-          <select id="a-sexo" required><option value="">Elegir…</option>
-            <option value="M">Gallo (♂)</option><option value="H">Gallina (♀)</option></select></div>
+        <div class="campo"><label id="a-sexo-et">Sexo *</label>
+          <input type="hidden" id="a-sexo" value="${a.sexo || ''}">
+          <div class="opciones" role="radiogroup" aria-labelledby="a-sexo-et">
+            <label data-sexo="M"><input type="radio" name="a-sexo-r" value="M" ${a.sexo === 'M' ? h`checked` : ''}><span>♂ Gallo</span></label>
+            <label data-sexo="H"><input type="radio" name="a-sexo-r" value="H" ${a.sexo === 'H' ? h`checked` : ''}><span>♀ Gallina</span></label>
+          </div></div>
         <div class="campo"><label for="a-variedad">Variedad *</label>
           <select id="a-variedad" required><option value="">Elegir…</option>
             <optgroup label="Oficiales">${ESTANDAR.variedades.filter(v => v.oficial).map(v => h`<option value="${v.id}">${v.nombre}</option>`)}</optgroup>
@@ -47,10 +50,11 @@ export default function (main, params) {
           </select></div>
         <div class="campo"><label for="a-fecha">Fecha de nacimiento *</label>
           <input id="a-fecha" type="date" required max="${hoyISO()}" value="${a.fecha_nacimiento || ''}"></div>
-        <div class="campo"><label for="a-padre">Padre</label>
-          <select id="a-padre"><option value="">Desconocido / fundador</option>${machos.map(x => h`<option value="${x.id}">${etiqueta(x)}</option>`)}</select></div>
         <div class="campo"><label for="a-madre">Madre</label>
           <select id="a-madre"><option value="">Desconocida / fundadora</option>${hembras.map(x => h`<option value="${x.id}">${etiqueta(x)}</option>`)}</select></div>
+        <div class="campo"><label for="a-padre">Padre</label>
+          <select id="a-padre"><option value="">Desconocido / fundador</option>${machos.map(x => h`<option value="${x.id}">${etiqueta(x)}</option>`)}</select>
+          <p class="ayuda">Si la madre está en un lote de reproducción, se propone su gallo.</p></div>
       </div>
       <div id="a-fx" class="aviso-caja info" hidden></div>
 
@@ -85,9 +89,10 @@ export default function (main, params) {
         <div class="campo"><label for="a-notas">Notas</label><textarea id="a-notas">${a.notas || ''}</textarea></div>
       </details>
 
-      <div class="fila" style="margin-top:1rem">
-        <button class="btn btn-primario" type="submit">${previo ? 'Guardar cambios' : 'Registrar ejemplar'}</button>
-        <a class="btn" href="${previo ? `#/animal/${previo.id}` : '#/censo'}">Cancelar</a>
+      <p class="peq" style="margin-top:1rem"><a href="${previo ? `#/animal/${previo.id}` : '#/censo'}">Cancelar y volver</a>${previo ? '' : ' · «Registrar y otro» guarda y prepara el siguiente de la pollada (misma madre, padre, fecha y variedad; anilla siguiente).'}</p>
+      <div class="acciones-fijas acciones-una-fila">
+        <button class="btn btn-primario" type="submit">${previo ? 'Guardar cambios' : 'Registrar'}</button>
+        ${previo ? '' : h`<button class="btn" type="submit" id="a-otro">Registrar y otro</button>`}
       </div>
     </form>`);
 
@@ -102,12 +107,20 @@ export default function (main, params) {
   let propuestoPara = null; // propone el padre una sola vez por madre elegida
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
   const desdeInc = !previo && q.get('inc') ? { inc: q.get('inc'), madre: q.get('madre') } : null;
-  if (desdeInc) {
+  // Datos que vienen de la incubación o de «Guardar y otro» (alta en serie de una pollada)
+  if (!previo) {
     if (q.get('madre') && datos.animal(q.get('madre'))) $('#a-madre', f).value = q.get('madre');
     if (q.get('padre') && datos.animal(q.get('padre'))) $('#a-padre', f).value = q.get('padre');
     if (/^\d{4}-\d{2}-\d{2}$/.test(q.get('fecha') || '')) $('#a-fecha', f).value = q.get('fecha');
+    if (ESTANDAR.variedades.some(v => v.id === q.get('variedad'))) $('#a-variedad', f).value = q.get('variedad');
+    if (/^\d{1,6}$/.test(q.get('num') || '')) $('#a-num', f).value = q.get('num');
   }
-  $('#a-familia', f).value = a.familia || '';
+  $('#a-familia', f).value = a.familia || (!previo && ESTANDAR.familias.includes(q.get('familia')) ? q.get('familia') : '');
+  // Sexo con dos botones grandes (un toque) en vez de un desplegable
+  f.querySelectorAll('input[name=a-sexo-r]').forEach(r => r.addEventListener('change', () => {
+    $('#a-sexo', f).value = r.value;
+    $('#a-sexo', f).dispatchEvent(new Event('change', { bubbles: true }));
+  }));
 
   const pintarFoto = (k) => {
     const cont = $(`#foto-${k}`, f);
@@ -185,6 +198,7 @@ export default function (main, params) {
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const boton = f.querySelector('[type=submit]');
+    const otro = ev.submitter?.id === 'a-otro';
     boton.disabled = true;
     try {
       const guardado = await datos.guardarAnimal({
@@ -207,7 +221,17 @@ export default function (main, params) {
       f.dataset.sucio = '';
       if (desdeInc) await datos.vincularPollito(desdeInc.inc, guardado.madre_id || desdeInc.madre, guardado.id).catch(() => {});
       aviso(`${previo ? 'Guardado' : 'Registrado'} ${guardado.anilla}${navigator.onLine ? '' : ' (se sincronizará al tener cobertura)'}`, 'ok');
-      location.hash = `#/animal/${guardado.id}`;
+      if (otro) {
+        // Siguiente de la pollada: misma madre, padre, fecha, variedad y familia; anilla siguiente
+        const sig = new URLSearchParams();
+        if (desdeInc) sig.set('inc', desdeInc.inc);
+        for (const [k, v] of [['madre', guardado.madre_id], ['padre', guardado.padre_id], ['fecha', guardado.fecha_nacimiento], ['variedad', guardado.variedad], ['familia', guardado.familia]]) if (v) sig.set(k, v);
+        const n = Number(parsearAnilla(guardado.anilla)?.numero);
+        if (Number.isFinite(n) && n < 999999) sig.set('num', String(n + 1));
+        sig.set('t', Date.now().toString(36)); // fuerza un formulario nuevo
+        location.hash = `#/alta?${sig}`;
+        setTimeout(() => document.getElementById('a-num')?.focus(), 400);
+      } else location.hash = `#/animal/${guardado.id}`;
     } catch (e) {
       aviso(e.message, 'error');
     } finally { boton.disabled = false; }

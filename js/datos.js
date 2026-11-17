@@ -110,9 +110,9 @@ export function validarAnimal(a, { esNuevo }) {
   const madre = a.madre_id ? estado.idx.get(a.madre_id) : null;
   if (a.padre_id && (!padre || padre.sexo !== 'M')) errores.push('El padre debe ser un gallo registrado.');
   if (a.madre_id && (!madre || madre.sexo !== 'H')) errores.push('La madre debe ser una gallina registrada.');
-  for (const [p, rolP] of [[padre, 'padre'], [madre, 'madre']]) {
+  for (const [p, rolP] of [[padre, 'del padre'], [madre, 'de la madre']]) {
     if (p?.fecha_nacimiento && a.fecha_nacimiento && p.fecha_nacimiento >= a.fecha_nacimiento) {
-      errores.push(`La fecha de nacimiento del ${rolP} debe ser anterior a la del ejemplar.`);
+      errores.push(`La fecha de nacimiento ${rolP} debe ser anterior a la del ejemplar.`);
     }
   }
   if (a.id && creaCiclo(a.id, a.padre_id, a.madre_id, estado.idx)) errores.push('La genealogía crearía un ciclo (un ejemplar sería ancestro de sí mismo).');

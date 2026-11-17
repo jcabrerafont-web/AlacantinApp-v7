@@ -192,6 +192,16 @@ async function arrancar() {
   });
   $('#estado-cola').addEventListener('click', () => { location.hash = '#/sincronizacion'; });
 
+  // Teclado abierto (campo de texto o número con foco): en el móvil se oculta la barra inferior
+  const conTeclado = (e) => e && (e.tagName === 'TEXTAREA' || (e.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'button', 'submit', 'date', 'range', 'color'].includes(e.type)));
+  document.addEventListener('focusin', e => { if (conTeclado(e.target)) document.body.classList.add('escribiendo'); });
+  // Si el foco pasa a un botón (p. ej. «Guardar»), se espera a que termine el toque: si la barra
+  // reapareciera entre pulsar y soltar, el botón se movería y el toque se perdería.
+  document.addEventListener('focusout', e => {
+    const aBoton = e.relatedTarget?.closest?.('button, a, .acciones-fijas');
+    setTimeout(() => document.body.classList.toggle('escribiendo', conTeclado(document.activeElement)), aBoton ? 450 : 0);
+  });
+
   window.addEventListener('hashchange', navegar);
   pintarBarra();
   pintarCabecera();

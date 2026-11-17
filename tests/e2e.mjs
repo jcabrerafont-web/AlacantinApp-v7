@@ -62,7 +62,7 @@ ok(!credEnClaro, 'La contraseña no se guarda en claro');
 const alta = async ({ num, diam, sexo, variedad, fecha, padre, madre, nombre, peso }) => {
   await ir('#/censo'); await ir('#/alta'); // formulario limpio aunque el alta anterior fallara
   await page.fill('#a-num', num);
-  await page.selectOption('#a-sexo', sexo);
+  await page.click(`#form-alta label[data-sexo="${sexo}"]`);
   if (diam) await page.selectOption('#a-diam', diam);
   await page.selectOption('#a-variedad', variedad);
   await page.fill('#a-fecha', fecha);
@@ -371,7 +371,7 @@ await page.waitForTimeout(500);
 const pre = await page.evaluate(() => ({ madre: document.querySelector('#a-madre').value, padre: document.querySelector('#a-padre').selectedOptions[0]?.textContent, fecha: document.querySelector('#a-fecha').value }));
 ok(pre.madre === idGallinaLote && pre.padre.includes('E2420000001') && pre.fecha === diasAtras(4), `Alta del pollito con madre, padre y fecha de nacimiento ya puestos (${pre.padre} · ${pre.fecha})`);
 await page.fill('#a-num', '40');
-await page.selectOption('#a-sexo', 'H');
+await page.click('#form-alta label[data-sexo="H"]');
 await page.selectOption('#a-variedad', 'blanca');
 await page.click('#form-alta button[type=submit]');
 await page.waitForTimeout(800);
@@ -391,7 +391,7 @@ await ir('#/censo');
 // 6g. Solicitud de inspección: el criador la pide, el inspector llama y programa, el criador la ve
 await cambiarRolLocal('criador');
 await ir('#/censo'); await ir('#/alta');
-await page.fill('#a-num', '41'); await page.selectOption('#a-sexo', 'H'); await page.selectOption('#a-variedad', 'blanca'); await page.fill('#a-fecha', '2025-05-01');
+await page.fill('#a-num', '41'); await page.click('#form-alta label[data-sexo="H"]'); await page.selectOption('#a-variedad', 'blanca'); await page.fill('#a-fecha', '2025-05-01');
 await page.click('#form-alta button[type=submit]'); await page.waitForTimeout(700);
 await ir('#/censo');
 ok(!!(await page.$('#censo-insp')), `Mi censo invita a solicitar la inspección de los ejemplares con un año (${(await page.$eval('#censo-insp', e => e.textContent).catch(() => '—')).trim().slice(0, 70)})`);
@@ -480,6 +480,33 @@ ok(await page.evaluate(() => window.__impreso && document.querySelector('#impres
 await cambiarRolLocal('criador');
 await ir('#/acta');
 ok(await page.$eval('#acta-anual', e => e.textContent.includes('Resumen anual') && e.textContent.includes('Titular') && !e.textContent.includes('Criadores y distribución') && e.querySelectorAll('.doc-firmas div').length === 2), 'Criador: resumen anual de su aviario, con su firma y la de la Dirección Técnica');
+await cambiarRolLocal('inspector');
+await ir('#/censo');
+
+// 6j. Uso en campo con una mano: puesta con un toque por gallina, botón fijo, alta en serie
+await cambiarRolLocal('criador');
+await ir('#/puesta');
+const botonesG = await page.$$eval('#pu-rejilla .boton-gallina', bs => bs.map(b => ({ txt: b.textContent.trim(), alto: b.getBoundingClientRect().height })));
+ok(botonesG.length >= 3 && botonesG.every(b => b.alto >= 60), `Puesta: rejilla de gallinas con botones grandes (${botonesG.length}, ${Math.round(botonesG[0]?.alto)} px)`);
+await page.click('#pu-rejilla .boton-gallina >> nth=0');
+ok(await page.evaluate(() => document.activeElement?.id === 'pu-peso' && document.querySelector('#pu-gallina').value !== ''), 'Puesta: tocar una gallina la elige y pone el cursor en el peso');
+ok(await page.evaluate(() => document.body.classList.contains('escribiendo') && getComputedStyle(document.querySelector('#barra')).display === 'none'), 'Con el teclado abierto se oculta la barra inferior (más espacio)');
+await page.fill('#pu-peso', '63'); await page.press('#pu-peso', 'Enter');
+const fijo = await page.evaluate(() => { const b = document.querySelector('#pu-guardar').getBoundingClientRect(); return { visible: b.bottom <= window.innerHeight && b.top >= 0, alto: b.height, texto: document.querySelector('#pu-guardar').textContent }; });
+ok(fijo.visible && fijo.alto >= 48 && fijo.texto.includes('1 huevo'), `Puesta: «Guardar» siempre a la vista y grande (${Math.round(fijo.alto)} px)`);
+await page.click('#pu-guardar'); await page.waitForTimeout(500);
+ok(await page.$$eval('#pu-rejilla .boton-gallina.hecha', bs => bs.length >= 1), 'Puesta: la gallina queda marcada con ✓ al guardar');
+const toastArriba = await page.evaluate(() => { const r = document.querySelector('#aviso').getBoundingClientRect(); return r.top < window.innerHeight / 2; });
+ok(toastArriba, 'En el móvil los mensajes salen arriba, sin tapar el campo ni el pulgar');
+await page.evaluate(() => document.activeElement?.blur());
+// Alta en serie: «Guardar y otro» mantiene madre, padre, fecha y variedad y sube el número de anilla
+await ir('#/censo'); await ir('#/alta');
+await page.fill('#a-num', '60'); await page.click('#form-alta label[data-sexo="H"]'); await page.selectOption('#a-variedad', 'blanca'); await page.fill('#a-fecha', '2025-04-02');
+await page.evaluate(async () => { const d = await import('./js/datos.js'); const m = d.estado.todos.find(a => a.anilla === 'E2418000002'); const s = document.querySelector('#a-madre'); s.value = m.id; s.dispatchEvent(new Event('change', { bubbles: true })); });
+await page.click('#a-otro'); await page.waitForTimeout(900);
+const serie = await page.evaluate(() => ({ num: document.querySelector('#a-num').value, fecha: document.querySelector('#a-fecha').value, variedad: document.querySelector('#a-variedad').value, madre: document.querySelector('#a-madre').value, sexo: document.querySelector('#a-sexo').value, existe: !!document.querySelector('#form-alta') }));
+ok(serie.existe && serie.num === '61' && serie.fecha === '2025-04-02' && serie.variedad === 'blanca' && serie.madre && serie.sexo === '', `«Guardar y otro»: siguiente anilla (${serie.num}) con la misma madre, fecha y variedad; el sexo se elige de nuevo (${(await aviso()).slice(0, 80)})`);
+await page.evaluate(async () => { const d = await import('./js/datos.js'); const db = await import('./js/db.js'); const x = d.estado.todos.find(a => a.anilla === 'E2518000060'); if (x) await db.borrar('animales', x.id); await d.cargar(); });
 await cambiarRolLocal('inspector');
 await ir('#/censo');
 
