@@ -1,13 +1,14 @@
 // ============================================================================
 // Configuración de despliegue.
-// Rellenar con los datos del proyecto Supabase (Project Settings > API).
-// La "anon key" es pública por diseño: la seguridad la garantizan las políticas
-// RLS de supabase/schema.sql. NUNCA poner aquí la service_role key.
+// Proyecto Supabase del Club (región Central EU, Frankfurt), creado el 17/11/2026.
+// supabaseAnonKey lleva la "publishable key" (sb_publishable_…), que sustituye a
+// la antigua anon key: es pública por diseño y la seguridad la garantizan las
+// políticas RLS de supabase/schema.sql. NUNCA poner aquí la secret/service_role key.
 // Si se dejan vacías, la app funciona en "modo dispositivo" (solo local).
 // ============================================================================
 export const CONFIG = Object.freeze({
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://mliunedrpbigybsovdyu.supabase.co',
+  supabaseAnonKey: 'sb_publishable_VwsP4abnoL_WeWHo69JpfQ_FBN-VZ1s',
   bucketFotos: 'fotos-alacantina',
   // Responsable del tratamiento de datos personales (política de privacidad, #/privacidad).
   // El NIF y el domicilio postal del Club conviene completarlos: identifican al responsable.
@@ -22,7 +23,7 @@ export const CONFIG = Object.freeze({
   // WhatsApp vacío: el criador elige a quién enviarlo.
   soporteEmail: 'clubalacantina@gmail.com',
   soporteWhatsApp: '',   // con prefijo, solo cifras: p. ej. 34600000000
-  version: '7.14.0'
+  version: '7.14.1'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

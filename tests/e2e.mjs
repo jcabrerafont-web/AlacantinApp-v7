@@ -578,6 +578,10 @@ await page.evaluate(async () => { const d = await import('./js/diagnostico.js');
 await ir('#/problema'); await page.waitForTimeout(300);
 const inf = await page.$eval('.pre-informe', e => e.textContent);
 ok(inf.includes('Fallo de prueba con [correo]') && !inf.includes('criadora@ejemplo.es') && !inf.includes('Criadora') && inf.includes('AlacantinApp 7.'), 'Informe de problemas: versión, conexión y últimos errores, sin nombre ni correo');
+{ // La CSP de vercel.json (script-src 'self') bloquea los scripts en línea
+  const html = await (await fetch('http://localhost:8820/index.html')).text();
+  ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), 'index.html sin scripts en línea (CSP de Vercel)');
+}
 ok(!!(await page.$('#pr-wa')) && !!(await page.$('#pr-mail')) && !!(await page.$('#pr-copiar')), 'Informe de problemas: enviar por WhatsApp, por correo o copiar');
 await page.evaluate(async () => (await import('./js/diagnostico.js')).borrarErrores());
 await cambiarRolLocal('inspector');

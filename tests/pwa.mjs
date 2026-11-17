@@ -2,6 +2,7 @@
 // Uso: node tests/pwa.mjs   (sirve una copia de la app en un puerto propio)
 //      (opcional) CHROME=/ruta/a/chrome  PLAYWRIGHT_MODULE=/ruta/a/playwright
 import http from 'node:http';
+import { configDispositivo } from './servidor.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,8 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const raiz = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'alacantinapp-pwa-'));
 for (const x of ['index.html', 'manifest.json', 'sw.js', 'css', 'js', 'icons', 'docs', 'fonts']) fs.cpSync(path.join(raiz, x), path.join(tmp, x), { recursive: true });
+// Modo dispositivo: sin los datos reales de Supabase.
+fs.writeFileSync(path.join(tmp, 'js/config.js'), configDispositivo(fs.readFileSync(path.join(tmp, 'js/config.js'), 'utf8')));
 // Servidor propio con retraso regulable: simula la cobertura mala para TODAS las peticiones,
 // también las que hace el Service Worker (las rutas de Playwright no las ven).
 const PUERTO = 8831;

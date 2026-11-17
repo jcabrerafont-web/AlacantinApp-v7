@@ -23,7 +23,7 @@ jobs:
         run: npm run test:unidad
       - name: Servir la app
         run: |
-          python3 -m http.server 8820 &
+          node tests/servidor.mjs 8820 &
           sleep 1
       - name: Pruebas en el navegador (flujo completo)
         run: npm run test:e2e
