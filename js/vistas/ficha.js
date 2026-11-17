@@ -94,6 +94,7 @@ export default function (main, { id }) {
       ${rd ? h`<div class="tarjeta"><h2>Camino al Registro Definitivo</h2>
         <ul class="lista-simple">${rd.lista.map(x => h`<li>${x.ok ? '✓' : '○'} ${x.texto}</li>`)}</ul>
         <p class="muted peq">${rd.cumple ? 'Cumple todo: pasará al RD con su calificación.' : 'Cuando se cumpla todo, una calificación Apto lo pasa al RD. '}<a href="#/programa?s=libro">¿Por qué?</a></p>
+        ${!rd.cumple && !auditor && completo.usuario_id === datos.estado.perfil?.id && datos.porCalificar().some(x => x.listo && x.a.id === a.id) ? h`<p class="peq"><a class="btn btn-pequeno" href="#/inspeccion">🔎 Solicitar inspección</a></p>` : ''}
         ${auditor ? h`<div class="fila"><button class="btn" data-base="RF">Inscribir en RF (fundador)</button><button class="btn" data-base="RA">Inscribir en RA (auxiliar)</button></div>` : ''}
       </div>` : ''}
 

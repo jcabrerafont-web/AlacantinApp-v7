@@ -4,7 +4,7 @@ import * as respaldo from '../respaldo.js';
 import { supabaseConfigurado } from '../config.js';
 import { h, pintar, $, aviso, confirmar, descargar, fecha, hoyISO } from '../ui.js';
 
-const NOMBRES = { animales: 'ejemplares', calificaciones: 'calificaciones', huevos: 'huevos', campanas: 'campañas de puesta', lotes: 'lotes de reproducción', incubaciones: 'incubaciones', perfiles: 'perfiles' };
+const NOMBRES = { animales: 'ejemplares', calificaciones: 'calificaciones', huevos: 'huevos', campanas: 'campañas de puesta', lotes: 'lotes de reproducción', incubaciones: 'incubaciones', solicitudes: 'solicitudes de inspección', perfiles: 'perfiles' };
 
 export default function (main) {
   const p = datos.estado.perfil;

@@ -77,6 +77,7 @@ export default function (main) {
       <div class="aviso-caja alerta peq"><strong>Defectos que descalifican</strong>, sume lo que sume: ${E.defectosGraves.map(d => d.texto.toLowerCase()).join('; ')}.</div>
       <p>El inspector también <strong>pesa al animal</strong>. El Estándar fija gallo ${E.peso.M.min / 1000}–${E.peso.M.max / 1000} kg y gallina ${E.peso.H.min / 1000}–${E.peso.H.max / 1000} kg; el peso queda en el acta, pero no suma puntos.</p>
       <p class="peq">Para prepararte, repasa la ${enlace('#/guia', 'Guía de campo')} y el ${enlace('#/estandar', 'Estándar')}. Los animales jóvenes pueden calificarse, pero no pasan al RD hasta cumplir un año: la ficha te dirá desde qué fecha.</p>
+      <p><strong>Cómo pedirla:</strong> en ${enlace('#/inspeccion', 'Herramientas → Solicitar inspección')} eliges los ejemplares con un año cumplido, dejas tu teléfono y el mejor momento. El inspector te llama, programa la visita y la verás en la app. Ten los animales en jaulas o en un corral pequeño y con la anilla legible.</p>
       <p class="peq muted">El baremo es una propuesta del Club pendiente de ratificar por la Dirección Técnica.</p>`)}
 
     ${seccion('familias', '4. Familias y consanguinidad', h`

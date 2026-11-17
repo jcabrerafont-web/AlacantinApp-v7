@@ -388,6 +388,52 @@ ok(sugerido.includes('E2420000001'), `Alta normal: al elegir la madre, propone e
 if (process.env.CAPTURAS) { await ir('#/reproduccion'); await page.screenshot({ path: `${process.env.CAPTURAS}/reproduccion.png`, fullPage: true }); }
 await ir('#/censo');
 
+// 6g. Solicitud de inspección: el criador la pide, el inspector llama y programa, el criador la ve
+await cambiarRolLocal('criador');
+await ir('#/censo'); await ir('#/alta');
+await page.fill('#a-num', '41'); await page.selectOption('#a-sexo', 'H'); await page.selectOption('#a-variedad', 'blanca'); await page.fill('#a-fecha', '2025-05-01');
+await page.click('#form-alta button[type=submit]'); await page.waitForTimeout(700);
+await ir('#/censo');
+ok(!!(await page.$('#censo-insp')), `Mi censo invita a solicitar la inspección de los ejemplares con un año (${(await page.$eval('#censo-insp', e => e.textContent).catch(() => '—')).trim().slice(0, 70)})`);
+await ir('#/inspeccion');
+const idSol41 = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E2518000041').id);
+ok(!!(await page.$(`#f-sol input[value="${idSol41}"]:checked`)), 'Solicitud: el ejemplar de un año sin calificar aparece marcado');
+ok(await page.$eval('main', m => m.textContent.includes('Próximos') && m.textContent.includes('E2618000040')), 'Solicitud: el pollito sale en «Próximos» con la fecha en que cumple el año');
+await page.$$eval('#f-sol input[name=sol-a]', is => is.forEach(i => { i.checked = false; }));
+await page.check(`#f-sol input[value="${idSol41}"]`);
+await page.fill('#sol-tel', '');
+await page.click('#f-sol button[type=submit]'); await page.waitForTimeout(300);
+ok((await aviso()).includes('teléfono'), 'Solicitud: el teléfono es obligatorio');
+await page.fill('#sol-tel', '612 345 678');
+await page.selectOption('#sol-horario', 'tardes');
+await page.click('#f-sol button[type=submit]'); await page.waitForTimeout(600);
+const trasSol = await page.evaluate(async () => { const d = await import('./js/datos.js'); let otra; try { await d.crearSolicitud({ animales: [], telefono: '600000000' }); otra = 'aceptada'; } catch (e) { otra = e.message; } return { tel: d.estado.perfil.telefono, texto: document.querySelector('#sol-abierta')?.textContent || '', otra }; });
+ok(trasSol.texto.includes('Pendiente') && trasSol.texto.includes('Tardes') && trasSol.tel === '612 345 678', `Solicitud enviada y el teléfono queda en Mi aviario (${trasSol.tel})`);
+ok(trasSol.otra.includes('Ya tienes una solicitud abierta'), 'Solo una solicitud abierta a la vez');
+await cambiarRolLocal('inspector');
+await ir('#/herramientas');
+ok(await page.$eval('main a[href="#/inspecciones"]', a => a.textContent.includes('1 abierta')), 'Herramientas del inspector: 1 solicitud abierta');
+await ir('#/inspecciones');
+const panel = await page.evaluate(() => ({ tel: document.querySelector('form[data-sol] a[href^="tel:"]')?.getAttribute('href'), wa: document.querySelector('form[data-sol] a[href^="https://wa.me/"]')?.getAttribute('href') || '', calificar: !!document.querySelector('form[data-sol] a[href^="#/calificar/"]'), realizadaOff: document.querySelector('[data-accion="realizada"]')?.disabled }));
+ok(panel.tel === 'tel:+34612345678' && panel.wa.startsWith('https://wa.me/34612345678?text='), `Panel: llamar y WhatsApp con prefijo 34 (${panel.tel})`);
+ok(panel.calificar && panel.realizadaOff, 'Panel: enlace para calificar cada ejemplar; «realizada» bloqueada hasta calificar alguno');
+await page.click('[data-accion="anulada"]'); await page.waitForTimeout(300);
+ok((await aviso()).includes('por qué'), 'Anular exige explicar el motivo al criador');
+const manana = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+await page.fill('form[data-sol] [name=fecha]', manana);
+await page.fill('form[data-sol] [name=respuesta]', 'Iré a las 10 h');
+await page.click('[data-accion="programada"]'); await page.waitForTimeout(500);
+ok(await page.$eval('form[data-sol] .chip', c => c.textContent.includes('programada')), 'El inspector programa la visita');
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/inspecciones.png`, fullPage: true });
+await cambiarRolLocal('criador');
+await ir('#/inspeccion');
+ok(await page.$eval('#sol-abierta', e => e.textContent.includes('Visita el') && e.textContent.includes('Iré a las 10 h')), 'El criador ve la fecha de la visita y el mensaje del inspector');
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/inspeccion.png`, fullPage: true });
+await page.click('#sol-anular'); await page.click('dialog button[value="si"]'); await page.waitForTimeout(500);
+ok(!(await page.$('#sol-abierta')) && await page.$eval('main', m => m.textContent.includes('Anulada')), 'El criador puede anular su solicitud y queda en el historial');
+await cambiarRolLocal('inspector');
+await ir('#/censo');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');
@@ -421,7 +467,7 @@ await ctx.setOffline(true);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a', { timeout: 8000 });
 await ir('#/censo');
-ok((await page.$$('#censo-lista a.item')).length === 5, 'Sin cobertura: la app abre y el censo sigue disponible (5 ejemplares: 4 tras la restauración + el pollito)');
+ok((await page.$$('#censo-lista a.item')).length === 6, 'Sin cobertura: la app abre y el censo sigue disponible (6 ejemplares: 4 tras la restauración, el pollito y la gallina de la inspección)');
 ok((await page.innerText('#estado-red')).includes('Sin cobertura'), 'Indicador de cobertura');
 await ctx.setOffline(false);
 

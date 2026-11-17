@@ -451,6 +451,66 @@ CREATE TRIGGER trg_validar_incubacion BEFORE INSERT OR UPDATE ON public.incubaci
   FOR EACH ROW EXECUTE FUNCTION public.validar_incubacion();
 
 -- ----------------------------------------------------------------------------
+-- 4e. Solicitudes de inspección: el criador pide la visita; inspección la programa y la cierra
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.solicitudes (
+  id               uuid PRIMARY KEY,
+  usuario_id       uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  animales         jsonb NOT NULL CHECK (jsonb_typeof(animales) = 'array' AND jsonb_array_length(animales) > 0),
+  telefono         text NOT NULL CHECK (length(regexp_replace(telefono, '\D', '', 'g')) >= 9),
+  horario          text NOT NULL DEFAULT 'indiferente' CHECK (horario IN ('indiferente', 'mananas', 'tardes', 'findes')),
+  notas            text CHECK (length(notas) <= 500),
+  estado           text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'programada', 'realizada', 'anulada')),
+  fecha_visita     date,
+  inspector_id     uuid REFERENCES public.perfiles(id),
+  inspector_nombre text,
+  respuesta        text CHECK (length(respuesta) <= 500),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT visita_con_fecha CHECK (estado NOT IN ('programada', 'realizada') OR fecha_visita IS NOT NULL)
+);
+-- Una sola solicitud abierta por criador
+CREATE UNIQUE INDEX IF NOT EXISTS solicitud_abierta_unica ON public.solicitudes (usuario_id) WHERE estado IN ('pendiente', 'programada');
+
+CREATE OR REPLACE FUNCTION public.validar_solicitud() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- La app sincroniza con upsert: si ya existe, decide la rama UPDATE
+    IF EXISTS (SELECT 1 FROM public.solicitudes WHERE id = NEW.id) THEN RETURN NEW; END IF;
+    IF NOT public.es_auditor() THEN NEW.usuario_id := auth.uid(); END IF;
+    IF NEW.estado <> 'pendiente' OR NEW.inspector_id IS NOT NULL THEN
+      RAISE EXCEPTION 'Una solicitud nueva empieza como pendiente' USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(NEW.animales) x
+               LEFT JOIN public.animales a ON a.id = x::uuid
+               WHERE a.id IS NULL OR a.usuario_id <> NEW.usuario_id OR a.estado = 'baja' OR a.seccion NOT IN ('RN', 'RA')) THEN
+      RAISE EXCEPTION 'La solicitud solo puede incluir ejemplares activos del criador en RN o RA' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    -- Lo que pidió el criador no cambia; una solicitud cerrada no se reabre
+    NEW.usuario_id := OLD.usuario_id; NEW.animales := OLD.animales; NEW.created_at := OLD.created_at;
+    IF OLD.estado IN ('realizada', 'anulada') AND NEW.estado IS DISTINCT FROM OLD.estado THEN
+      RAISE EXCEPTION 'La solicitud ya está cerrada' USING ERRCODE = '23514';
+    END IF;
+    IF public.es_auditor() THEN
+      IF NEW.estado <> OLD.estado OR NEW.fecha_visita IS DISTINCT FROM OLD.fecha_visita THEN NEW.inspector_id := auth.uid(); END IF;
+    ELSE
+      -- El criador solo puede anular la suya
+      IF NEW.estado NOT IN (OLD.estado, 'anulada') THEN
+        RAISE EXCEPTION 'Solo la inspección programa o cierra una solicitud' USING ERRCODE = '42501';
+      END IF;
+      NEW.fecha_visita := OLD.fecha_visita; NEW.inspector_id := OLD.inspector_id; NEW.inspector_nombre := OLD.inspector_nombre;
+    END IF;
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_solicitud ON public.solicitudes;
+CREATE TRIGGER trg_validar_solicitud BEFORE INSERT OR UPDATE ON public.solicitudes
+  FOR EACH ROW EXECUTE FUNCTION public.validar_solicitud();
+
+-- ----------------------------------------------------------------------------
 -- 4c. Historial de cambios del Libro (para el control oficial: quién, cuándo, qué)
 --     Solo lo escriben los triggers; lo leen la administración y la inspección.
 -- ----------------------------------------------------------------------------
@@ -493,10 +553,11 @@ ALTER TABLE public.campanas       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.historial      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lotes          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incubaciones   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.solicitudes    ENABLE ROW LEVEL SECURITY;
 
 DO $$ DECLARE r record; BEGIN
   FOR r IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
-           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial', 'lotes', 'incubaciones') LOOP
+           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial', 'lotes', 'incubaciones', 'solicitudes') LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
 END $$;
@@ -555,11 +616,19 @@ CREATE POLICY incubaciones_editar ON public.incubaciones FOR UPDATE TO authentic
 CREATE POLICY incubaciones_borrar ON public.incubaciones FOR DELETE TO authenticated
   USING (usuario_id = auth.uid());
 
+CREATE POLICY solicitudes_ver ON public.solicitudes FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor());
+CREATE POLICY solicitudes_crear ON public.solicitudes FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid() OR public.es_auditor());
+CREATE POLICY solicitudes_editar ON public.solicitudes FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor()) WITH CHECK (usuario_id = auth.uid() OR public.es_auditor());
+
 CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
 
 GRANT SELECT ON public.censo_publico TO anon, authenticated;
 GRANT SELECT ON public.historial TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas, public.lotes, public.incubaciones TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.solicitudes TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.perfiles, public.animales TO authenticated;
 GRANT SELECT, INSERT ON public.calificaciones TO authenticated;
 GRANT SELECT, INSERT, DELETE ON public.huevos TO authenticated;

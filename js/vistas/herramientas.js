@@ -15,6 +15,7 @@ export default function (main) {
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],
     ['Cría', [
+      ['#/inspeccion', '🔎', 'Solicitar inspección', (() => { const s = datos.solicitudAbierta(); if (s) return s.estado === 'programada' ? `Visita el ${s.fecha_visita.split('-').reverse().join('/')}` : 'Solicitud enviada: pendiente de llamada'; const n = datos.porCalificar(p.id).filter(x => x.listo).length; return n ? `${n} ejemplar(es) con un año listos para calificar` : 'Calificación por un inspector del Club: la llave del Registro Definitivo'; })()],
       ['#/programa', '🧭', 'Guía del criador', 'Qué hacer y cuándo: Libro, anillas, calificación, familias, puesta'],
       ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],
       ['#/reproduccion', '🐣', 'Reproducción e incubación', 'Lotes gallo + gallinas, incubadora y alta de pollitos con sus padres'],
@@ -26,7 +27,7 @@ export default function (main) {
       ['#/guia', '📋', 'Guía de Campo', 'Las 12 regiones y los defectos graves']
     ]]
   ];
-  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
+  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/inspecciones', '📞', 'Solicitudes de inspección', (() => { const n = datos.solicitudesTodas().filter(datos.solicitudAbiertaEs).length; return n ? `${n} abierta(s): llamar, programar y calificar` : 'No hay solicitudes abiertas'; })()], ['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
   if (r === 'administrador') grupos.push(['Administración', [['#/usuarios', '🛡️', 'Usuarios y roles', 'Asignar inspectores y administradores']]]);
 
   pintar(main, h`

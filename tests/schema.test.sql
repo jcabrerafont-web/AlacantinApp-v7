@@ -198,3 +198,49 @@ SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-000
 \echo '   15g otro criador no ve lotes ni incubaciones ajenos (esperado: 0 0)'
 SELECT (SELECT count(*) FROM lotes) AS lotes_ajenos, (SELECT count(*) FROM incubaciones) AS incubaciones_ajenas;
 RESET ROLE;
+
+\echo '== 16. Solicitudes de inspección'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento) VALUES
+ ('10000000-0000-0000-0000-000000000050', auth.uid(), 'E2518000050', 'H', 'blanca', '2025-01-01');
+\echo '   16a solicitud con un ejemplar propio en RN -> OK'
+INSERT INTO solicitudes (id, usuario_id, animales, telefono) VALUES
+ ('50000000-0000-0000-0000-000000000001', auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612 345 678');
+\echo '   16b segunda solicitud abierta (esperado: error unique)'
+INSERT INTO solicitudes (id, usuario_id, animales, telefono) VALUES
+ (gen_random_uuid(), auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612 345 678');
+\echo '   16c el criador intenta programarse la visita (esperado: error 42501)'
+UPDATE solicitudes SET estado = 'programada', fecha_visita = current_date WHERE id = '50000000-0000-0000-0000-000000000001';
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+\echo '   16d otro criador con un ejemplar ajeno (esperado: error 23514) y sin ver la ajena (0)'
+INSERT INTO solicitudes (id, usuario_id, animales, telefono) VALUES
+ (gen_random_uuid(), auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612 345 678');
+SELECT count(*) AS solicitudes_ajenas FROM solicitudes;
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+\echo '   16e el inspector la ve y programa la visita; no puede cambiar los ejemplares'
+UPDATE solicitudes SET estado = 'programada', fecha_visita = current_date + 3, respuesta = 'Iré a las 10', animales = '["10000000-0000-0000-0000-000000000001"]' WHERE id = '50000000-0000-0000-0000-000000000001';
+SELECT estado, inspector_id = auth.uid() AS inspector, animales = '["10000000-0000-0000-0000-000000000050"]'::jsonb AS ejemplares_intactos FROM solicitudes;
+\echo '   16f programada sin fecha (esperado: error check)'
+UPDATE solicitudes SET fecha_visita = NULL WHERE id = '50000000-0000-0000-0000-000000000001';
+UPDATE solicitudes SET estado = 'realizada' WHERE id = '50000000-0000-0000-0000-000000000001';
+\echo '   16g una solicitud realizada no se reabre (esperado: error 23514)'
+UPDATE solicitudes SET estado = 'pendiente' WHERE id = '50000000-0000-0000-0000-000000000001';
+RESET ROLE;
+\echo '   16h sincronización por upsert: el criador anula la suya y el inspector cierra otra'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+INSERT INTO solicitudes (id, usuario_id, animales, telefono) VALUES
+ ('50000000-0000-0000-0000-000000000002', auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612345678');
+INSERT INTO solicitudes (id, usuario_id, animales, telefono, estado, respuesta) VALUES
+ ('50000000-0000-0000-0000-000000000002', auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612345678', 'anulada', 'Anulada por el criador')
+ ON CONFLICT (id) DO UPDATE SET estado = EXCLUDED.estado, respuesta = EXCLUDED.respuesta;
+INSERT INTO solicitudes (id, usuario_id, animales, telefono) VALUES
+ ('50000000-0000-0000-0000-000000000003', auth.uid(), '["10000000-0000-0000-0000-000000000050"]', '612345678');
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+INSERT INTO solicitudes (id, usuario_id, animales, telefono, estado, fecha_visita) VALUES
+ ('50000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000b', '["10000000-0000-0000-0000-000000000001"]', '612345678', 'programada', current_date + 1)
+ ON CONFLICT (id) DO UPDATE SET usuario_id = EXCLUDED.usuario_id, animales = EXCLUDED.animales, estado = EXCLUDED.estado, fecha_visita = EXCLUDED.fecha_visita;
+SELECT right(id::text, 1) AS sol, estado, usuario_id = '00000000-0000-0000-0000-00000000000a' AS del_criador, animales = '["10000000-0000-0000-0000-000000000050"]'::jsonb AS intactos FROM solicitudes ORDER BY id;
+RESET ROLE;

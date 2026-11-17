@@ -9,7 +9,7 @@ export const CONFIG = Object.freeze({
   supabaseUrl: '',
   supabaseAnonKey: '',
   bucketFotos: 'fotos-alacantina',
-  version: '7.5.0'
+  version: '7.6.0'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

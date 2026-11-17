@@ -7,7 +7,7 @@ import * as db from './db.js';
 import * as sync from './sync.js';
 import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla } from './estandar.js';
 import { indice, fxAnimal, creaCiclo } from './genetica.js';
-import { esAuditor } from './auth.js';
+import { esAuditor, actualizarPerfil } from './auth.js';
 import { uuid } from './ui.js';
 
 export const estado = {
@@ -19,6 +19,7 @@ export const estado = {
   campanas: [],
   lotes: [],
   incubaciones: [],
+  solicitudes: [],
   perfiles: [],
   pendientes: 0,
   online: navigator.onLine
@@ -36,8 +37,8 @@ const PRIVADOS = ['usuario_id', 'rega', 'latitud', 'longitud', 'notas', 'baja_ca
 export const versionPublica = (a) => Object.fromEntries(Object.entries(a).filter(([k]) => !PRIVADOS.includes(k)));
 
 export async function cargar() {
-  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones] = await Promise.all(
-    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones'].map(s => db.todos(s)));
+  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes] = await Promise.all(
+    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes'].map(s => db.todos(s)));
   estado.todos = animales;
   estado.idx = indice(animales);
   const p = estado.perfil;
@@ -48,6 +49,7 @@ export async function cargar() {
     estado.campanas = [];
     estado.lotes = [];
     estado.incubaciones = [];
+    estado.solicitudes = [];
   } else if (esAuditor(p.rol)) {
     estado.calificaciones = calificaciones;
     estado.huevos = huevos;
@@ -55,6 +57,7 @@ export async function cargar() {
     estado.campanas = campanas;
     estado.lotes = lotes;
     estado.incubaciones = incubaciones;
+    estado.solicitudes = solicitudes;
   } else {
     const mios = new Set(animales.filter(a => a.usuario_id === p.id).map(a => a.id));
     estado.calificaciones = calificaciones.filter(c => mios.has(c.animal_id));
@@ -63,6 +66,7 @@ export async function cargar() {
     estado.campanas = campanas.filter(c => c.usuario_id === p.id);
     estado.lotes = lotes.filter(l => l.usuario_id === p.id);
     estado.incubaciones = incubaciones.filter(i => i.usuario_id === p.id);
+    estado.solicitudes = solicitudes.filter(x => x.usuario_id === p.id);
   }
   estado.pendientes = await sync.pendientes();
   notificar();
@@ -603,6 +607,96 @@ export const candidatosRM = () => estado.todos
   .filter(a => a.estado !== 'baja' && a.seccion !== 'RM')
   .map(a => ({ a, m: meritosRM(a) }))
   .filter(x => x.m?.cumple);
+
+// ---------------------------------------------------------------------------
+// Solicitudes de inspección: el criador pide la visita con los ejemplares listos;
+// inspección y administración la programan, califican y la cierran.
+// ---------------------------------------------------------------------------
+export const ESTADOS_SOLICITUD = { pendiente: 'Pendiente', programada: 'Visita programada', realizada: 'Realizada', anulada: 'Anulada' };
+export const HORARIOS = { indiferente: 'Cualquier momento', mananas: 'Mañanas', tardes: 'Tardes', findes: 'Fines de semana' };
+export const solicitudAbiertaEs = (s) => s.estado === 'pendiente' || s.estado === 'programada';
+export const misSolicitudes = () => estado.solicitudes.filter(s => s.usuario_id === estado.perfil?.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+export const solicitudAbierta = () => misSolicitudes().find(solicitudAbiertaEs) || null;
+// Para inspección: abiertas primero (la más antigua antes), luego el resto
+export const solicitudesTodas = () => [...estado.solicitudes].sort((a, b) =>
+  (solicitudAbiertaEs(b) - solicitudAbiertaEs(a)) || (solicitudAbiertaEs(a) ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at)));
+
+// Ejemplares del criador pendientes de calificar: en RN o RA, sin Apto ni descalificación.
+// «listo» = ya tiene la edad mínima del RD; el resto se muestra con la fecha en que la cumple.
+export function porCalificar(usuarioId = estado.perfil?.id) {
+  return estado.todos
+    .filter(a => a.usuario_id === usuarioId && a.estado !== 'baja' && ['RN', 'RA'].includes(a.seccion))
+    .map(a => {
+      const califs = calificacionesDe(a.id);
+      const meses = edadMeses(a.fecha_nacimiento);
+      return { a, meses, califs, listo: meses !== null && meses >= REGLAS.edadMinimaRD_meses, fechaListo: sumaMesesIso(a.fecha_nacimiento, REGLAS.edadMinimaRD_meses) };
+    })
+    .filter(x => !x.califs.some(c => c.resultado === 'Apto' || c.clase === 'D'))
+    .sort((x, y) => x.a.anilla.localeCompare(y.a.anilla));
+}
+const sumaMesesIso = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+
+// Teléfono para llamar y para WhatsApp (los móviles españoles de 9 cifras llevan el prefijo 34)
+export function telefonoInternacional(t) {
+  let d = String(t || '').replace(/[^\d+]/g, '');
+  if (d.startsWith('+')) d = d.slice(1); else if (d.startsWith('00')) d = d.slice(2);
+  d = d.replace(/\D/g, '');
+  if (/^[6789]\d{8}$/.test(d)) d = `34${d}`;
+  return d.length >= 9 ? d : null;
+}
+
+export async function crearSolicitud({ animales, telefono, horario = 'indiferente', notas = '' }) {
+  let p = estado.perfil;
+  if (!p) throw new Error('Inicia sesión para solicitar una inspección.');
+  if (solicitudAbierta()) throw new Error('Ya tienes una solicitud abierta. Espera a la visita o anúlala para hacer otra.');
+  const listos = new Set(porCalificar(p.id).filter(x => x.listo).map(x => x.a.id));
+  const lista = [...new Set(animales || [])].filter(id => listos.has(id));
+  if (!lista.length) throw new Error('Elige al menos un ejemplar con un año cumplido y sin calificar.');
+  const tel = String(telefono || '').trim();
+  if (!telefonoInternacional(tel)) throw new Error('Indica un teléfono de contacto válido: el inspector te llamará para concertar la visita.');
+  if (!HORARIOS[horario]) horario = 'indiferente';
+  // El teléfono se guarda en el perfil si no estaba o ha cambiado
+  if (tel !== (p.telefono || '')) {
+    const { perfil, paraServidor } = await actualizarPerfil(p, { telefono: tel });
+    estado.perfil = p = perfil;
+    await guardarPerfilServidor(paraServidor);
+  }
+  const ahora = new Date().toISOString();
+  const s = { id: uuid(), usuario_id: p.id, animales: lista, telefono: tel, horario, notas: String(notas || '').trim().slice(0, 500),
+    estado: 'pendiente', fecha_visita: null, inspector_id: null, inspector_nombre: null, respuesta: null, created_at: ahora, updated_at: ahora };
+  await db.guardar('solicitudes', s);
+  await sync.encolar('solicitudes', 'upsert', s);
+  await cargar();
+  return s;
+}
+
+// Cambios de estado. El criador solo puede anular la suya mientras está abierta;
+// inspección y administración programan la visita, la dan por realizada o la anulan.
+export async function atenderSolicitud(id, { estado: nuevo, fecha_visita, respuesta }) {
+  const p = estado.perfil;
+  const s = estado.solicitudes.find(x => x.id === id);
+  if (!p || !s) throw new Error('Solicitud no encontrada.');
+  const auditor = esAuditor(p.rol);
+  if (!auditor && (s.usuario_id !== p.id || nuevo !== 'anulada')) throw new Error('No autorizado.');
+  if (!solicitudAbiertaEs(s)) throw new Error('La solicitud ya está cerrada.');
+  if (!ESTADOS_SOLICITUD[nuevo] || nuevo === 'pendiente') throw new Error('Estado no válido.');
+  if (nuevo === 'programada' && !/^\d{4}-\d{2}-\d{2}$/.test(String(fecha_visita || ''))) throw new Error('Indica la fecha de la visita.');
+  if (nuevo === 'programada' && fecha_visita < s.created_at.slice(0, 10)) throw new Error('La visita no puede ser anterior a la solicitud.');
+  const r = { ...s, estado: nuevo, updated_at: new Date().toISOString(),
+    fecha_visita: nuevo === 'programada' || nuevo === 'realizada' ? (fecha_visita || s.fecha_visita || hoyIso()) : s.fecha_visita,
+    respuesta: respuesta !== undefined ? String(respuesta || '').trim().slice(0, 500) || null : s.respuesta,
+    ...(auditor ? { inspector_id: p.id, inspector_nombre: p.nombre || p.email } : {}) };
+  await db.guardar('solicitudes', r);
+  await sync.encolar('solicitudes', 'upsert', r);
+  await cargar();
+  return r;
+}
+
+// Qué ejemplares de la solicitud ya se han calificado desde que se pidió
+export function progresoSolicitud(s) {
+  const filas = s.animales.map(id => ({ id, a: estado.idx.get(id), calif: calificacionesDe(id).find(c => c.created_at >= s.created_at) || null }));
+  return { filas, hechas: filas.filter(f => f.calif).length, total: filas.length };
+}
 
 // ---------------------------------------------------------------------------
 // Perfil y administración

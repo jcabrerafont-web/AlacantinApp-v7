@@ -20,6 +20,7 @@ export default function (main) {
     ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
     <div id="censo-copia"></div>
+    ${p && !esAuditor(p.rol) && !datos.solicitudAbierta() && datos.porCalificar(p.id).some(x => x.listo) ? h`<a id="censo-insp" class="aviso-caja info peq" href="#/inspeccion" style="display:block;text-decoration:none">🔎 Tienes ${datos.porCalificar(p.id).filter(x => x.listo).length} ejemplar(es) con un año sin calificar. <strong>Solicitar inspección →</strong></a>` : ''}
     <div id="censo-kpis" class="kpis"></div>
     <div class="tarjeta">
       <label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Anilla o nombre" value="${filtros.q}">

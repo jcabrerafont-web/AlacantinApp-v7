@@ -75,7 +75,7 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - En el alta hay consejos para hacer una foto útil, y se guarda la fecha de cada foto (`fotos_fecha`) para saber la edad del animal en ella.
   - La Dirección Técnica tiene el **Dossier fotográfico** (`#/dossier`): mejores fotos de perfil por variedad, sexo y edad, qué falta para el Catálogo y para FESACOCUR, e impresión en PDF.
 - **Copia de seguridad** (`#/copia`, Herramientas):
-  - Descarga en JSON de todo el Libro del dispositivo: ejemplares, calificaciones, huevos, campañas, lotes, incubaciones y perfiles; fotos opcionales. Nunca incluye contraseñas ni la sesión.
+  - Descarga en JSON de todo el Libro del dispositivo: ejemplares, calificaciones, huevos, campañas, lotes, incubaciones, solicitudes de inspección y perfiles; fotos opcionales. Nunca incluye contraseñas ni la sesión.
   - Restauración de dos formas: «fusionar», que conserva la versión más reciente de cada registro, o «reemplazar». Los archivos que no son copias o los registros incompletos se rechazan.
   - En modo dispositivo, la copia de otra cuenta local (un móvil anterior) se adopta como propia. Con servidor, lo propio se reenvía al Libro central.
   - Mi censo recuerda hacer la copia si nunca se ha hecho o tiene más de 30 días.
@@ -85,6 +85,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - **Incubaciones:** se proponen los huevos aptos de los últimos 10 días de cada gallina; calendario día 0 / 7 (miraje) / 18 (nacedora) / 21 (nacimiento); fertilidad (fértiles ÷ huevos) y nacimiento (nacidos ÷ fértiles) por gallina.
   - **Alta del pollito** desde la incubación con madre, padre y fecha ya puestos, y unido a su incubación. En un alta normal, al elegir la madre se propone el gallo de su lote.
   - En el servidor, `lotes` e `incubaciones` validan que gallo y gallinas son del criador y que nacidos ≤ huevos − claros.
+- **Solicitud de inspección** (`#/inspeccion` para el criador, `#/inspecciones` para inspección y administración):
+  - El criador elige sus ejemplares en RN o RA con un año cumplido y sin calificar, deja su teléfono (se guarda en Mi aviario) y el mejor momento. Solo una solicitud abierta a la vez; puede anularla.
+  - Mi censo y la ficha invitan a pedirla cuando hay ejemplares listos; los que aún no tienen un año salen en «Próximos» con la fecha.
+  - El panel de inspección muestra los datos del criador (socio, municipio, REGA), botones para llamar, WhatsApp (prefijo 34) y cómo llegar (coordenadas del aviario), y el avance de la calificación de cada ejemplar.
+  - Estados: pendiente → visita programada (con fecha y mensaje al criador) → realizada, o anulada con motivo.
+  - En el servidor: una sola solicitud abierta por criador; el criador solo puede anular; inspección no puede cambiar los ejemplares pedidos; una solicitud cerrada no se reabre.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.
@@ -145,7 +151,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 25 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 81 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 94 comprobaciones en Chrome (Playwright)
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 
