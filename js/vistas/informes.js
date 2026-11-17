@@ -69,6 +69,7 @@ export default function (main) {
       <div class="fila">
         <button class="btn" id="x-pedigri">⬇️ Matriz de pedigrí (CSV · ENDOG/CFC/R)</button>
         <button class="btn" id="x-censo">⬇️ Censo (CSV)</button>
+        ${auditor ? h`<button class="btn" id="x-criadores">⬇️ Criadores y explotaciones (CSV)</button>` : ''}
         <button class="btn" id="x-imprimir">🖨️ Imprimir informe</button>
       </div>
       <p class="ayuda">La matriz incluye los ascendientes de otros criadores necesarios para el cálculo y está ordenada con progenitores antes que su descendencia.</p>
@@ -95,6 +96,24 @@ export default function (main) {
     activos.forEach(a => filas.push([a.anilla, a.nombre || '', a.sexo, nombreVariedad(a.variedad), a.fecha_nacimiento,
       tramoEdad(a.fecha_nacimiento)?.nombre || '', a.seccion, a.familia || '', a.peso_g ?? '', a.municipio || '', fxAnimal(a, idx).toFixed(6)]));
     descargar(csv(filas), `ESGA025_censo_${hoyISO()}.csv`);
+  });
+  // Relación de criadores y explotaciones con sus efectivos (RD 45/2019, art. 14.5 c y d)
+  $('#x-criadores', main)?.addEventListener('click', () => {
+    const porTitular = new Map();
+    activos.forEach(a => {
+      const k = a.usuario_id || '—';
+      const x = porTitular.get(k) || { machos: 0, hembras: 0, rd: 0, rega: a.rega, municipio: a.municipio, provincia: a.provincia };
+      x[a.sexo === 'M' ? 'machos' : 'hembras'] += 1;
+      if (['RD', 'RM'].includes(a.seccion)) x.rd += 1;
+      porTitular.set(k, x);
+    });
+    const filas = [['CRIADOR', 'CORREO', 'REGA', 'MUNICIPIO', 'PROVINCIA', 'MACHOS', 'HEMBRAS', 'TOTAL', 'EN_RD_O_RM', 'CAMPANAS_PUESTA']];
+    for (const [id, x] of porTitular) {
+      const p = datos.estado.perfiles.find(q => q.id === id);
+      filas.push([p?.nombre || '', p?.email || '', p?.rega || x.rega || '', p?.municipio || x.municipio || '', p?.provincia || x.provincia || '',
+        x.machos, x.hembras, x.machos + x.hembras, x.rd, datos.estado.campanas.filter(c => c.usuario_id === id).length]);
+    }
+    descargar(csv(filas), `ESGA025_criadores_explotaciones_${hoyISO()}.csv`);
   });
   $('#x-imprimir', main).addEventListener('click', () => {
     pintar('#impresion', h`<h1>${auditor ? 'Informe del Libro Genealógico' : 'Informe de censo'} · ${ESTANDAR.codigo}</h1>

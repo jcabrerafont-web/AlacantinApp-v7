@@ -126,6 +126,7 @@ export async function guardarAnimal(datos) {
     padre_id: datos.padre_id || null,
     madre_id: datos.madre_id || null,
     usuario_id: previo?.usuario_id || p.id,
+    criador_id: previo ? (previo.criador_id ?? previo.usuario_id) : p.id, // criador de origen: no cambia
     estado: previo?.estado || 'activo',
     created_at: previo?.created_at || ahora,
     updated_at: ahora
@@ -147,6 +148,61 @@ export async function guardarAnimal(datos) {
   await sync.encolar('animales', 'upsert', a);
   await cargar();
   return a;
+}
+
+// Cambio de titular (venta o cesión a otro socio): el animal sigue en el Libro con
+// el nuevo propietario; el criador de origen se conserva. Solo la administración.
+export async function cambiarTitular(animalId, perfilId) {
+  if (rol() !== 'administrador') throw new Error('El cambio de titular lo registra la administración del Libro.');
+  const a = estado.idx.get(animalId);
+  const nuevo = estado.perfiles.find(x => x.id === perfilId);
+  if (!a || !nuevo) throw new Error('Ejemplar o socio no encontrado.');
+  if (a.usuario_id === perfilId) throw new Error('Ya es el titular.');
+  const r = { ...a, criador_id: a.criador_id ?? a.usuario_id, usuario_id: perfilId,
+    rega: nuevo.rega || null, municipio: nuevo.municipio || null, provincia: nuevo.provincia || null,
+    latitud: nuevo.latitud ?? null, longitud: nuevo.longitud ?? null, updated_at: new Date().toISOString() };
+  await db.guardar('animales', r);
+  await sync.encolar('animales', 'upsert', r);
+  await cargar();
+  return r;
+}
+
+// Requisitos para pasar del RN al Registro Definitivo, uno a uno, para guiar al criador.
+// (Castellana Negra A.6 y Reg. UE 2016/1012 anexo II por analogía: filiación establecida
+//  con padres inscritos en el Libro; explotación registrada.)
+export const SECCIONES_LIBRO = ['RF', 'RA', 'RD', 'RM'];
+export function requisitosRD(a) {
+  const padre = estado.idx.get(a.padre_id), madre = estado.idx.get(a.madre_id);
+  const meses = edadMeses(a.fecha_nacimiento);
+  const califs = calificacionesDe(a.id);
+  const apto = califs.find(c => c.resultado === 'Apto');
+  const v = variedadPorId(a.variedad);
+  const lista = [
+    { ok: Boolean(v?.oficial), texto: v?.oficial ? `Variedad oficial (${v.nombre})` : 'Variedad oficial (la suya está en proceso de reconocimiento)' },
+    { ok: Boolean(padre && SECCIONES_LIBRO.includes(padre.seccion)), texto: padre ? `Padre inscrito en el Libro (${padre.anilla} · ${padre.seccion})` : 'Padre registrado e inscrito en el Libro' },
+    { ok: Boolean(madre && SECCIONES_LIBRO.includes(madre.seccion)), texto: madre ? `Madre inscrita en el Libro (${madre.anilla} · ${madre.seccion})` : 'Madre registrada e inscrita en el Libro' },
+    { ok: Boolean(a.rega), texto: a.rega ? `Explotación registrada (REGA ${a.rega})` : 'Explotación con REGA (complétalo en Mi aviario)' },
+    { ok: meses !== null && meses >= REGLAS.edadMinimaRD_meses, texto: `Un año de edad${meses !== null && meses < REGLAS.edadMinimaRD_meses ? ` (tiene ${meses} meses)` : ''}` },
+    { ok: Boolean(apto), texto: apto ? `Calificación Apto (${String(apto.total).replace('.', ',')} puntos)` : `Calificación Apto: ${REGLAS.puntosMinimosApto[a.sexo] ?? 65} puntos o más y sin defectos descalificantes` }
+  ];
+  return { lista, cumple: lista.every(x => x.ok) };
+}
+
+// Inscripción directa en el Registro Fundacional (fundadores de la raza, Reg. UE 2016/1012
+// art. 19 por analogía) o en el Auxiliar (buena morfología sin genealogía completa).
+// La decide la Dirección Técnica (inspector o administración).
+export async function inscribirSeccionBase(animalId, seccion, motivo) {
+  if (!esAuditor(rol())) throw new Error('Esta inscripción la decide la Dirección Técnica del Libro.');
+  if (!['RF', 'RA'].includes(seccion)) throw new Error('Sección no válida.');
+  const a = estado.idx.get(animalId);
+  if (!a || a.seccion !== 'RN') throw new Error('Solo se inscriben en RF o RA ejemplares que están en el RN.');
+  if (!String(motivo || '').trim()) throw new Error('Indica el motivo (p. ej. «fundador de la raza, aviario X»).');
+  const ahora = new Date().toISOString();
+  const r = { ...a, seccion, notas: [a.notas, `${ahora.slice(0, 10)} · ${seccion}: ${String(motivo).trim()}`].filter(Boolean).join('\n'), updated_at: ahora };
+  await db.guardar('animales', r);
+  await sync.encolar('animales', 'upsert', r);
+  await cargar();
+  return r;
 }
 
 export async function darDeBaja(id, causa, fechaBaja) {
@@ -348,7 +404,8 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
   await db.guardar('calificaciones', c);
   await sync.encolar('calificaciones', 'upsert', c);
   // Promoción RN -> RD (la confirma también el trigger del servidor)
-  if (ev.accedeRD && a.seccion === 'RN') {
+  const padresEnLibro = [a.padre_id, a.madre_id].every(id => SECCIONES_LIBRO.includes(estado.idx.get(id)?.seccion));
+  if (ev.accedeRD && a.seccion === 'RN' && padresEnLibro && a.rega) {
     const promovido = { ...a, seccion: 'RD', updated_at: new Date().toISOString() };
     await db.guardar('animales', promovido);
   }

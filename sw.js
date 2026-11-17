@@ -9,7 +9,7 @@
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos offline
 //    viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.2.0';
+const VERSION = '7.3.0';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 const TIMEOUT_MS = 3500;

@@ -3,7 +3,7 @@
 // Se maquetan en #impresion y se imprimen con el diálogo del sistema
 // ("Guardar como PDF"). Sin ventanas emergentes ni librerías externas.
 // ============================================================================
-import { ESTANDAR, REGLAS, BAREMO, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, anillaLegible, parsearAnilla, variedadPorId, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
 import { ancestros, fxAnimal } from './genetica.js';
 import { h, pintar, fecha, kg, pct } from './ui.js';
 
@@ -27,29 +27,37 @@ function imprimir(plantilla) {
   setTimeout(() => window.print(), 50);
 }
 
-export function certificado(a, { idx, titular, ultimaCalificacion }) {
+// Certificado zootécnico de animal reproductor de raza pura.
+// Las aves se rigen por el art. 26 del RD 45/2019; el contenido sigue, por analogía,
+// el anexo V, parte 2, capítulo I del Reglamento (UE) 2016/1012 (letras a–o).
+export function certificado(a, { idx, titular, criador, ultimaCalificacion, rendimiento }) {
   const anc = new Map(ancestros(a.id, idx, 3).map(x => [x.ruta, idx.get(x.id)]));
   const celda = (ruta, rol) => {
     const x = anc.get(ruta);
-    return x ? h`<td><strong>${x.anilla}</strong>${x.nombre ? h` · ${x.nombre}` : ''}<br><small>${rol} · ${nombreVariedad(x.variedad)} · ${x.seccion}</small></td>`
+    return x ? h`<td><strong>${x.anilla}</strong>${x.nombre ? h` · ${x.nombre}` : ''}<br><small>${rol} · ${nombreVariedad(x.variedad)} · sección ${x.seccion}</small></td>`
       : h`<td><small>${rol}: no registrado</small></td>`;
   };
   const fx = fxAnimal(a, idx);
-  const ref = `CG-${ESTANDAR.codigo}-${String(a.anilla).replace(/\W/g, '')}-${huella([a.id, a.anilla, a.seccion, a.padre_id, a.madre_id, ultimaCalificacion?.id || ''].join('|'))}`;
+  const pa = parsearAnilla(a.anilla);
+  const persona = (p, extra = {}) => p ? h`${p.nombre || '—'}${p.email ? h`<br><small>${p.email}</small>` : ''}<br><small>${[extra.rega || p.rega ? `REGA ${extra.rega || p.rega}` : '', extra.municipio || p.municipio, extra.provincia || p.provincia].filter(Boolean).join(' · ')}</small>` : '—';
+  const ref = `CZ-${ESTANDAR.codigo}-${String(a.anilla).replace(/\W/g, '')}-${huella([a.id, a.anilla, a.seccion, a.usuario_id, a.padre_id, a.madre_id, ultimaCalificacion?.id || ''].join('|'))}`;
+  const coma = (n, d = 1) => (n === null || n === undefined || !Number.isFinite(Number(n)) ? '—' : Number(n).toFixed(d).replace('.', ','));
   imprimir(h`
-    ${cabecera('Certificado genealógico', ref)}
+    ${cabecera('Certificado zootécnico · Animal reproductor de raza pura', ref)}
+    <p class="peq">Especie: <em>Gallus gallus domesticus</em> (gallina) · Expedido conforme al art. 26 del Real Decreto 45/2019 y, por analogía, al anexo V del Reglamento (UE) 2016/1012.
+      Sociedad expedidora: <strong>Club Gallina Alacantina</strong> · ${location.origin}</p>
     <h2>Ejemplar</h2>
     <table><tbody>
-      <tr><th>Anilla EE</th><td>${anillaLegible(a.anilla)} (${parsearAnilla(a.anilla)?.diametro ?? '—'} mm)</td><th>Sexo</th><td>${sexoTexto(a.sexo)}</td></tr>
-      <tr><th>Nombre</th><td>${a.nombre || '—'}</td><th>Variedad</th><td>${nombreVariedad(a.variedad)}</td></tr>
-      <tr><th>Nacimiento</th><td>${fecha(a.fecha_nacimiento)}</td><th>Sección</th><td>${a.seccion} · ${ESTANDAR.secciones[a.seccion] || ''}</td></tr>
-      <tr><th>Peso</th><td>${kg(a.peso_g)}</td><th>Familia</th><td>${a.familia ? `Familia ${a.familia}` : '—'}</td></tr>
-      <tr><th>Consanguinidad (Wright, 5 gen.)</th><td colspan="3">${pct(fx, 3)}</td></tr>
+      <tr><th>Libro genealógico</th><td>Libro Genealógico de la Gallina Alacantina</td><th>Sección</th><td>${a.seccion} · ${ESTANDAR.secciones[a.seccion] || ''}</td></tr>
+      <tr><th>Raza</th><td>Alacantina · ${nombreVariedad(a.variedad)}${variedadPorId(a.variedad)?.oficial ? '' : ' (variedad en reconocimiento)'}</td><th>Sexo</th><td>${sexoTexto(a.sexo)}</td></tr>
+      <tr><th>Nº en el Libro</th><td>${a.anilla}</td><th>Identificación</th><td>Anilla cerrada EE (FESACOCUR) ${anillaLegible(a.anilla)} · ${pa?.diametro ?? '—'} mm${a.rfid ? h`<br><small>Chip ${a.rfid}</small>` : ''}</td></tr>
+      <tr><th>Nacimiento</th><td>${fecha(a.fecha_nacimiento)} · ${pa ? 'España' : '—'}</td><th>Nombre</th><td>${a.nombre || '—'}</td></tr>
     </tbody></table>
-    <h2>Titular</h2>
-    <table><tbody><tr><th>Criador</th><td>${titular?.nombre || '—'}</td><th>REGA</th><td>${a.rega || titular?.rega || '—'}</td></tr>
-      <tr><th>Municipio</th><td colspan="3">${a.municipio || titular?.municipio || '—'}${a.provincia ? ` (${a.provincia})` : ''}</td></tr></tbody></table>
-    <h2>Genealogía (3 generaciones)</h2>
+    <table><tbody>
+      <tr><th>Criador (lugar de nacimiento)</th><td>${persona(criador || titular, criador ? {} : a)}</td>
+          <th>Propietario</th><td>${persona(titular, a)}</td></tr>
+    </tbody></table>
+    <h2>Genealogía</h2>
     <table><tbody>
       <tr>${celda('P', 'Padre')}${celda('PP', 'Abuelo paterno')}${celda('PPP', 'Bisabuelo')}</tr>
       <tr><td></td><td></td>${celda('PPM', 'Bisabuela')}</tr>
@@ -60,11 +68,19 @@ export function certificado(a, { idx, titular, ultimaCalificacion }) {
       <tr><td></td>${celda('MM', 'Abuela materna')}${celda('MMP', 'Bisabuelo')}</tr>
       <tr><td></td><td></td>${celda('MMM', 'Bisabuela')}</tr>
     </tbody></table>
-    <h2>Calificación morfológica</h2>
-    ${ultimaCalificacion ? h`<p>${fecha(ultimaCalificacion.fecha)} · ${ultimaCalificacion.inspector_nombre} · <strong>${String(ultimaCalificacion.total).replace(".", ",")} puntos · ${ultimaCalificacion.clase} (${nombreClase(ultimaCalificacion.clase)})</strong> · ${ultimaCalificacion.resultado}</p>`
-      : h`<p>Sin calificación registrada.</p>`}
-    <div class="doc-firmas"><div>Firma del titular</div><div>Firma y sello de la Dirección Técnica del Libro Genealógico</div></div>
-    <p class="doc-pie">Documento generado por AlacantinApp a partir de los registros del Libro Genealógico. La referencia identifica de forma única el contenido certificado. Solo es válido con la firma de la Dirección Técnica.</p>`);
+    <h2>Resultados de control y evaluación</h2>
+    <table><tbody>
+      <tr><th>Calificación morfológica</th><td>${ultimaCalificacion ? h`${fecha(ultimaCalificacion.fecha)} · <strong>${coma(ultimaCalificacion.total)} puntos · ${ultimaCalificacion.clase} (${nombreClase(ultimaCalificacion.clase)})</strong> · ${ultimaCalificacion.resultado} · inspector ${ultimaCalificacion.inspector_nombre}` : 'Sin calificación registrada'}</td></tr>
+      <tr><th>Peso</th><td>${kg(a.peso_g)}</td></tr>
+      ${a.sexo === 'H' ? h`<tr><th>Control de puesta</th><td>${rendimiento?.n ? `${rendimiento.etiqueta}: ${rendimiento.n} huevos · puesta ${Math.round(100 * rendimiento.puesta)} % · peso medio ${coma(rendimiento.media)} g · masa ${coma(rendimiento.masa)} g/día` : 'Sin campañas de control registradas'}</td></tr>` : ''}
+      <tr><th>Consanguinidad</th><td>${pct(fx, 3)} (Wright, 5 generaciones)</td></tr>
+      <tr><th>Defectos genéticos conocidos</th><td>Ninguno registrado</td></tr>
+    </tbody></table>
+    <div class="doc-firmas">
+      <div>Expedido en ______________________, a ${new Date().toLocaleDateString('es-ES')}</div>
+      <div>Nombre, cargo y firma de la persona autorizada<br>(Dirección Técnica del Libro Genealógico)</div>
+    </div>
+    <p class="doc-pie">Generado por AlacantinApp a partir de los registros del Libro Genealógico. La referencia identifica de forma única el contenido certificado; solo es válido con la firma de la persona autorizada por el Club.</p>`);
 }
 
 export function acta(a, c, titular) {

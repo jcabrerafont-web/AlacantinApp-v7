@@ -27,7 +27,9 @@ ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');
 await ir('#/guia');
 ok((await page.$$('#guia-lista details')).length === 12, 'Guía de campo: 12 regiones');
 await ir('#/programa');
-ok((await page.$$('details.guia-sec')).length === 6 && (await page.innerText('main')).includes('Control de puesta'), 'Visitante: Guía del criador con 6 secciones');
+ok((await page.$$('details.guia-sec')).length === 7 && (await page.innerText('main')).includes('Control de puesta'), 'Visitante: Guía del criador con 7 secciones');
+ok(await page.$eval('#sec-normativa', e => e.textContent.includes('Real Decreto 45/2019') && e.querySelectorAll('.lista-normas li').length >= 20), 'Guía: apartado de normativa con requisitos y tareas del Club');
+if (process.env.CAPTURAS) { await ir('#/programa?s=normativa'); await page.waitForTimeout(300); await page.screenshot({ path: `${process.env.CAPTURAS}/guia-normativa.png` }); }
 ok((await page.innerText('#sec-puesta')).length > 0 && await page.$eval('#sec-puesta', e => e.textContent.includes('masa de huevo')), 'Guía explica los tres criterios de puesta');
 await ir('#/programa?s=puesta');
 ok(await page.$eval('#sec-puesta', e => e.open), 'Guía: enlace directo a la sección de puesta');
@@ -197,7 +199,8 @@ await page.click('#form-cal button[type=submit]');
 await page.click('dialog button[value="si"]');
 await page.waitForTimeout(800);
 const sec = await page.evaluate(async id => (await import('./js/datos.js')).animal(id).seccion, idH1);
-ok(sec === 'RD', `Calificación EX (Apto) promociona RN → RD (${sec})`);
+ok(sec === 'RN', `Apto pero sin padres en el Libro: sigue en RN (${sec})`);
+ok((await page.innerText('main')).includes('Camino al Registro Definitivo'), 'La ficha explica qué le falta para el RD');
 ok(await page.evaluate(() => window.__impreso === true && document.querySelector('#impresion').innerText.includes('95,5') && /2400 g.*conforme/.test(document.querySelector('#impresion').innerText) && !document.querySelector('#impresion').innerText.includes('<strong>')), 'Acta con desglose de puntos y peso conforme');
 const conDefecto = await page.evaluate(async id => {
   const d = await import('./js/datos.js');
@@ -207,6 +210,29 @@ const conDefecto = await page.evaluate(async id => {
   return `${c.total}/${c.clase}/${c.resultado}`;
 }, idH1);
 ok(conDefecto === '100/D/No apto', `Defecto descalificante: descalificado aunque sume 100 (${conDefecto})`);
+const rdHija = await page.evaluate(async () => {
+  const d = await import('./js/datos.js');
+  const { BAREMO } = await import('./js/estandar.js');
+  const por = (an) => d.estado.todos.find(a => a.anilla === an);
+  let sinMotivo;
+  try { await d.inscribirSeccionBase(por('E2420000001').id, 'RF', ''); sinMotivo = 'aceptado'; } catch (e) { sinMotivo = e.message; }
+  await d.inscribirSeccionBase(por('E2420000001').id, 'RF', 'Fundador de la raza');
+  await d.inscribirSeccionBase(por('E2418000002').id, 'RF', 'Fundadora de la raza');
+  const hija = por('E2518000003');
+  const req = d.requisitosRD(hija).lista.filter(x => !x.ok).length;
+  await d.guardarCalificacion({ animalId: hija.id, puntos: Object.fromEntries(BAREMO.apartados.map(x => [x.id, x.max - 2])), pesoG: 2400 });
+  return { sinMotivo, faltabanAntes: req, seccion: d.animal(hija.id).seccion, padre: por('E2420000001').seccion };
+});
+ok(rdHija.sinMotivo.includes('motivo') && rdHija.padre === 'RF', 'La Dirección Técnica inscribe fundadores en RF (con motivo obligatorio)');
+ok(rdHija.seccion === 'RD', `Hija de fundadores, con un año, REGA y Apto: pasa a RD (${JSON.stringify(rdHija)})`);
+if (process.env.CAPTURAS) {
+  const idHija = await page.evaluate(async () => (await import('./js/datos.js')).estado.todos.find(a => a.anilla === 'E2518000003').id);
+  await ir('#/censo'); await ir(`#/animal/${idHija}`);
+  await page.click('#b-cert'); await page.waitForTimeout(300);
+  await page.addStyleTag({ content: '#impresion{display:block!important;position:static!important} body>*:not(#impresion){display:none!important}' });
+  await page.screenshot({ path: `${process.env.CAPTURAS}/certificado.png`, fullPage: true });
+  await page.evaluate(() => document.querySelectorAll('style').forEach(st => { if (st.textContent.includes('#impresion{display:block')) st.remove(); }));
+}
 
 // 6b. Registro de Méritos (administración): requisitos y vía por premio
 const cambiarRolLocal = async (nuevo) => {
@@ -230,8 +256,8 @@ const rmRes = await page.evaluate(async id => {
   out.push(`${r.seccion}/${r.rm_via}`);
   return out;
 }, idH1);
-ok(rmRes[0] === '95.5/0/false', `RM: mejor calificación no descalificada (95,5; el 100 con defecto no cuenta) y descendientes en RD (${rmRes[0]})`);
-ok(rmRes[1].includes('3 descendientes'), `RM por requisitos exige 3 hijas/os en RD a una gallina (${rmRes[1]})`);
+ok(rmRes[0] === '95.5/1/false', `RM: mejor calificación no descalificada (95,5; el 100 con defecto no cuenta) y descendientes en RD (${rmRes[0]})`);
+ok(rmRes[1].includes('3 descendientes'), `RM por requisitos exige 3 hijas/os en RD a una gallina (tiene 1) (${rmRes[1]})`);
 ok(rmRes[2].includes('premio'), 'RM por premio exige describir el premio');
 ok(rmRes[3] === 'RM/premio', `RM por premio inscrito (${rmRes[3]})`);
 await ir('#/censo'); await ir(`#/animal/${idH1}`);

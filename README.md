@@ -61,6 +61,14 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
     Se explican en la pantalla y en la Guía: la cantidad y el tamaño del huevo tienden a ir en sentido contrario, y la masa los equilibra. La madre propuesta del gallo de reposición de cada familia es la mejor en masa de huevo (`REGLAS.controlPuesta.criterioMadre`). Se muestra la edad de cada gallina y se avisa de los días con más de un huevo anotado.
   - Hay un acumulado de la temporada. En el servidor se guardan en la tabla `campanas` (un ciclo por criador y temporada, solo gallinas propias).
 - **Guía del criador** (`#/programa`, también para visitantes): explica en lenguaje sencillo el Libro (RN → RD → RM), las anillas, la calificación, las familias y la consanguinidad, el control de puesta y un calendario orientativo del año. Las cifras se leen de `REGLAS`, `BAREMO` y `ESTANDAR`, así que nunca contradice lo que la app aplica.
+- **Cumplimiento normativo** (detalle en la Guía del criador, apartado 7):
+  - Las aves no están en el ámbito directo del Reglamento (UE) 2016/1012. Rige el **art. 26 del RD 45/2019**, que lo aplica «mutatis mutandis».
+  - **Paso al RD:** además de Apto, un año y variedad oficial, exige **padre y madre inscritos en el Libro** (RF, RA, RD o RM) y **REGA**. Es la filiación establecida del anexo II del Reglamento, por analogía.
+  - **Fundadores:** la Dirección Técnica inscribe a los fundadores (RF) y a los animales sin genealogía completa (RA) desde la ficha, con motivo obligatorio (art. 19, por analogía).
+  - **Certificado zootécnico** con el contenido del anexo V, por analogía: especie, libro, sección, identificación, fecha y país de nacimiento, criador de origen y propietario, genealogía, calificación, control de puesta, consanguinidad, y lugar, fecha y firma.
+  - **Criador de origen** (`criador_id`), que no cambia nunca. **Cambio de titular** por la administración para ventas o cesiones entre socios: el animal sigue en el Libro.
+  - **Historial de cambios** en el servidor (`historial`), solo legible por inspección y administración, para el control oficial.
+  - **Relación de criadores y explotaciones con sus efectivos** en CSV (art. 14.5).
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.

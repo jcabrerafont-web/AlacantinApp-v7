@@ -77,7 +77,8 @@ CREATE TRIGGER trg_proteger_perfil BEFORE INSERT OR UPDATE ON public.perfiles
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.animales (
   id               uuid PRIMARY KEY,
-  usuario_id       uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE RESTRICT,
+  usuario_id       uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE RESTRICT,  -- propietario actual
+  criador_id       uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,          -- criador de origen (inmutable)
   anilla           text NOT NULL,
   sexo             char(1) NOT NULL CHECK (sexo IN ('M', 'H')),
   variedad         text NOT NULL CHECK (variedad IN ('negra-moteada', 'pinta', 'blanca', 'arminada', 'milflores')),
@@ -171,15 +172,18 @@ BEGIN
     IF v_nac >= NEW.fecha_nacimiento THEN RAISE EXCEPTION 'La madre debe haber nacido antes que el ejemplar'; END IF;
   END IF;
   IF TG_OP = 'INSERT' THEN
+    NEW.criador_id := coalesce(NEW.criador_id, NEW.usuario_id);
     IF NEW.seccion = 'RM' THEN
       RAISE EXCEPTION 'El Registro de Méritos se alcanza desde el RF o el RD, no en el alta' USING ERRCODE = '23514';
     END IF;
     IF NOT public.es_auditor() THEN
       NEW.usuario_id := auth.uid();                       -- el titular es siempre quien da el alta
+      NEW.criador_id := auth.uid();                       -- y es también su criador de origen
       IF NEW.seccion NOT IN ('RN') THEN NEW.seccion := 'RN'; END IF;  -- RF/RA las asigna el Libro
     END IF;
   ELSE
     IF NOT public.es_admin() THEN NEW.usuario_id := OLD.usuario_id; END IF;
+    NEW.criador_id := OLD.criador_id;                    -- el criador de origen no cambia nunca
     -- La sección solo cambia por calificación (trigger) o por la Dirección Técnica
     IF NEW.seccion IS DISTINCT FROM OLD.seccion AND NOT public.es_auditor()
        AND coalesce(current_setting('alacantina.promocion', true), '') <> 'si' THEN
@@ -285,7 +289,11 @@ BEGIN
   NEW.peso_conforme := CASE a.sexo WHEN 'M' THEN NEW.peso_g BETWEEN 3000 AND 3500
                                    WHEN 'H' THEN NEW.peso_g BETWEEN 2200 AND 2600 END;
   IF NEW.resultado = 'Apto' AND a.seccion = 'RN'
-     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND a.fecha_nacimiento + interval '1 year' <= current_date THEN
+     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND a.fecha_nacimiento + interval '1 year' <= current_date
+     AND coalesce(a.rega, '') <> ''
+     -- filiación establecida: padre y madre inscritos en el Libro (Reg. UE 2016/1012, anexo II, por analogía)
+     AND EXISTS (SELECT 1 FROM public.animales p WHERE p.id = a.padre_id AND p.seccion IN ('RF', 'RA', 'RD', 'RM'))
+     AND EXISTS (SELECT 1 FROM public.animales m WHERE m.id = a.madre_id AND m.seccion IN ('RF', 'RA', 'RD', 'RM')) THEN
     PERFORM set_config('alacantina.promocion', 'si', true);
     UPDATE public.animales SET seccion = 'RD' WHERE id = NEW.animal_id;
     PERFORM set_config('alacantina.promocion', '', true);
@@ -363,6 +371,38 @@ CREATE TRIGGER trg_validar_campana BEFORE INSERT OR UPDATE ON public.campanas
   FOR EACH ROW EXECUTE FUNCTION public.validar_campana();
 
 -- ----------------------------------------------------------------------------
+-- 4c. Historial de cambios del Libro (para el control oficial: quién, cuándo, qué)
+--     Solo lo escriben los triggers; lo leen la administración y la inspección.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.historial (
+  id         bigserial PRIMARY KEY,
+  tabla      text NOT NULL,
+  registro   uuid NOT NULL,
+  operacion  text NOT NULL,
+  usuario_id uuid,
+  fecha      timestamptz NOT NULL DEFAULT now(),
+  antes      jsonb,
+  despues    jsonb
+);
+CREATE INDEX IF NOT EXISTS historial_registro ON public.historial (registro, fecha);
+
+CREATE OR REPLACE FUNCTION public.anotar_historial() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.historial (tabla, registro, operacion, usuario_id, antes, despues)
+  VALUES (TG_TABLE_NAME, coalesce(NEW.id, OLD.id), TG_OP, auth.uid(),
+          CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) - 'fotos' END,
+          CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) - 'fotos' END);
+  RETURN coalesce(NEW, OLD);
+END $$;
+DROP TRIGGER IF EXISTS trg_historial_animales ON public.animales;
+CREATE TRIGGER trg_historial_animales AFTER INSERT OR UPDATE OR DELETE ON public.animales
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_historial();
+DROP TRIGGER IF EXISTS trg_historial_calificaciones ON public.calificaciones;
+CREATE TRIGGER trg_historial_calificaciones AFTER INSERT ON public.calificaciones
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_historial();
+
+-- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.perfiles       ENABLE ROW LEVEL SECURITY;
@@ -370,10 +410,11 @@ ALTER TABLE public.animales       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calificaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.huevos         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campanas       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.historial      ENABLE ROW LEVEL SECURITY;
 
 DO $$ DECLARE r record; BEGIN
   FOR r IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
-           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas') LOOP
+           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial') LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
 END $$;
@@ -414,7 +455,10 @@ CREATE POLICY campanas_editar ON public.campanas FOR UPDATE TO authenticated
 CREATE POLICY campanas_borrar ON public.campanas FOR DELETE TO authenticated
   USING (usuario_id = auth.uid());
 
+CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
+
 GRANT SELECT ON public.censo_publico TO anon, authenticated;
+GRANT SELECT ON public.historial TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.perfiles, public.animales TO authenticated;
 GRANT SELECT, INSERT ON public.calificaciones TO authenticated;

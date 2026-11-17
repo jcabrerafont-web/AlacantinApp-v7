@@ -79,7 +79,7 @@ INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_
 INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, defectos, resultado) VALUES
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', 2400, '{"tronco":15,"cabeza":6,"cresta":10,"barbillas":5,"orejillas":10,"cuello":6,"dorso":8,"alas":4,"pecho":10,"cola":10,"extremidades":6,"plumaje":10}', 100, 'EX', '["orejilla"]', 'Apto');
 SELECT anilla, seccion AS seccion_tras_no_aptos FROM animales WHERE anilla = 'E2418000002';
-\echo '   10e 82,5 puntos -> MB / Apto y promoción a RD'
+\echo '   10e 82,5 puntos -> MB / Apto, pero SIN padres en el Libro ni REGA: sigue en RN'
 INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', 2400, '{"tronco":12.5,"cabeza":5,"cresta":8,"barbillas":4,"orejillas":9,"cuello":5,"dorso":6,"alas":3,"pecho":8,"cola":8,"extremidades":5,"plumaje":9}', 0, 'I', 'No apto');
 \echo '   10f sin peso (esperado: error de NOT NULL)'
@@ -87,14 +87,20 @@ INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, punto
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tronco":15,"cabeza":6,"cresta":10,"barbillas":5,"orejillas":10,"cuello":6,"dorso":8,"alas":4,"pecho":10,"cola":10,"extremidades":6,"plumaje":10}', 100, 'EX', 'Apto');
 SELECT total, clase, resultado, peso_g, peso_conforme FROM calificaciones ORDER BY created_at, total;
 SELECT anilla, seccion FROM animales WHERE anilla = 'E2418000002';
-\echo '   10g gallo con 67 puntos -> R pero No apto (gallos >= 70); sigue en RN'
+\echo '   10e2 la Dirección Técnica (inspector) inscribe a los fundadores G1 y H1 en el RF'
+UPDATE animales SET seccion = 'RF', rega = 'ES030140001234' WHERE anilla IN ('E2420000001', 'E2418000002');
+SELECT anilla, seccion FROM animales WHERE anilla IN ('E2420000001', 'E2418000002') ORDER BY anilla;
+INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, padre_id, madre_id, rega) VALUES
+ ('10000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', 'E2520000050', 'M', 'blanca', '2025-01-10',
+  '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'ES030140001234');
+\echo '   10g hijo de fundadores, gallo con 67 puntos -> R pero No apto (gallos >= 70); sigue en RN'
 INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000001', auth.uid(), 'Insp', 3200, '{"tronco":10,"cabeza":4,"cresta":7,"barbillas":3,"orejillas":7,"cuello":4,"dorso":5,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":6}', 0, 'I', 'No apto');
-\echo '   10h gallo con 72 puntos -> B / Apto y promoción a RD'
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000005', auth.uid(), 'Insp', 3200, '{"tronco":10,"cabeza":4,"cresta":7,"barbillas":3,"orejillas":7,"cuello":4,"dorso":5,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":6}', 0, 'I', 'No apto');
+\echo '   10h el mismo gallo con 72 puntos -> B / Apto y promoción a RD (padres en RF, REGA, 1 año)'
 INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
- (gen_random_uuid(), '10000000-0000-0000-0000-000000000001', auth.uid(), 'Insp', 3200, '{"tronco":11,"cabeza":4,"cresta":7,"barbillas":4,"orejillas":7,"cuello":4,"dorso":6,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":8}', 0, 'I', 'No apto');
-SELECT total, clase, resultado FROM calificaciones WHERE animal_id = '10000000-0000-0000-0000-000000000001' ORDER BY total;
-SELECT anilla, seccion FROM animales WHERE anilla = 'E2420000001';
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000005', auth.uid(), 'Insp', 3200, '{"tronco":11,"cabeza":4,"cresta":7,"barbillas":4,"orejillas":7,"cuello":4,"dorso":6,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":8}', 0, 'I', 'No apto');
+SELECT total, clase, resultado FROM calificaciones WHERE animal_id = '10000000-0000-0000-0000-000000000005' ORDER BY total;
+SELECT anilla, seccion FROM animales WHERE anilla = 'E2520000050';
 \echo '   10i hija de menos de un año, 82,5 puntos -> Apto pero sigue en RN'
 INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento) VALUES
  ('10000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-00000000000a', 'E' || to_char(current_date - 60, 'YY') || '18000099', 'H', 'blanca', current_date - 60);
@@ -115,7 +121,7 @@ INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ('00000000-0000-00
 ALTER TABLE perfiles DISABLE TRIGGER trg_proteger_perfil;
 UPDATE perfiles SET rol = 'administrador' WHERE email = 'admin@x.es';
 ALTER TABLE perfiles ENABLE TRIGGER trg_proteger_perfil;
-\echo '   12a2 el criador titular tampoco: la sección no cambia (esperado: RD)'
+\echo '   12a2 el criador titular tampoco: la sección no cambia (esperado: RF)'
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Premio' WHERE anilla = 'E2418000002';
 SELECT seccion FROM animales WHERE anilla = 'E2418000002';
@@ -133,7 +139,7 @@ INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, 
  (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000032', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD');
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'requisitos', rm_motivo = '82,5 puntos · 3 descendientes en RD' WHERE anilla = 'E2418000002';
 SELECT anilla, seccion, rm_via, rm_motivo FROM animales WHERE anilla = 'E2418000002';
-\echo '   12e gallo en RD con 72 puntos, por premio: no llega a 85 (esperado: error 23514)'
+\echo '   12e gallo fundador (RF) sin calificación, por premio: no llega a 85 (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Campeonato' WHERE anilla = 'E2420000001';
 \echo '   12f hija en RD sin calificación suficiente (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = '' WHERE anilla = 'E2518000030';
@@ -154,4 +160,16 @@ RESET ROLE;
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
 \echo '   13d otro criador no la ve (esperado: 0)'
 SELECT count(*) AS campanas_ajenas FROM campanas;
+RESET ROLE;
+
+\echo '== 14. Criador de origen inmutable e historial de cambios'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+\echo '   14a la administración cambia el titular de H2 (venta a otro socio): el criador de origen se conserva'
+UPDATE animales SET usuario_id = '00000000-0000-0000-0000-00000000000c' WHERE anilla = 'E2518000003';
+SELECT anilla, usuario_id = '00000000-0000-0000-0000-00000000000c' AS nuevo_titular, criador_id = '00000000-0000-0000-0000-00000000000a' AS criador_origen FROM animales WHERE anilla = 'E2518000003';
+\echo '   14b el historial registra los cambios y solo lo leen inspección y administración'
+SELECT operacion, count(*) FROM historial WHERE registro = '10000000-0000-0000-0000-000000000003' GROUP BY operacion ORDER BY operacion;
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT count(*) AS historial_visible_para_criador FROM historial;
 RESET ROLE;

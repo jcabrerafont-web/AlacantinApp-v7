@@ -30,6 +30,8 @@ export default function (main, { id }) {
     const hijos = datos.estado.todos.filter(x => x.padre_id === a.id || x.madre_id === a.id);
     const rm = verPrivado && a.estado !== 'baja' ? datos.meritosRM(completo) : null;
     const admin = datos.rol() === 'administrador';
+    const rd = verPrivado && a.estado !== 'baja' && a.seccion === 'RN' ? datos.requisitosRD(completo) : null;
+    const criador = completo.criador_id && completo.criador_id !== completo.usuario_id ? datos.estado.perfiles.find(x => x.id === completo.criador_id) : null;
     const enlace = (x) => (x ? h`<a href="#/animal/${x.id}">${x.anilla}</a>${x.nombre ? h` · ${x.nombre}` : ''}` : h`<span class="muted">No registrado</span>`);
 
     pintar(main, h`
@@ -55,6 +57,7 @@ export default function (main, { id }) {
           <tr><th>Consanguinidad</th><td>${pct(fx, 3)} <span class="chip ${nf.nivel === 'alerta' ? 'chip-alerta' : nf.nivel === 'precaucion' ? 'chip-aviso' : 'chip-ok'}">${nf.texto}</span>
             <div class="muted peq">Generaciones equivalentes conocidas: ${generacionesEquivalentes(a.id, datos.estado.idx).toFixed(2).replace('.', ',')}</div></td></tr>
           ${verPrivado ? h`<tr><th>Aviario</th><td>${a.rega || 'REGA pendiente'} · ${a.municipio || '—'}</td></tr>
+            ${criador ? h`<tr><th>Criador de origen</th><td>${criador.nombre || criador.email}</td></tr>` : ''}
             ${a.rfid ? h`<tr><th>Chip RFID</th><td>${a.rfid}</td></tr>` : ''}
             ${a.estado === 'baja' ? h`<tr><th>Baja</th><td>${fecha(a.baja_fecha)} · ${a.baja_causa || ''}</td></tr>` : ''}
             ${a.notas ? h`<tr><th>Notas</th><td>${a.notas}</td></tr>` : ''}` : ''}
@@ -68,6 +71,7 @@ export default function (main, { id }) {
         ${propio && a.estado !== 'baja' ? h`<a class="btn" href="#/editar/${a.id}">✏️ Editar</a>` : ''}
         ${verPrivado ? h`<button class="btn" id="b-cert">📄 Certificado</button>` : ''}
         ${auditor && a.estado !== 'baja' ? h`<a class="btn btn-primario" href="#/calificar/${a.id}">✅ Calificar</a>` : ''}
+        ${admin && a.estado !== 'baja' ? h`<button class="btn" id="b-titular">Cambiar titular</button>` : ''}
         ${propio && a.estado !== 'baja' ? h`<button class="btn btn-peligro" id="b-baja">Dar de baja</button>` : ''}
       </div>
 
@@ -87,6 +91,12 @@ export default function (main, { id }) {
           <button class="btn btn-pequeno" data-acta="${c.id}">Acta</button></li>`)}</ul>`
           : h`<p class="muted">Sin calificar. ${propio ? 'La califica un inspector del Club en visita al aviario.' : ''}</p>`}</div>` : ''}
 
+      ${rd ? h`<div class="tarjeta"><h2>Camino al Registro Definitivo</h2>
+        <ul class="lista-simple">${rd.lista.map(x => h`<li>${x.ok ? '✓' : '○'} ${x.texto}</li>`)}</ul>
+        <p class="muted peq">${rd.cumple ? 'Cumple todo: pasará al RD con su calificación.' : 'Cuando se cumpla todo, una calificación Apto lo pasa al RD. '}<a href="#/programa?s=libro">¿Por qué?</a></p>
+        ${auditor ? h`<div class="fila"><button class="btn" data-base="RF">Inscribir en RF (fundador)</button><button class="btn" data-base="RA">Inscribir en RA (auxiliar)</button></div>` : ''}
+      </div>` : ''}
+
       ${a.seccion === 'RM' ? h`<div class="tarjeta"><h2>★ Registro de Méritos</h2>
         <p>Inscrito el ${fecha(a.rm_fecha)} · ${a.rm_via === 'premio' ? 'por premio' : 'por calificación y descendencia'}${a.rm_motivo ? h`<br><span class="muted">${a.rm_motivo}</span>` : ''}</p></div>`
       : rm && rm.origenValido ? h`<div class="tarjeta"><h2>Camino al Registro de Méritos</h2>
@@ -104,7 +114,17 @@ export default function (main, { id }) {
           <span class="item-principal"><span class="item-titulo">${x.anilla}</span><span class="item-sub">${fecha(x.fecha_nacimiento)} · ${x.seccion}</span></span></a></li>`)}</ul></div>` : ''}`);
 
     const titular = () => datos.estado.perfiles.find(x => x.id === completo.usuario_id) || (propio ? datos.estado.perfil : null);
-    $('#b-cert', main)?.addEventListener('click', () => docs.certificado(completo, { idx: datos.estado.idx, titular: titular(), ultimaCalificacion: califs[0] }));
+    $('#b-cert', main)?.addEventListener('click', () => {
+      // Rendimiento: acumulado de la temporada más reciente con campañas; si no, la puesta registrada
+      const temporadas = [...new Set(datos.estado.campanas.map(c => c.temporada))].sort((x, y) => y - x);
+      let rendimiento = null;
+      for (const t of temporadas) {
+        const f = datos.temporadaPuesta(t).filas.find(x => x.id === completo.id);
+        if (f?.n) { rendimiento = { ...f, etiqueta: `Campañas ${t}` }; break; }
+      }
+      docs.certificado(completo, { idx: datos.estado.idx, titular: titular(), ultimaCalificacion: califs[0],
+        criador: completo.criador_id && completo.criador_id !== completo.usuario_id ? datos.estado.perfiles.find(x => x.id === completo.criador_id) : null, rendimiento });
+    });
     main.querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () =>
       docs.acta(completo, califs.find(c => c.id === b.dataset.acta), titular())));
     $('#b-rm', main)?.addEventListener('click', async () => {
@@ -122,11 +142,36 @@ export default function (main, { id }) {
       try { await datos.inscribirRM(a.id, { via: 'premio', motivo: document.getElementById('rm-motivo')?.value || '' }); aviso(`${a.anilla} inscrito en el Registro de Méritos.`, 'ok'); }
       catch (e) { aviso(e.message, 'error'); }
     });
+    main.querySelectorAll('[data-base]').forEach(b => b.addEventListener('click', async () => {
+      const sec = b.dataset.base;
+      const r = await dialogo({
+        titulo: `Inscribir ${a.anilla} en ${sec}`,
+        cuerpo: h`<p class="peq">${sec === 'RF' ? 'Registro Fundacional: animales con los que arranca el Libro de la raza.' : 'Registro Auxiliar: buena morfología, pero sin genealogía completa.'} Sus hijos podrán pasar al RD.</p>
+          <div class="campo"><label for="base-motivo">Motivo</label><textarea id="base-motivo" placeholder="Ej.: fundador de la raza, revisado en el aviario de …"></textarea></div>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: `Inscribir en ${sec}` }]
+      });
+      if (r !== 'si') return;
+      try { await datos.inscribirSeccionBase(a.id, sec, document.getElementById('base-motivo')?.value || ''); aviso(`${a.anilla} inscrito en ${sec}.`, 'ok'); }
+      catch (e) { aviso(e.message, 'error'); }
+    }));
+    $('#b-titular', main)?.addEventListener('click', async () => {
+      const socios = datos.estado.perfiles.filter(x => x.id !== completo.usuario_id);
+      const r = await dialogo({
+        titulo: `Cambiar titular de ${a.anilla}`,
+        cuerpo: h`<p class="peq">Para ventas o cesiones a otro socio: el animal sigue en el Libro con el nuevo propietario y hereda su REGA. El criador de origen se conserva.</p>
+          <div class="campo"><label for="nuevo-titular">Nuevo titular</label><select id="nuevo-titular">${socios.map(x => h`<option value="${x.id}">${x.nombre || x.email}${x.rega ? ` · ${x.rega}` : ''}</option>`)}</select></div>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Cambiar titular' }]
+      });
+      if (r !== 'si') return;
+      try { await datos.cambiarTitular(a.id, document.getElementById('nuevo-titular')?.value); aviso('Titular cambiado.', 'ok'); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
     $('#b-baja', main)?.addEventListener('click', async () => {
       const r = await dialogo({
         titulo: `Baja de ${a.anilla}`,
-        cuerpo: h`<div class="campo"><label for="baja-causa">Causa</label><select id="baja-causa">
-          <option>Muerte</option><option>Venta</option><option>Cesión</option><option>Sacrificio</option><option>Desaparición</option><option>Otra</option></select></div>
+        cuerpo: h`<p class="peq muted">Si lo vendes o cedes a otro socio del Club, no lo des de baja: pide a la administración el cambio de titular para que siga en el Libro.</p>
+          <div class="campo"><label for="baja-causa">Causa</label><select id="baja-causa">
+          <option>Muerte</option><option>Venta fuera del Club</option><option>Cesión fuera del Club</option><option>Sacrificio</option><option>Desaparición</option><option>Otra</option></select></div>
           <div class="campo"><label for="baja-fecha">Fecha</label><input id="baja-fecha" type="date" value="${hoyISO()}" max="${hoyISO()}"></div>`,
         acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Dar de baja', peligro: true }]
       });

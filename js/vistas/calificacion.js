@@ -74,7 +74,11 @@ export default function (main, { id }) {
     box.textContent = !ev.completa && ev.clase !== 'D'
       ? `Faltan ${ev.sinPuntuar.length} región(es)${ev.invalidos.length ? ` y hay ${ev.invalidos.length} fuera de rango` : ''}.`
       : `Total ${coma(ev.total)} · ${ev.claseNombre} · Resultado: ${ev.resultado}` +
-        (ev.motivos.length ? ` · ${ev.motivos.join(' · ')}` : '');
+        (ev.motivos.length ? ` · ${ev.motivos.join(' · ')}` : '') +
+        (a.seccion === 'RN' && ev.resultado === 'Apto' ? (() => {
+          const faltan = datos.requisitosRD(a).lista.slice(0, 4).filter(x => !x.ok).map(x => x.texto);
+          return faltan.length ? ` · Para pasar al RD falta: ${faltan.join('; ')}` : '';
+        })() : '');
     f.dataset.sucio = '1';
   };
   f.addEventListener('input', refrescar);

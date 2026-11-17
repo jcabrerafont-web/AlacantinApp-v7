@@ -7,6 +7,37 @@ import { ESTANDAR, REGLAS, BAREMO } from '../estandar.js';
 import * as datos from '../datos.js';
 import { h, pintar } from '../ui.js';
 
+
+// Requisito · norma · cómo lo cumple la app
+const NORMAS = [
+  ['Identificación individual de cada animal', 'RD 45/2019, art. 26.5 b', 'Anilla cerrada EE de FESACOCUR, única en el Libro. La app compone y valida el código (año, diámetro y número) y rechaza duplicados.'],
+  ['Registro de las genealogías', 'RD 45/2019, arts. 26.5 c y 14.5 a', 'Padre y madre de cada animal, pedigrí de 5 generaciones y matriz genealógica exportable en CSV.'],
+  ['Fiabilidad de la filiación', 'RD 45/2019, art. 26.5 d', 'El padre debe ser un gallo y la madre una gallina registrados y nacidos antes; no se admiten ciclos. El control de puesta con identificación del huevo asegura la madre.'],
+  ['Estructura del Libro y criterios de cada sección', 'RD 45/2019, art. 26.5 d', 'Registros Fundacional, Auxiliar, de Nacimientos, Definitivo y de Méritos, con sus requisitos aplicados por la app y comprobados en el servidor.'],
+  ['Filiación establecida para la sección principal', 'Reg. (UE) 2016/1012, anexo II (por analogía)', 'Para pasar al RD, el padre y la madre deben estar inscritos en el Libro y la explotación debe tener REGA. La ficha muestra qué falta.'],
+  ['Animales fundadores identificados (raza sin libro previo)', 'Reg. (UE) 2016/1012, art. 19 (por analogía)', 'Registro Fundacional, que solo asigna la Dirección Técnica y con motivo anotado.'],
+  ['Características de la raza y sistema de calificación', 'RD 45/2019, arts. 26.5 a y 3 e', 'Estándar ESGA025 completo y baremo de 100 puntos por las 12 regiones del Estándar, aplicado por inspectores.'],
+  ['Objetivos de conservación y control de la consanguinidad', 'RD 45/2019, arts. 26.5 f y 8.2 f', 'Consanguinidad de Wright, familias con rotación de Gobe, planificador de apareamientos y tamaño efectivo (Ne).'],
+  ['Control de rendimientos (aptitudes aviares)', 'RD 45/2019, arts. 3 h y 8.6 b', 'Campañas de control de puesta con pesaje individual: puesta, tamaño del huevo y masa de huevo.'],
+  ['Base de datos de la asociación', 'RD 45/2019, art. 14.1 y 14.5', 'Libro con identificación y genealogías, resultados del programa, criadores con sus efectivos y explotaciones (CSV en Informes).'],
+  ['Acceso a los datos y protección de datos personales', 'RD 45/2019, art. 14.6; RGPD', 'Cada criador ve lo suyo; la inspección y la administración, todo; el público, el censo sin titular, REGA ni ubicación.'],
+  ['Información pública sobre el programa de cría', 'RD 45/2019, art. 14.7', 'El Estándar y esta Guía son públicos, sin necesidad de registrarse.'],
+  ['Datos para el Catálogo y el Sistema Nacional de Información (ARCA)', 'RD 45/2019, art. 12; Protocolo CNZ 2025, 3.1 f, j, l', 'Informes de censo por sexo y edad, criadores, distribución territorial, Ne y endogamia.'],
+  ['Certificado zootécnico', 'Reg. (UE) 2016/1012, anexo V (por analogía)', 'Especie, libro, sección, identificación, fecha y país de nacimiento, criador y propietario, genealogía, resultados de calificación y puesta, lugar, fecha y firma.'],
+  ['Trazabilidad ante el control oficial', 'RD 45/2019, arts. 14.2 y 29', 'Historial de cambios en el servidor (quién, cuándo y qué) y actas de calificación firmadas.'],
+  ['Cambio de propietario sin perder el Libro', 'Reg. (UE) 2016/1012, anexo V j-k (por analogía)', 'La administración cambia el titular; el criador de origen se conserva siempre.']
+];
+// Lo que corresponde al Club
+const CLUB = [
+  ['Asociación con personalidad jurídica, estatutos y reglamento interno sin discriminación entre socios', 'RD 45/2019, art. 26.4 a y f'],
+  ['Personal cualificado: Dirección Técnica del Libro e inspectores calificadores', 'RD 45/2019, arts. 26.4 b y 3 e'],
+  ['Programa de cría escrito y aprobado por la autoridad competente: la comunidad autónoma con más reproductoras o, si el censo está repartido en al menos tres y ninguna supera el 60 %, el Ministerio', 'RD 45/2019, arts. 9 y 26.5'],
+  ['Solicitud de inclusión de la raza en el Catálogo Oficial, avalada por el informe de una entidad científica (historia, morfología, censos, caracterización genética, Ne…)', 'RD 45/2019, art. 6; Protocolo CNZ 2025, 3.1'],
+  ['Ratificar el baremo de calificación y las reglas que la app aplica como propuesta', 'RD 45/2019, art. 26.5 a y d'],
+  ['Conservación fuera del aviario (banco de germoplasma) y, si se usan, análisis de ADN en un laboratorio reconocido', 'RD 45/2019, arts. 8.2 f, 15 y 18'],
+  ['Reconocimiento de la Armiñada y la Milflores: ante FESACOCUR para exposiciones y, como variedad de la raza, con cinco generaciones en aislamiento reproductivo', 'RD 45/2019, art. 3 b; Protocolo CNZ 2025, 3.3']
+];
+
 export default function (main) {
   const R = REGLAS, E = ESTANDAR, CP = REGLAS.controlPuesta;
   const usuario = !datos.esVisitante();
@@ -25,10 +56,10 @@ export default function (main) {
       <ol class="pasos">
         <li><strong>Nacimiento (RN).</strong> Anilla el pollito con su anilla oficial y dalo de alta con su padre y su madre. Entra en el <em>Registro de Nacimientos</em>. ${enlace('#/alta', 'Alta rápida →')}</li>
         <li><strong>Calificación.</strong> Un inspector del Club puntúa al animal sobre 100 y lo pesa. Es <em>Apto</em> si no tiene ningún defecto descalificante y llega a <strong>${R.puntosMinimosApto.H} puntos (gallinas)</strong> o <strong>${R.puntosMinimosApto.M} (gallos)</strong>.</li>
-        <li><strong>Registro Definitivo (RD).</strong> Pasa a él el animal Apto, de variedad oficial, con <strong>${R.edadMinimaRD_meses / 12 === 1 ? 'un año' : `${R.edadMinimaRD_meses} meses`}</strong> cumplido. Solo los animales del RD (y del RF y RA) deben usarse como reproductores del Libro.</li>
+        <li><strong>Registro Definitivo (RD).</strong> Pasa a él el animal Apto, de variedad oficial, con <strong>${R.edadMinimaRD_meses / 12 === 1 ? 'un año' : `${R.edadMinimaRD_meses} meses`}</strong> cumplido, con <strong>padre y madre inscritos en el Libro</strong> y criado en una explotación con <strong>REGA</strong>. La ficha de cada animal te dice qué le falta. Solo los animales del RD (y del RF y RA) deben usarse como reproductores del Libro.</li>
         <li><strong>Registro de Méritos (RM).</strong> Para los reproductores sobresalientes: gallinas con ${R.rm.H.puntos} puntos o más y ${R.rm.H.hijosRD} hijos en el RD; gallos con ${R.rm.M.puntos} puntos y ${R.rm.M.hijosRD} hijos en el RD. También por un premio en exposición, con la misma puntuación. Lo acuerda la administración del Libro.</li>
       </ol>
-      <p class="peq muted">Además existen el <strong>Registro Fundacional (RF)</strong>, para los animales con los que arranca el Libro, y el <strong>Registro Auxiliar (RA)</strong>, para animales de buena morfología sin genealogía completa. Los asigna la Dirección Técnica.</p>
+      <p class="peq muted">Además existen el <strong>Registro Fundacional (RF)</strong>, para los animales con los que arranca el Libro, y el <strong>Registro Auxiliar (RA)</strong>, para animales de buena morfología sin genealogía completa. Los asigna la Dirección Técnica. Al empezar el Libro, los buenos animales que ya tenéis entran como fundadores, y sus hijos ya pueden llegar al RD.</p>
       <p class="peq muted">Las variedades en proceso de reconocimiento (${E.variedades.filter(v => !v.oficial).map(v => v.nombre).join(' y ')}) se registran y se siguen genealógicamente, pero no acceden al RD ni al RM hasta su reconocimiento oficial.</p>`)}
 
     ${seccion('anillas', '2. Anillas oficiales', h`
@@ -86,6 +117,15 @@ export default function (main) {
         <tr><th>Otoño</th><td>Elegir la reposición (un hijo de cada gallo, una hija de cada gallina). Calificar los animales que ya tienen un año.</td></tr>
       </tbody></table></div>
       <p class="peq muted">Orientativo: cada aviario y cada año pueden necesitar ajustes. Ante cualquier duda, consulta a la Dirección Técnica del Club.</p>`)}
+
+    ${seccion('normativa', '7. Qué exige la normativa y cómo lo cumple la app', h`
+      <p>La Alacantina es una raza <strong>aviar</strong>. El Reglamento (UE) 2016/1012 solo regula directamente bovino, porcino, ovino, caprino y équidos. Para las aves rige el <strong>artículo 26 del Real Decreto 45/2019</strong>, que aplica ese Reglamento «mutatis mutandis», adaptado a cada especie. La app sigue ambos.</p>
+      <div class="aviso-caja info peq"><strong>Situación de la raza:</strong> la Alacantina aún no figura en el Catálogo Oficial de Razas de Ganado de España (anexo I del RD 45/2019). El primer paso es solicitar su inclusión según el Protocolo de la Comisión Nacional de Zootecnia (5 de junio de 2025). La app ya reúne los datos que ese protocolo pide.</div>
+      <h3>Requisito por requisito</h3>
+      <ul class="lista-normas">${NORMAS.map(([req, norma, app]) => h`<li><strong>${req}</strong> <span class="muted peq">· ${norma}</span><br><span class="peq">✓ ${app}</span></li>`)}</ul>
+      <h3>Lo que tiene que hacer el Club (fuera de la app)</h3>
+      <ul class="lista-normas">${CLUB.map(([req, norma]) => h`<li>☐ ${req} <span class="muted peq">· ${norma}</span></li>`)}</ul>
+      <p class="peq muted">Resumen orientativo para el criador y la junta, no asesoramiento jurídico. Ante cualquier duda manda el texto oficial de cada norma.</p>`)}
 
     <p class="peq muted">Esta guía sigue el Estándar ${E.codigo}, las normas del Libro de la Alacantina y, donde el Club aún no tiene norma propia, la reglamentación oficial del Libro Genealógico de la Castellana Negra como referencia.</p>`);
 
