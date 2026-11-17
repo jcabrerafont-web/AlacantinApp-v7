@@ -24,7 +24,7 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 
 - **Variedades:**
   - Oficiales, según el Estándar 2025: Negra moteada, Pinta o exchequer y Blanca.
-  - Armiñada y Milflores se pueden registrar marcadas «en proceso de reconocimiento» (art. 3.3 del Protocolo CNZ), pero no acceden al Registro Definitivo.
+  - Blanca armiñada en negro y Milflores se pueden registrar marcadas «en proceso de reconocimiento» (art. 3.3 del Protocolo CNZ), pero no acceden al Registro Definitivo.
 - **Anilla oficial EE (FESACOCUR):**
   - El código del Libro es **E + año de nacimiento (2 cifras) + diámetro (mm) + número (6 cifras, con ceros delante)**. Por ejemplo, un gallo nacido en 2026 con la anilla nº 123 es `E2620000123`. Es el mismo sistema que usa el Libro de la Castellana Negra (manual GANECA).
   - En el alta se escribe solo el número grabado. El año sale de la fecha de nacimiento y el diámetro se propone según el sexo.
@@ -74,6 +74,11 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Sí las piden los expedientes de reconocimiento: el Protocolo CNZ 2025 (3.1 c: ambos sexos, varias edades y cada variedad) y el dossier técnico de FESACOCUR (gallo y gallina de perfil, fondo uniforme, misma variedad).
   - En el alta hay consejos para hacer una foto útil, y se guarda la fecha de cada foto (`fotos_fecha`) para saber la edad del animal en ella.
   - La Dirección Técnica tiene el **Dossier fotográfico** (`#/dossier`): mejores fotos de perfil por variedad, sexo y edad, qué falta para el Catálogo y para FESACOCUR, e impresión en PDF.
+- **Copia de seguridad** (`#/copia`, Herramientas):
+  - Descarga en JSON de todo el Libro del dispositivo: ejemplares, calificaciones, huevos, campañas y perfiles; fotos opcionales. Nunca incluye contraseñas ni la sesión.
+  - Restauración de dos formas: «fusionar», que conserva la versión más reciente de cada registro, o «reemplazar». Los archivos que no son copias o los registros incompletos se rechazan.
+  - En modo dispositivo, la copia de otra cuenta local (un móvil anterior) se adopta como propia. Con servidor, lo propio se reenvía al Libro central.
+  - Mi censo recuerda hacer la copia si nunca se ha hecho o tiene más de 30 días.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.

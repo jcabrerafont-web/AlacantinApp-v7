@@ -26,6 +26,7 @@ const RUTAS = [
   ['apareamientos', 'apareamientos', 'usuario'],
   ['informes', 'informes', 'usuario'],
   ['sincronizacion', 'sincronizacion', 'usuario'],
+  ['copia', 'copia', 'usuario'],
   ['calificar/:id', 'calificacion', ['inspector', 'administrador']],
   ['dossier', 'dossier', ['inspector', 'administrador']],
   ['usuarios', 'usuarios', ['administrador']]

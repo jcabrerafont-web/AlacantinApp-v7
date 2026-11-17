@@ -36,7 +36,7 @@ export const ESTANDAR = Object.freeze({
       detalle: 'Tarsos blanco rosáceo con roña, pico de color córneo con manchas negras y la mandíbula superior más oscura que la inferior.' }),
     Object.freeze({ id: 'blanca', nombre: 'Blanca', oficial: true, flameadoDescalifica: false,
       detalle: 'Tarsos blanco rosáceo y pico color hueso.' }),
-    Object.freeze({ id: 'arminada', nombre: 'Armiñada', oficial: false, flameadoDescalifica: false,
+    Object.freeze({ id: 'arminada', nombre: 'Blanca armiñada en negro', oficial: false, flameadoDescalifica: false,
       detalle: 'En proceso de reconocimiento: sin descripción oficial en el Estándar.' }),
     Object.freeze({ id: 'milflores', nombre: 'Milflores', oficial: false, flameadoDescalifica: false,
       detalle: 'En proceso de reconocimiento: sin descripción oficial en el Estándar.' })

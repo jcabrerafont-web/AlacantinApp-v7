@@ -283,6 +283,47 @@ if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}
 await ir('#/alta');
 ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Club') || await page.$eval('main', m => m.textContent.includes('Cómo hacer una foto que sirva al Club')), 'Alta: consejos para la foto de perfil');
 
+// 6d. Copia de seguridad
+await ir('#/censo');
+ok((await page.innerText('#censo-copia')).includes('copia de seguridad'), 'Mi censo recuerda hacer la copia de seguridad');
+await ir('#/copia');
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/copia.png` });
+const [descargaCopia] = await Promise.all([page.waitForEvent('download'), page.click('#cp-descargar')]);
+const rutaCopia = await descargaCopia.path();
+const textoCopia = (await import('node:fs')).readFileSync(rutaCopia, 'utf8');
+const copiaJson = JSON.parse(textoCopia);
+ok(descargaCopia.suggestedFilename().startsWith('AlacantinApp_copia_') && copiaJson.formato === 'alacantinapp-respaldo' && copiaJson.datos.animales.length === 3 && !textoCopia.includes('credenciales'),
+  `Copia descargada en JSON sin contraseñas (${copiaJson.datos.animales.length} ejemplares)`);
+await ir('#/censo');
+ok((await page.innerText('#censo-copia')).trim() === '', 'Tras la copia desaparece el recordatorio');
+const restauracion = await page.evaluate(async (copia) => {
+  const db = await import('./js/db.js');
+  const d = await import('./js/datos.js');
+  const r = await import('./js/respaldo.js');
+  const antes = (await db.todos('animales')).length;
+  let basura;
+  try { r.validarCopia({ hola: 1 }); basura = 'aceptada'; } catch (e) { basura = e.message; }
+  for (const t of ['animales', 'calificaciones', 'huevos', 'campanas']) await db.vaciar(t);
+  await d.cargar();
+  const vacio = d.estado.todos.length;
+  const { cuenta } = await r.restaurar(r.validarCopia(copia), d.estado.perfil, { modo: 'reemplazar' });
+  await d.cargar();
+  // Copia de "otro móvil": otra cuenta local -> los ejemplares pasan a la cuenta actual
+  const otra = structuredClone(copia);
+  const viejo = 'cuenta-antigua-movil';
+  otra.perfil = { id: viejo, nombre: 'Yo en el móvil viejo' };
+  otra.datos.animales = [{ ...copia.datos.animales[0], id: 'animal-movil-viejo', anilla: 'E2420000099', usuario_id: viejo, criador_id: viejo, padre_id: null, madre_id: null }];
+  otra.datos.calificaciones = []; otra.datos.huevos = []; otra.datos.campanas = [];
+  const { adoptada } = await r.restaurar(r.validarCopia(otra), d.estado.perfil, { modo: 'fusionar' });
+  await d.cargar();
+  const adoptado = d.animal('animal-movil-viejo');
+  return { antes, vacio, restaurados: cuenta.animales, despues: d.estado.todos.length, basura, adoptada, titular: adoptado?.usuario_id === d.estado.perfil.id, editable: d.puedeEditar(adoptado) };
+}, copiaJson);
+ok(restauracion.vacio === 0 && restauracion.restaurados === restauracion.antes && restauracion.despues === restauracion.antes + 1,
+  `Borrado total y restauración completa (${JSON.stringify(restauracion)})`);
+ok(restauracion.basura.includes('no es una copia'), 'Rechaza archivos que no son copias de AlacantinApp');
+ok(restauracion.adoptada && restauracion.titular && restauracion.editable, 'Copia de otro móvil: sus ejemplares pasan a la cuenta actual y se pueden editar');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');
@@ -316,7 +357,7 @@ await ctx.setOffline(true);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a', { timeout: 8000 });
 await ir('#/censo');
-ok((await page.$$('#censo-lista a.item')).length === 3, 'Sin cobertura: la app abre y el censo sigue disponible');
+ok((await page.$$('#censo-lista a.item')).length === 4, 'Sin cobertura: la app abre y el censo sigue disponible (4 ejemplares tras la restauración)');
 ok((await page.innerText('#estado-red')).includes('Sin cobertura'), 'Indicador de cobertura');
 await ctx.setOffline(false);
 

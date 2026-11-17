@@ -11,6 +11,7 @@ export default function (main) {
   const grupos = [
     ['Mi cuenta', [
       ['#/perfil', '🏡', 'Mi aviario', 'Nombre, REGA, municipio y ubicación que heredan las altas'],
+      ['#/copia', '💾', 'Copia de seguridad', supabaseConfigurado() ? 'Descargar o restaurar tus datos' : 'Imprescindible: tus datos solo están en este dispositivo'],
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],
     ['Cría', [

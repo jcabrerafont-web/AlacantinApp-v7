@@ -4,6 +4,8 @@ import { esAuditor } from '../auth.js';
 import { ESTANDAR, nombreVariedad, tramoEdad } from '../estandar.js';
 import { nivelFx } from '../genetica.js';
 import { h, pintar, $, pct } from '../ui.js';
+import { copiaPendiente } from '../respaldo.js';
+import { supabaseConfigurado } from '../config.js';
 
 const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const filtros = { q: '', sexo: '', variedad: '', seccion: '', bajas: false };
@@ -17,6 +19,7 @@ export default function (main) {
       ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">➕ Alta</a>` : ''}</div>
     ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
+    <div id="censo-copia"></div>
     <div id="censo-kpis" class="kpis"></div>
     <div class="tarjeta">
       <label for="f-q">Buscar</label><input id="f-q" type="search" placeholder="Anilla o nombre" value="${filtros.q}">
@@ -33,6 +36,15 @@ export default function (main) {
     </div>
     <div class="tarjeta"><ul id="censo-lista" class="lista"></ul></div>`);
 
+  // Recordatorio de copia de seguridad (sobre todo en modo dispositivo)
+  if (p) {
+    const propios = datos.estado.todos.filter(a => a.usuario_id === p.id).length;
+    copiaPendiente(p, propios).then(r => {
+      const caja = $('#censo-copia', main);
+      if (!r || !caja) return;
+      pintar(caja, h`<a class="aviso-caja ${supabaseConfigurado() ? 'info' : 'aviso'} peq" href="#/copia" style="display:block;text-decoration:none">💾 ${r.dias === null ? 'Aún no has hecho ninguna copia de seguridad' : `Tu última copia de seguridad es de hace ${r.dias} días`}${supabaseConfigurado() ? '' : ': tus datos solo están en este dispositivo'}. <strong>Hacer copia →</strong></a>`);
+    });
+  }
   for (const [id, k] of [['#f-sexo', 'sexo'], ['#f-var', 'variedad'], ['#f-sec', 'seccion']]) $(id, main).value = filtros[k];
   if ($('#f-bajas', main)) $('#f-bajas', main).checked = filtros.bajas;
 
