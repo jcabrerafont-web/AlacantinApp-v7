@@ -47,6 +47,17 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Intro abre la ficha; también busca por nombre.
 - **Fecha de hoy** en la hora del móvil, no en UTC. En el servidor, `public.hoy()` usa la hora de España: antes, entre la medianoche y la 1:00 (2:00 en verano), un huevo de hoy se habría guardado con la fecha de ayer o se habría rechazado.
 
+## Protección de datos (v7.13.0)
+
+- **Información por capas** (AEPD; LOPDGDD art. 11; RGPD art. 13):
+  - **Registro:** tabla de información básica y casilla obligatoria «Tengo 14 años o más y he leído la información sobre protección de datos».
+  - **Política completa** en `#/privacidad`, pública, redactada para esta app. Responsable: `CONFIG.club`, contacto clubalacantina@gmail.com.
+- **Mi aviario:**
+  - la ubicación GPS se guarda solo al pulsar el botón (consentimiento) y se borra con un toque;
+  - «Descargar mis datos» (JSON) y «Pedir la baja o ejercer un derecho» (correo al Club).
+- **Informes de problemas:** llegan a clubalacantina@gmail.com (`CONFIG.soporteEmail`).
+- El borrador de la política, con las tareas del Club, está en el proyecto: `POLITICA_PRIVACIDAD.md`.
+
 ## Pulido (v7.12.0)
 
 - **Pantalla:** Herramientas → Pantalla: Automático, Claro, Oscuro o **☀️ Sol**. El modo sol tiene máximo contraste, letra un 12,5 % mayor y bordes gruesos. Se guarda en el dispositivo y se aplica antes de pintar, sin parpadeo.
@@ -205,6 +216,11 @@ Toda la normativa vive en **`js/estandar.js`**: es la única fuente de verdad de
 
 ### 1. Supabase (servidor del Libro)
 
+> **Protección de datos:**
+> - Al crear el proyecto, elegir la región **Central EU (Frankfurt)**, no el grupo general «Europe», que incluye Londres y Zúrich. La política de privacidad dice que los datos están en la UE.
+> - Aceptar el contrato de encargado de Supabase (supabase.com/legal/dpa) y el de Vercel (vercel.com/legal/dpa).
+> - Completar el NIF y el domicilio del Club en `CONFIG.club` (`js/config.js`).
+
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. En *SQL Editor*, ejecuta completo `supabase/schema.sql`. Es idempotente.
 3. Regístrate en la app con el correo de la Dirección Técnica.
@@ -248,7 +264,7 @@ docs/                 Estándar oficial en PDF
 ```bash
 node tests/genetica.test.mjs                  # 28 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 130 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 136 comprobaciones en Chrome (Playwright)
 node tests/pwa.mjs                            # Service Worker: arranque con mala cobertura y actualización de versión
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```

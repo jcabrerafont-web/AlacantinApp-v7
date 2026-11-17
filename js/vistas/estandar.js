@@ -48,5 +48,6 @@ export default function (main) {
       <span class="item-sub">Guía del criador: anillas, calificación, familias y control de puesta</span></span><span aria-hidden="true">›</span></a>
 
     <p><a class="btn" href="./docs/Estandar-Alacantina2025.pdf" target="_blank" rel="noopener">📄 Ver el Estándar oficial (PDF)</a></p>
+    <p class="peq muted"><a href="#/privacidad">Política de privacidad</a></p>
   `);
 }

@@ -14,6 +14,7 @@ export default function (main) {
     ['Mi cuenta', [
       ['#/perfil', '🏡', 'Mi aviario', 'Nombre, REGA, municipio y ubicación que heredan las altas'],
       ['#/copia', '💾', 'Copia de seguridad', supabaseConfigurado() ? 'Descargar o restaurar tus datos' : 'Imprescindible: tus datos solo están en este dispositivo'],
+      ['#/privacidad', '🔒', 'Privacidad y tus datos', 'Qué datos usa la app, para qué, y cómo descargarlos o pedir la baja'],
       ['#/problema', '🐞', 'Informar de un problema', 'Cuenta qué ha pasado y envíalo por WhatsApp o correo'],
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],

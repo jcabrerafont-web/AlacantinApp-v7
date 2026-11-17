@@ -2,7 +2,8 @@
 import * as datos from '../datos.js';
 import * as auth from '../auth.js';
 import { iniciarSesion } from '../app.js';
-import { h, pintar, $, aviso } from '../ui.js';
+import { h, pintar, $, aviso, descargar, hoyISO } from '../ui.js';
+import { CONFIG } from '../config.js';
 
 export default function (main) {
   const p = datos.estado.perfil;
@@ -21,11 +22,24 @@ export default function (main) {
       </div>
       <fieldset><legend>Ubicación del aviario</legend>
         <p id="pf-gps" class="muted">${p.latitud != null ? `${Number(p.latitud).toFixed(5)}, ${Number(p.longitud).toFixed(5)}` : 'Sin ubicación registrada'}</p>
-        <button class="btn" type="button" id="pf-capturar">📍 Usar mi ubicación actual</button>
-        <p class="ayuda">Captúrala estando en el aviario. Solo la ven tú, los inspectores y la administración del Club.</p>
+        <div class="fila" style="flex-wrap:wrap;gap:.5rem"><button class="btn" type="button" id="pf-capturar">📍 Usar mi ubicación actual</button>
+          <button class="btn" type="button" id="pf-borrar-gps" ${p.latitud != null ? '' : h`hidden`}>Borrar la ubicación</button></div>
+        <p class="ayuda">Opcional. Sirve para que el inspector llegue al aviario. Al pulsar «Usar mi ubicación actual» das tu consentimiento para que el Club la guarde; puedes borrarla cuando quieras. Solo la ven tú, la inspección y la administración del Club.</p>
       </fieldset>
       <button class="btn btn-primario" type="submit">Guardar</button>
     </form>
+    <div class="tarjeta" id="pf-mis-datos"><h2>Tus datos y tus derechos</h2>
+      <p class="peq">Aquí puedes corregir tus datos. También puedes descargar una copia de todo lo tuyo (portabilidad) o pedir la baja y ejercer tus demás derechos. <a href="#/privacidad">Política de privacidad</a></p>
+      <div class="fila" style="flex-wrap:wrap;gap:.5rem">
+        <button class="btn" type="button" id="pf-descargar">⬇️ Descargar mis datos</button>
+        <a class="btn" id="pf-derechos" href="mailto:${CONFIG.club.email}?subject=${encodeURIComponent('Protección de datos: ejercicio de derechos')}&body=${encodeURIComponent(`Nombre: ${p.nombre || ''}
+Correo de la cuenta: ${p.email || ''}
+
+Solicito (marca lo que corresponda): acceso / rectificación / supresión (baja) / oposición / limitación / portabilidad.
+
+Detalle:
+`)}">✉️ Pedir la baja o ejercer un derecho</a>
+      </div></div>
     <form id="form-pass" class="tarjeta" novalidate>
       <h2>Cambiar contraseña</h2>
       <div class="campo"><label for="pf-pass">Nueva contraseña (mín. 8)</label><input id="pf-pass" type="password" autocomplete="new-password" minlength="8"></div>
@@ -43,6 +57,32 @@ export default function (main) {
   $('#pf-rega', f).addEventListener('input', ayudaRega);
   ayudaRega();
 
+  // Retirar el consentimiento de la ubicación: se borra al momento
+  $('#pf-borrar-gps', f).addEventListener('click', async () => {
+    try {
+      const { perfil, paraServidor } = await auth.actualizarPerfil(datos.estado.perfil, { latitud: null, longitud: null });
+      await datos.guardarPerfilServidor(paraServidor);
+      await iniciarSesion(perfil);
+      lat = null; lng = null;
+      $('#pf-gps', f).textContent = 'Sin ubicación registrada';
+      $('#pf-borrar-gps', f).hidden = true;
+      aviso('Ubicación borrada.', 'ok');
+    } catch (err) { aviso(err.message, 'error'); }
+  });
+  // Portabilidad: todo lo del usuario en un archivo JSON legible
+  $('#pf-descargar', main).addEventListener('click', () => {
+    const e = datos.estado, yo = e.perfil.id;
+    const mios = e.todos.filter(a => a.usuario_id === yo || a.criador_id === yo);
+    const ids = new Set(mios.map(a => a.id));
+    const perfil = Object.fromEntries(['id', 'nombre', 'email', 'telefono', 'numero_socio', 'rega', 'municipio', 'provincia', 'latitud', 'longitud', 'rol', 'created_at', 'updated_at'].map(k => [k, e.perfil[k] ?? null]));
+    const contenido = { formato: 'alacantinapp-mis-datos', fecha: new Date().toISOString(), responsable: CONFIG.club.nombre, perfil,
+      ejemplares: mios.map(({ fotos, ...a }) => ({ ...a, fotos: Object.keys(fotos || {}) })),
+      calificaciones: e.calificaciones.filter(c => ids.has(c.animal_id)), huevos: e.huevos.filter(x => ids.has(x.animal_id)),
+      campanas: e.campanas.filter(x => x.usuario_id === yo), lotes: e.lotes.filter(x => x.usuario_id === yo),
+      incubaciones: e.incubaciones.filter(x => x.usuario_id === yo), solicitudes: e.solicitudes.filter(x => x.usuario_id === yo) };
+    descargar(JSON.stringify(contenido, null, 2), `AlacantinApp_mis_datos_${hoyISO()}.json`, 'application/json');
+    aviso('Descargado: un archivo con todos tus datos.', 'ok');
+  });
   $('#pf-capturar', f).addEventListener('click', () => {
     if (!navigator.geolocation) { aviso('Este dispositivo no ofrece geolocalización.', 'error'); return; }
     $('#pf-gps', f).textContent = 'Obteniendo ubicación…';
@@ -50,6 +90,7 @@ export default function (main) {
       lat = Math.round(pos.coords.latitude * 1e6) / 1e6;
       lng = Math.round(pos.coords.longitude * 1e6) / 1e6;
       $('#pf-gps', f).textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(pos.coords.accuracy)} m)`;
+      $('#pf-borrar-gps', f).hidden = false;
     }, err => {
       $('#pf-gps', f).textContent = 'No se pudo obtener la ubicación';
       aviso(err.code === 1 ? 'Permiso de ubicación denegado.' : 'Sin señal GPS. Prueba en exterior.', 'error');

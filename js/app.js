@@ -14,6 +14,7 @@ const RUTAS = [
   ['estandar', 'estandar', '*'],
   ['guia', 'guia', '*'],
   ['programa', 'programa', '*'],
+  ['privacidad', 'privacidad', '*'],
   ['censo', 'censo', '*'],
   ['animal/:id', 'ficha', '*'],
   ['pedigri/:id', 'pedigri', '*'],

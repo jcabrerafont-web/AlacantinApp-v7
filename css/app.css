@@ -336,3 +336,10 @@ body.escribiendo .banner-actualizar { display: none; }
 .lista-pasos li a { display: inline-block; min-height: 32px; }
 .lista-pasos li.hecho a { color: var(--texto-2); text-decoration: line-through; }
 .pre-informe { white-space: pre-wrap; word-break: break-word; font-size: .78rem; background: var(--fondo); padding: .5rem; border-radius: 8px; max-height: 40vh; overflow: auto; }
+/* Protección de datos */
+.info-basica { font-size: .85rem; margin: .75rem 0; }
+.info-basica caption { text-align: left; font-weight: 800; padding-bottom: .35rem; }
+.info-basica th { width: 7.5rem; vertical-align: top; text-transform: none; letter-spacing: 0; font-size: .82rem; color: var(--texto); }
+.texto-legal h2 { font-size: 1.05rem; margin-top: 1.25rem; }
+.texto-legal h2:first-child { margin-top: 0; }
+.texto-legal li { margin-bottom: .35rem; }

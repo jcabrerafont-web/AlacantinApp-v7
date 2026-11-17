@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 // Prueba de extremo a extremo en Chrome (modo dispositivo, sin Supabase ni CDN)
 // Uso: npm i -D playwright && npx playwright install chromium && node tests/e2e.mjs http://localhost:8820
 //      (opcional) CHROME=/ruta/a/chrome para usar un navegador ya instalado
@@ -41,6 +42,12 @@ await page.click('[data-tab="registro"]');
 await page.fill('#r-nombre', 'Criadora <b>Prueba</b>');
 await page.fill('#r-email', 'criadora@ejemplo.es');
 await page.fill('#r-pass', 'clave-segura-1');
+const capa = await page.$eval('#form-registro .info-basica', t => t.textContent.replace(/\s+/g, ' '));
+ok(['Responsable', 'Finalidad', 'Legitimación', 'Destinatarios', 'Derechos', 'clubalacantina@gmail.com'].every(x => capa.includes(x)), 'Registro: información básica de protección de datos (responsable, finalidad, legitimación, destinatarios, derechos)');
+await page.click('#form-registro button[type=submit]');
+await page.waitForTimeout(400);
+ok(page.url().endsWith('#/acceso') && (await aviso()).includes('14 años'), 'Sin marcar «14 años y he leído la información» no se crea la cuenta');
+await page.check('#r-acepto');
 await page.click('#form-registro button[type=submit]');
 await page.waitForTimeout(1200);
 ok(page.url().endsWith('#/perfil'), 'Tras registrarse va a Mi aviario');
@@ -572,6 +579,22 @@ const inf = await page.$eval('.pre-informe', e => e.textContent);
 ok(inf.includes('Fallo de prueba con [correo]') && !inf.includes('criadora@ejemplo.es') && !inf.includes('Criadora') && inf.includes('AlacantinApp 7.'), 'Informe de problemas: versión, conexión y últimos errores, sin nombre ni correo');
 ok(!!(await page.$('#pr-wa')) && !!(await page.$('#pr-mail')) && !!(await page.$('#pr-copiar')), 'Informe de problemas: enviar por WhatsApp, por correo o copiar');
 await page.evaluate(async () => (await import('./js/diagnostico.js')).borrarErrores());
+await cambiarRolLocal('inspector');
+await ir('#/censo');
+
+// 6l. Privacidad: política pública, ubicación con consentimiento y borrable, descarga de los datos propios
+await cambiarRolLocal('criador');
+await ir('#/privacidad');
+const pol = await page.$eval('main', m => m.textContent.replace(/\s+/g, ' '));
+ok(['Quién es el responsable', 'Qué datos tratamos', 'base legal', 'Quién ve tus datos', 'Supabase', 'Vercel', 'Cuánto tiempo', 'Tus derechos', 'Agencia Española de Protección de Datos', '14 años'].every(x => pol.includes(x)), 'Política de privacidad completa (responsable, datos, bases legales, destinatarios, proveedores, plazos, derechos, AEPD, edad)');
+await page.evaluate(async () => { const d = await import('./js/datos.js'); const auth = await import('./js/auth.js'); const { perfil } = await auth.actualizarPerfil(d.estado.perfil, { latitud: 38.27, longitud: -0.7 }); d.estado.perfil = perfil; });
+await ir('#/censo'); await ir('#/perfil');
+await page.click('#pf-borrar-gps'); await page.waitForTimeout(500);
+ok(await page.evaluate(async () => (await import('./js/datos.js')).estado.perfil.latitud == null) && (await page.innerText('#pf-gps')).includes('Sin ubicación'), 'Mi aviario: la ubicación (consentimiento) se borra con un toque');
+const [misDatos] = await Promise.all([page.waitForEvent('download'), page.click('#pf-descargar')]);
+const md = JSON.parse(fs.readFileSync(await misDatos.path(), 'utf8'));
+ok(misDatos.suggestedFilename().startsWith('AlacantinApp_mis_datos_') && md.perfil.email === 'criadora@ejemplo.es' && md.ejemplares.length >= 3 && !JSON.stringify(md).includes('clave-segura'), `Descargar mis datos: perfil, ${md.ejemplares.length} ejemplares, huevos y calificaciones, sin contraseña`);
+ok((await page.getAttribute('#pf-derechos', 'href')).startsWith('mailto:clubalacantina@gmail.com'), 'Pedir la baja o ejercer un derecho: correo al Club');
 await cambiarRolLocal('inspector');
 await ir('#/censo');
 

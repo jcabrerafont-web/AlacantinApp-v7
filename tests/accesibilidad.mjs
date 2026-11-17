@@ -12,7 +12,7 @@ for (const tema of ['claro', 'oscuro', 'sol']) {
   await page.goto(base + '/'); await page.waitForSelector('#barra a');
   const ir = async (x) => { await page.evaluate(h => { location.hash = h; }, x); await page.waitForTimeout(450); };
   // visitante
-  const rutasVis = ['#/estandar', '#/guia', '#/censo', '#/programa', '#/acceso'];
+  const rutasVis = ['#/estandar', '#/guia', '#/censo', '#/programa', '#/acceso', '#/privacidad'];
   const rutasUsu = ['#/censo', '#/hoy', '#/alta', '#/puesta', '#/herramientas', '#/reproduccion', '#/inspeccion', '#/campanas', '#/auditoria', '#/acta', '#/perfil', '#/informes', '#/copia', '#/problema', '#/sincronizacion', '#/apareamientos'];
   const revisar = async () => page.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); const c = getComputedStyle(e); return r.width > 0 && r.height > 0 && c.visibility !== 'hidden' && c.display !== 'none' && c.opacity !== '0'; };
@@ -48,7 +48,7 @@ for (const tema of ['claro', 'oscuro', 'sol']) {
   for (const r of rutasVis) { await ir(r); res['vis ' + r] = await revisar(); }
   await ir('#/acceso'); await page.click('[data-tab="registro"]');
   await page.fill('#r-nombre', 'Ana'); await page.fill('#r-email', `a${tema}@x.es`); await page.fill('#r-pass', 'clave-segura-1');
-  await page.click('#form-registro button[type=submit]'); await page.waitForTimeout(1200);
+  await page.check('#r-acepto'); await page.click('#form-registro button[type=submit]'); await page.waitForTimeout(1200);
   await page.evaluate(async () => { const d = await import('./js/datos.js'); await d.guardarAnimal({ anilla: 'E2420000001', sexo: 'M', variedad: 'blanca', fecha_nacimiento: '2024-03-01', seccion: 'RN' }); await d.guardarAnimal({ anilla: 'E2418000002', sexo: 'H', variedad: 'blanca', fecha_nacimiento: '2024-03-01', seccion: 'RN' }); });
   for (const r of rutasUsu) { await ir(r); res['usu ' + r] = await revisar(); }
   // foco tras navegar
