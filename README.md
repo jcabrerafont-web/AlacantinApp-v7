@@ -40,7 +40,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - El resultado es **Apto** con clase EX, MB, B o R. Lo calcula la app y lo **recalcula el servidor**: el inspector no lo elige.
   - **Peso:** obligatorio en la calificación. Se pesa al animal y se anota en gramos; la app y el servidor lo contrastan con el Estándar (gallo 3000–3500 g, gallina 2200–2600 g) y el acta lo refleja como conforme o fuera de rango. No suma puntos.
   - Para ajustar el reparto hay que cambiar `MAXIMOS` en `js/estandar.js` y `baremo_maximos()` en `supabase/schema.sql`.
-- **Registro Definitivo:** se alcanza con resultado Apto, en una variedad oficial y con 180 días o más de edad. Es una regla del Club, configurable en `REGLAS`, y la aplica también el servidor.
+- **Registro Definitivo:** equiparado a la reglamentación oficial del Libro de la Castellana Negra (anexo I, A.6). Se exige:
+  - resultado **Apto**: sin descalificación y con **65 puntos o más las gallinas y 70 los gallos**;
+  - variedad oficial;
+  - **un año de edad**.
+
+  Un animal más joven puede salir Apto, pero sigue en RN: la ficha indica desde qué fecha puede calificarse de nuevo. Estos criterios están en `REGLAS` y los aplica también el servidor.
 - **Registro de Méritos (RM):** el Club no tenía criterio propio. Se equipara a la reglamentación oficial del Libro Genealógico de la Castellana Negra (anexo I, apdo. A.7, MAPA):
   - Acceden ejemplares del **RF o del RD**, de variedad oficial, que tengan una calificación (no descalificada) de **80 puntos o más las gallinas y 85 los gallos**, y **3 (gallinas) o 10 (gallos) descendientes** en el Registro Definitivo.
   - Vía alternativa, tomada del reglamento de la Gallina del Sobrarbe: con la misma calificación mínima, un **premio en feria, concurso o exposición**, que debe describirse.

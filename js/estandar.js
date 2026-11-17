@@ -106,7 +106,10 @@ export const ESTANDAR = Object.freeze({
 
 // Reglas del Club (no proceden del Estándar; ajustables por la Dirección Técnica)
 export const REGLAS = Object.freeze({
-  edadMinimaRD_dias: 180,            // Edad mínima para promocionar RN -> RD tras calificación Apto
+  // Paso RN -> RD, equiparado a la reglamentación del LG de la Castellana Negra
+  // (anexo I, A.6): un año de edad y 65 puntos las gallinas / 70 los gallos.
+  edadMinimaRD_meses: 12,
+  puntosMinimosApto: Object.freeze({ H: 65, M: 70 }),
   // Registro de Méritos: equiparado a la reglamentación oficial del LG de la
   // Castellana Negra (anexo I, apdo. A.7): reproductores sobresalientes del RF o
   // RD, a propuesta de la asociación y con acuerdo de la comisión del Libro.
@@ -141,6 +144,13 @@ export function pesoConforme(sexo, gramos) {
 export function huevoApto(gramos, cascara) {
   const g = Number(gramos);
   return Number.isFinite(g) && g >= ESTANDAR.huevo.min && g <= ESTANDAR.huevo.max && cascara === ESTANDAR.huevo.cascara;
+}
+
+// 'AAAA-MM-DD' + n meses -> 'AAAA-MM-DD'
+export function sumarMeses(fechaISO, n) {
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const f = new Date(Date.UTC(y, m - 1 + n, d));
+  return f.toISOString().slice(0, 10);
 }
 
 export function edadMeses(fechaNacimiento, hoy = new Date()) {
@@ -194,8 +204,6 @@ export const BAREMO = Object.freeze({
     Object.freeze({ id: 'I', nombre: 'Insuficiente', min: 0 })
   ]),
   descalificado: Object.freeze({ id: 'D', nombre: 'Descalificado' }),
-  // Clases que se admiten en el Libro (en el modelo GANECA: EX, MB, B y R)
-  clasesAptas: Object.freeze(['EX', 'MB', 'B', 'R']),
   paso: 0.5
 });
 
@@ -212,7 +220,7 @@ export function puntoValido(valor, max) {
 
 // Evalúa una calificación morfológica.
 // puntos: { [apartadoId]: number }   defectos: ids de defectos graves observados
-export function evaluarCalificacion({ sexo, variedad, pesoG, puntos = {}, defectos = [] }) {
+export function evaluarCalificacion({ sexo, variedad, pesoG, fechaNacimiento, puntos = {}, defectos = [], hoy = new Date() }) {
   const v = variedadPorId(variedad);
   const graves = [...new Set(defectos)].filter(id => {
     const d = ESTANDAR.defectosGraves.find(x => x.id === id);
@@ -230,12 +238,17 @@ export function evaluarCalificacion({ sexo, variedad, pesoG, puntos = {}, defect
   }
   const completa = sinPuntuar.length === 0 && invalidos.length === 0;
   const clase = graves.length ? BAREMO.descalificado : claseDe(total);
-  const apto = completa && BAREMO.clasesAptas.includes(clase.id);
+  const minimo = REGLAS.puntosMinimosApto[sexo] ?? REGLAS.puntosMinimosApto.M;
+  const apto = completa && clase.id !== 'D' && total >= minimo;
+  const meses = edadMeses(fechaNacimiento, hoy);
+  const cumpleEdad = meses !== null && meses >= REGLAS.edadMinimaRD_meses;
+  const fechaEdadRD = fechaNacimiento ? sumarMeses(fechaNacimiento, REGLAS.edadMinimaRD_meses) : null;
   const motivos = [];
   graves.forEach(id => motivos.push(ESTANDAR.defectosGraves.find(d => d.id === id).texto));
-  if (!graves.length && completa && !apto) motivos.push(`Puntuación inferior a ${BAREMO.clases.find(c => c.id === 'R').min}`);
+  if (!graves.length && completa && !apto) motivos.push(`Menos de ${minimo} puntos (mínimo para ${sexo === 'H' ? 'gallinas' : 'gallos'})`);
   if (!v) motivos.push('Variedad no registrada');
   else if (!v.oficial) motivos.push(`Variedad «${v.nombre}» en proceso de reconocimiento`);
+  if (apto && v?.oficial && !cumpleEdad && fechaEdadRD) motivos.push(`Sin acceso a RD hasta cumplir un año (${fechaEdadRD.split('-').reverse().join('/')}): habrá que calificarlo de nuevo`);
   return {
     completa, sinPuntuar, invalidos,
     total: Math.round(total * 2) / 2,
@@ -243,7 +256,8 @@ export function evaluarCalificacion({ sexo, variedad, pesoG, puntos = {}, defect
     defectosGraves: graves,
     pesoConforme: pesoConforme(sexo, pesoG),
     resultado: apto ? 'Apto' : 'No apto',
-    accedeRD: apto && Boolean(v?.oficial),
+    minimo, cumpleEdad, fechaEdadRD,
+    accedeRD: apto && Boolean(v?.oficial) && cumpleEdad,
     motivos
   };
 }

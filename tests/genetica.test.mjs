@@ -91,7 +91,7 @@ t('Baremo: validación de puntos (rango, pasos de 0,5, coma decimal)', () => {
 
 t('Calificación: total, clase, descalificación y acceso a RD', () => {
   const max = Object.fromEntries(BAREMO.apartados.map(x => [x.id, x.max]));
-  const e1 = evaluarCalificacion({ sexo: 'M', variedad: 'negra-moteada', pesoG: 3200, puntos: max });
+  const e1 = evaluarCalificacion({ sexo: 'M', variedad: 'negra-moteada', pesoG: 3200, fechaNacimiento: '2024-01-01', puntos: max });
   assert.equal(e1.total, 100); assert.equal(e1.clase, 'EX'); assert.equal(e1.resultado, 'Apto'); assert.equal(e1.accedeRD, true);
   const e2 = evaluarCalificacion({ sexo: 'M', variedad: 'negra-moteada', puntos: max, defectos: ['flameado'] });
   assert.equal(e2.clase, 'D'); assert.equal(e2.resultado, 'No apto');
@@ -128,5 +128,18 @@ t('Registro de Méritos: requisitos equiparados al LG de la Castellana Negra', a
   assert.deepEqual({ ...REGLAS.rm.H }, { puntos: 80, hijosRD: 3 });
   assert.deepEqual({ ...REGLAS.rm.M }, { puntos: 85, hijosRD: 10 });
   assert.deepEqual([...REGLAS.rm.seccionesOrigen], ['RF', 'RD']);
+});
+t('Paso a RD como en la Castellana: gallinas >= 65, gallos >= 70, un año de edad', () => {
+  const max = Object.fromEntries(BAREMO.apartados.map(x => [x.id, x.max]));
+  const p67 = { ...max, tronco: 0, orejillas: 0, cola: 7, cabeza: 6 }; // 100-15-10-3 = 72 -> ajustar a 67
+  p67.plumaje = 5; // 72-5 = 67
+  const hoy = new Date('2026-11-17T12:00:00');
+  const g67 = evaluarCalificacion({ sexo: 'M', variedad: 'blanca', fechaNacimiento: '2024-05-01', puntos: p67, hoy });
+  assert.equal(g67.total, 67); assert.equal(g67.clase, 'R'); assert.equal(g67.resultado, 'No apto');
+  const h67 = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', fechaNacimiento: '2024-05-01', puntos: p67, hoy });
+  assert.equal(h67.resultado, 'Apto'); assert.equal(h67.accedeRD, true);
+  const joven = evaluarCalificacion({ sexo: 'H', variedad: 'blanca', fechaNacimiento: '2026-03-01', puntos: max, hoy });
+  assert.equal(joven.resultado, 'Apto'); assert.equal(joven.accedeRD, false); assert.equal(joven.fechaEdadRD, '2027-03-01');
+  assert.equal(evaluarCalificacion({ sexo: 'H', variedad: 'blanca', fechaNacimiento: '2025-11-17', puntos: max, hoy }).accedeRD, true);
 });
 console.log(`\n${ok} pruebas superadas`);

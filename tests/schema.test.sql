@@ -65,7 +65,7 @@ RESET ROLE;
 SELECT string_agg(column_name, ', ' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = 'censo_publico';
 
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
-\echo '== 10. Inspector: 12 regiones obligatorias y en rango; el servidor recalcula total/clase/resultado; Apto promociona RN->RD (>=180 días)'
+\echo '== 10. Inspector: 12 regiones obligatorias y en rango; el servidor recalcula total/clase/resultado; Apto promociona RN->RD (>= 1 año; gallina >= 65)'
 \echo '   10a incompleto (esperado: error 23514)'
 INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', 2400, '{"tronco":15}', 100, 'EX', 'Apto');
@@ -87,6 +87,20 @@ INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, punto
  (gen_random_uuid(), '10000000-0000-0000-0000-000000000002', auth.uid(), 'Insp', '{"tronco":15,"cabeza":6,"cresta":10,"barbillas":5,"orejillas":10,"cuello":6,"dorso":8,"alas":4,"pecho":10,"cola":10,"extremidades":6,"plumaje":10}', 100, 'EX', 'Apto');
 SELECT total, clase, resultado, peso_g, peso_conforme FROM calificaciones ORDER BY created_at, total;
 SELECT anilla, seccion FROM animales WHERE anilla = 'E2418000002';
+\echo '   10g gallo con 67 puntos -> R pero No apto (gallos >= 70); sigue en RN'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000001', auth.uid(), 'Insp', 3200, '{"tronco":10,"cabeza":4,"cresta":7,"barbillas":3,"orejillas":7,"cuello":4,"dorso":5,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":6}', 0, 'I', 'No apto');
+\echo '   10h gallo con 72 puntos -> B / Apto y promoción a RD'
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000001', auth.uid(), 'Insp', 3200, '{"tronco":11,"cabeza":4,"cresta":7,"barbillas":4,"orejillas":7,"cuello":4,"dorso":6,"alas":3,"pecho":7,"cola":7,"extremidades":4,"plumaje":8}', 0, 'I', 'No apto');
+SELECT total, clase, resultado FROM calificaciones WHERE animal_id = '10000000-0000-0000-0000-000000000001' ORDER BY total;
+SELECT anilla, seccion FROM animales WHERE anilla = 'E2420000001';
+\echo '   10i hija de menos de un año, 82,5 puntos -> Apto pero sigue en RN'
+INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento) VALUES
+ ('10000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-00000000000a', 'E' || to_char(current_date - 60, 'YY') || '18000099', 'H', 'blanca', current_date - 60);
+INSERT INTO calificaciones (id, animal_id, inspector_id, inspector_nombre, peso_g, puntos, total, clase, resultado) VALUES
+ (gen_random_uuid(), '10000000-0000-0000-0000-000000000009', auth.uid(), 'Insp', 2300, '{"tronco":12.5,"cabeza":5,"cresta":8,"barbillas":4,"orejillas":9,"cuello":5,"dorso":6,"alas":3,"pecho":8,"cola":8,"extremidades":5,"plumaje":9}', 0, 'I', 'No apto');
+SELECT a.seccion, c.total, c.resultado FROM animales a JOIN calificaciones c ON c.animal_id = a.id WHERE a.id = '10000000-0000-0000-0000-000000000009';
 \echo '== 11. Calificación cerrada no modificable (esperado: 0 filas)'
 UPDATE calificaciones SET resultado = 'No apto';
 RESET ROLE;
@@ -119,7 +133,7 @@ INSERT INTO animales (id, usuario_id, anilla, sexo, variedad, fecha_nacimiento, 
  (gen_random_uuid(), '00000000-0000-0000-0000-00000000000a', 'E2518000032', 'H', 'blanca', '2025-06-01', '10000000-0000-0000-0000-000000000002', 'RD');
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'requisitos', rm_motivo = '82,5 puntos · 3 descendientes en RD' WHERE anilla = 'E2418000002';
 SELECT anilla, seccion, rm_via, rm_motivo FROM animales WHERE anilla = 'E2418000002';
-\echo '   12e gallo que sigue en RN, aunque sea por premio (esperado: error 23514)'
+\echo '   12e gallo en RD con 72 puntos, por premio: no llega a 85 (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = 'Campeonato' WHERE anilla = 'E2420000001';
 \echo '   12f hija en RD sin calificación suficiente (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = '' WHERE anilla = 'E2518000030';

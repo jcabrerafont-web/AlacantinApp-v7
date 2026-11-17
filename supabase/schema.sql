@@ -258,12 +258,13 @@ CREATE TABLE IF NOT EXISTS public.calificaciones (
   CONSTRAINT doce_regiones CHECK (public.puntos_validos(puntos)),
   CONSTRAINT total_rango CHECK (total BETWEEN 0 AND 100),
   CONSTRAINT clase_coherente CHECK (clase = public.clase_de(total, jsonb_array_length(defectos) > 0)),
-  CONSTRAINT resultado_coherente CHECK ((resultado = 'Apto') = (clase IN ('EX', 'MB', 'B', 'R')))
+  CONSTRAINT resultado_coherente CHECK (resultado = 'No apto' OR clase IN ('EX', 'MB', 'B', 'R'))
 );
 CREATE INDEX IF NOT EXISTS calificaciones_animal ON public.calificaciones (animal_id);
 
--- Recalcula total/clase/resultado y promociona RN -> RD:
--- resultado Apto (clase EX/MB/B/R sin defectos), variedad oficial y >= 180 días de edad
+-- Recalcula total/clase/resultado y promociona RN -> RD (equiparado al LG de la
+-- Castellana Negra, A.6): Apto = sin descalificación y >= 65 puntos las gallinas /
+-- >= 70 los gallos; para pasar a RD, además, variedad oficial y un año de edad.
 CREATE OR REPLACE FUNCTION public.procesar_calificacion() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE a public.animales%ROWTYPE;
@@ -277,13 +278,14 @@ BEGIN
   NEW.inspector_id := auth.uid();
   NEW.total := (SELECT sum(value::numeric) FROM jsonb_each_text(NEW.puntos));
   NEW.clase := public.clase_de(NEW.total, jsonb_array_length(NEW.defectos) > 0);
-  NEW.resultado := CASE WHEN NEW.clase IN ('EX', 'MB', 'B', 'R') THEN 'Apto' ELSE 'No apto' END;
   SELECT * INTO a FROM public.animales WHERE id = NEW.animal_id;
+  NEW.resultado := CASE WHEN NEW.clase <> 'D' AND NEW.total >= (CASE a.sexo WHEN 'H' THEN 65 ELSE 70 END)
+                        THEN 'Apto' ELSE 'No apto' END;
   -- Estándar ESGA025: gallo 3000–3500 g, gallina 2200–2600 g
   NEW.peso_conforme := CASE a.sexo WHEN 'M' THEN NEW.peso_g BETWEEN 3000 AND 3500
                                    WHEN 'H' THEN NEW.peso_g BETWEEN 2200 AND 2600 END;
   IF NEW.resultado = 'Apto' AND a.seccion = 'RN'
-     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND current_date - a.fecha_nacimiento >= 180 THEN
+     AND a.variedad IN ('negra-moteada', 'pinta', 'blanca') AND a.fecha_nacimiento + interval '1 year' <= current_date THEN
     PERFORM set_config('alacantina.promocion', 'si', true);
     UPDATE public.animales SET seccion = 'RD' WHERE id = NEW.animal_id;
     PERFORM set_config('alacantina.promocion', '', true);

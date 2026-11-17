@@ -205,7 +205,7 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
   if (!esAuditor(p?.rol)) throw new Error('La calificación oficial corresponde a un inspector acreditado.');
   const a = estado.idx.get(animalId);
   if (!a) throw new Error('Ejemplar no encontrado.');
-  const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, pesoG, puntos, defectos });
+  const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, fechaNacimiento: a.fecha_nacimiento, pesoG, puntos, defectos });
   if (ev.invalidos.length) throw new Error('Hay puntuaciones fuera de rango (de 0 al máximo del apartado, en pasos de 0,5).');
   if (!ev.completa) throw new Error(`Puntúa las ${BAREMO.apartados.length} regiones antes de cerrar la ficha.`);
   if (ev.pesoConforme === null) throw new Error('El peso del animal (en gramos) es obligatorio en la calificación.');
@@ -222,8 +222,7 @@ export async function guardarCalificacion({ animalId, puntos, defectos, pesoG, o
   await db.guardar('calificaciones', c);
   await sync.encolar('calificaciones', 'upsert', c);
   // Promoción RN -> RD (la confirma también el trigger del servidor)
-  const meses = edadMeses(a.fecha_nacimiento);
-  if (ev.accedeRD && a.seccion === 'RN' && meses !== null && meses * 30.44 >= REGLAS.edadMinimaRD_dias) {
+  if (ev.accedeRD && a.seccion === 'RN') {
     const promovido = { ...a, seccion: 'RD', updated_at: new Date().toISOString() };
     await db.guardar('animales', promovido);
   }

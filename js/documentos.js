@@ -3,7 +3,7 @@
 // Se maquetan en #impresion y se imprimen con el diálogo del sistema
 // ("Guardar como PDF"). Sin ventanas emergentes ni librerías externas.
 // ============================================================================
-import { ESTANDAR, BAREMO, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
 import { ancestros, fxAnimal } from './genetica.js';
 import { h, pintar, fecha, kg, pct } from './ui.js';
 
@@ -88,5 +88,5 @@ export function acta(a, c, titular) {
     <h2>Clase: ${c.clase} · ${nombreClase(c.clase)} — Resultado: ${c.resultado}</h2>
     ${c.observaciones ? h`<p>${c.observaciones}</p>` : ''}
     <div class="doc-firmas"><div>Firma del inspector: ${c.inspector_nombre}</div><div>Enterado, el titular: ${titular?.nombre || ''}</div></div>
-    <p class="doc-pie">${BAREMO.fuente}. El peso se registra y se contrasta con el Estándar, pero no puntúa. Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Se admiten en el Libro las clases ${BAREMO.clasesAptas.join(', ')}. El acceso al Registro Definitivo exige además variedad oficial y edad mínima según las normas del Libro.</p>`);
+    <p class="doc-pie">${BAREMO.fuente}. El peso se registra y se contrasta con el Estándar, pero no puntúa. Clases: ${BAREMO.clases.map(x => `${x.id} ≥ ${x.min}`).join(', ')}; un defecto descalificante supone la descalificación. Apto con ${REGLAS.puntosMinimosApto.H} puntos o más las gallinas y ${REGLAS.puntosMinimosApto.M} los gallos, sin descalificación. El acceso al Registro Definitivo exige además variedad oficial y un año de edad.</p>`);
 }

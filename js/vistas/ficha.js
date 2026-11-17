@@ -1,7 +1,7 @@
 // Ficha del ejemplar (datos, genealogía, puesta, calificaciones y acciones según rol)
 import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
-import { ESTANDAR, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
+import { ESTANDAR, REGLAS, sumarMeses, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
 import { nivelFx, generacionesEquivalentes } from '../genetica.js';
 import * as docs from '../documentos.js';
 import { h, pintar, $, aviso, fecha, kg, pct, dialogo, confirmar, hoyISO } from '../ui.js';
@@ -79,6 +79,8 @@ export default function (main, { id }) {
           : h`<p class="muted">Sin huevos registrados.</p>`}</div>` : ''}
 
       ${verPrivado ? h`<div class="tarjeta"><h2>Calificaciones</h2>
+        ${a.seccion === 'RN' && califs[0]?.resultado === 'Apto' && meses !== null && meses < REGLAS.edadMinimaRD_meses && v?.oficial
+          ? h`<div class="aviso-caja info peq">Apto, pero el Registro Definitivo exige un año de edad: podrá calificarse de nuevo a partir del ${fecha(sumarMeses(a.fecha_nacimiento, REGLAS.edadMinimaRD_meses))}.</div>` : ''}
         ${califs.length ? h`<ul class="lista">${califs.map(c => h`<li class="item"><div class="item-principal">
           <div class="item-titulo">${c.clase ?? '—'} · ${c.total === undefined || c.total === null ? "—" : String(c.total).replace(".", ",")} puntos · ${c.resultado} · ${fecha(c.fecha)}</div>
           <div class="item-sub">${c.inspector_nombre}${c.defectos?.length ? ` · ${c.defectos.length} defecto(s) descalificante(s)` : ''}</div></div>

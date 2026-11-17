@@ -1,6 +1,6 @@
 // Calificación morfológica: baremo de 100 puntos en las 12 regiones del Estándar (inspector / administrador)
 import * as datos from '../datos.js';
-import { ESTANDAR, BAREMO, evaluarCalificacion, nombreVariedad, sexoTexto, variedadPorId, pesoConforme } from '../estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, evaluarCalificacion, nombreVariedad, sexoTexto, variedadPorId, pesoConforme } from '../estandar.js';
 import * as docs from '../documentos.js';
 import { h, pintar, $, aviso, confirmar } from '../ui.js';
 
@@ -17,7 +17,7 @@ export default function (main, { id }) {
     <p><a href="#/animal/${a.id}">← ${a.anilla}</a></p>
     <h1>Calificación de ${a.anilla}</h1>
     <p class="muted">${sexoTexto(a.sexo)} · ${nombreVariedad(a.variedad)} · ${a.seccion}</p>
-    <div class="aviso-caja info peq">Baremo en fase de <strong>propuesta</strong>, pendiente de ratificar por la Dirección Técnica. Clases: ${BAREMO.clases.map(c => `${c.id} ≥ ${c.min}`).join(' · ')}.</div>
+    <div class="aviso-caja info peq">Baremo en fase de <strong>propuesta</strong>, pendiente de ratificar por la Dirección Técnica. Clases: ${BAREMO.clases.map(c => `${c.id} ≥ ${c.min}`).join(' · ')}. Apto: ${REGLAS.puntosMinimosApto[a.sexo]} puntos o más (${a.sexo === 'M' ? 'gallos' : 'gallinas'}).</div>
     ${!v?.oficial ? h`<div class="aviso-caja aviso">Variedad en proceso de reconocimiento: la calificación queda registrada, pero no da acceso al Registro Definitivo.</div>` : ''}
     <form id="form-cal" novalidate>
       <div class="tarjeta marcador" aria-live="polite"><div><b id="c-total">0</b> <span class="muted">/ 100</span></div><span id="c-clase" class="chip">—</span></div>
@@ -60,7 +60,7 @@ export default function (main, { id }) {
   });
   const refrescar = () => {
     const l = leer();
-    const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, ...l });
+    const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, fechaNacimiento: a.fecha_nacimiento, ...l });
     BAREMO.apartados.forEach(x => f.querySelector(`[data-apartado="${x.id}"]`).classList.toggle('invalido', ev.invalidos.includes(x.id)));
     $('#c-total', f).textContent = coma(ev.total);
     const chip = $('#c-clase', f);
@@ -73,7 +73,7 @@ export default function (main, { id }) {
     box.className = `aviso-caja ${ev.clase === 'D' ? 'alerta' : !ev.completa ? 'info' : ev.resultado === 'Apto' ? 'ok' : 'aviso'}`;
     box.textContent = !ev.completa && ev.clase !== 'D'
       ? `Faltan ${ev.sinPuntuar.length} región(es)${ev.invalidos.length ? ` y hay ${ev.invalidos.length} fuera de rango` : ''}.`
-      : `Total ${coma(ev.total)} · ${ev.claseNombre} · Resultado: ${ev.resultado}${ev.resultado === 'Apto' && !ev.accedeRD ? ' (sin acceso a RD)' : ''}` +
+      : `Total ${coma(ev.total)} · ${ev.claseNombre} · Resultado: ${ev.resultado}` +
         (ev.motivos.length ? ` · ${ev.motivos.join(' · ')}` : '');
     f.dataset.sucio = '1';
   };
@@ -107,7 +107,7 @@ export default function (main, { id }) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const l = leer();
-    const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, ...l });
+    const ev = evaluarCalificacion({ sexo: a.sexo, variedad: a.variedad, fechaNacimiento: a.fecha_nacimiento, ...l });
     if (!ev.completa) { aviso(ev.invalidos.length ? 'Hay puntuaciones fuera de rango.' : `Faltan ${ev.sinPuntuar.length} región(es) por puntuar.`, 'error'); return; }
     if (ev.pesoConforme === null) { aviso('Pesa al animal y anota el peso en gramos.', 'error'); $('#c-peso', f).focus(); return; }
     if (!(await confirmar('Cerrar ficha', `${coma(ev.total)} puntos · ${ev.claseNombre} · ${ev.resultado}. Peso ${l.pesoG} g (${ev.pesoConforme ? 'conforme' : 'fuera del rango del Estándar'}). La ficha no se puede modificar después.`, 'Cerrar ficha'))) return;
