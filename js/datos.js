@@ -245,28 +245,64 @@ export async function borrarCampana(id) {
   await cargar();
 }
 
-// Resultados por gallina: huevos, % de puesta, peso medio, aptos para incubar.
-// Marca la más ponedora de cada familia (candidata a madre del gallo de reposición).
+// Tres criterios en paralelo (ver REGLAS.controlPuesta):
+//  - puesta: % de días controlados con huevo (cantidad)
+//  - peso:   peso medio del huevo, solo con un mínimo de huevos (tamaño)
+//  - masa:   gramos de huevo al día = puesta × peso medio (equilibra los dos;
+//            criterio por defecto para proponer la madre del gallo de reposición)
+const CRITERIOS = {
+  puesta: f => f.puesta,
+  peso: f => (f.n >= REGLAS.controlPuesta.minHuevosPeso ? f.media || 0 : -1),
+  masa: f => f.masa
+};
+function destacar(filas) {
+  const lider = (lista, k) => {
+    const v = CRITERIOS[k];
+    const cand = lista.filter(f => f.n > 0 && v(f) > 0).sort((x, y) => v(y) - v(x) || y.n - x.n);
+    return cand[0]?.id || null;
+  };
+  const general = Object.fromEntries(Object.keys(CRITERIOS).map(k => [k, lider(filas, k)]));
+  const familias = [...new Set(filas.map(f => f.a.familia).filter(Boolean))];
+  const porFamilia = Object.fromEntries(familias.map(fam => {
+    const del = filas.filter(f => f.a.familia === fam);
+    return [fam, Object.fromEntries(Object.keys(CRITERIOS).map(k => [k, lider(del, k)]))];
+  }));
+  const criterio = REGLAS.controlPuesta.criterioMadre;
+  filas.forEach(f => {
+    const fam = f.a.familia ? porFamilia[f.a.familia] : null;
+    f.destaca = { puesta: general.puesta === f.id, peso: general.peso === f.id, masa: general.masa === f.id };
+    f.madreFamilia = Boolean(fam && fam[criterio] === f.id);
+  });
+  return { general, porFamilia, criterio };
+}
+const conIndicadores = (f, dias, inicio) => {
+  const puesta = dias ? Math.min(1, f.diasConHuevo / dias) : 0;
+  const media = f.pesos.length ? f.pesos.reduce((s, g) => s + g, 0) / f.pesos.length : null;
+  return { ...f, puesta, media, masa: media ? puesta * media : 0,
+    pesoFiable: f.n >= REGLAS.controlPuesta.minHuevosPeso, edadMeses: edadMeses(f.a.fecha_nacimiento, new Date(`${inicio}T12:00:00`)) };
+};
+
+// Resultados de una campaña por gallina
 export function resultadosCampana(c, hoy = new Date().toISOString().slice(0, 10)) {
   const fin = finCampana(c);
   const transcurridos = estadoCampana(c, hoy) === 'terminada' ? c.dias : diaCampana(c, hoy);
   const filas = c.gallinas.map(id => {
     const a = estado.idx.get(id);
+    if (!a) return null;
     const r = resumenPuesta(id, c.inicio, fin);
     // Una gallina pone como mucho un huevo al día: la puesta se calcula con los días
     // con huevo y se avisan los días con más de uno (doble anotación o error).
     const porDia = {};
     r.lista.forEach(x => { porDia[x.fecha] = (porDia[x.fecha] || 0) + 1; });
-    const diasDobles = Object.values(porDia).filter(n => n > 1).length;
-    return { a, id, ...r, diasDobles, puesta: transcurridos ? Math.min(1, r.dias / transcurridos) : 0, hoy: porDia[hoy] || 0 };
-  }).filter(f => f.a);
-  filas.sort((x, y) => y.n - x.n || (y.media || 0) - (x.media || 0));
-  const mejor = {};
-  for (const f of filas) { const fam = f.a.familia || '—'; if (f.n > 0 && !mejor[fam]) mejor[fam] = f.id; }
-  filas.forEach(f => { f.mejorDeFamilia = mejor[f.a.familia || '—'] === f.id && Boolean(f.a.familia); });
+    return conIndicadores({ a, id, n: r.n, aptos: r.aptos, lista: r.lista, pesos: r.lista.map(x => x.peso_g), diasConHuevo: r.dias,
+      diasDobles: Object.values(porDia).filter(n => n > 1).length, hoy: porDia[hoy] || 0 }, transcurridos, c.inicio);
+  }).filter(Boolean);
+  filas.sort((x, y) => y.masa - x.masa || y.n - x.n);
+  const lideres = destacar(filas);
   const total = filas.reduce((s, f) => s + f.n, 0);
-  const diasConHuevo = filas.reduce((s, f) => s + f.dias, 0);
-  return { filas, total, transcurridos, fin, puestaMedia: filas.length && transcurridos ? diasConHuevo / (filas.length * transcurridos) : 0 };
+  const diasConHuevo = filas.reduce((s, f) => s + f.diasConHuevo, 0);
+  return { filas, total, transcurridos, fin, ...lideres,
+    puestaMedia: filas.length && transcurridos ? diasConHuevo / (filas.length * transcurridos) : 0 };
 }
 
 // Acumulado de la temporada (todas las campañas del año) por gallina
@@ -276,13 +312,14 @@ export function temporadaPuesta(temporada) {
   for (const c of camps) {
     const res = resultadosCampana(c);
     for (const f of res.filas) {
-      const x = acc.get(f.id) || { a: f.a, n: 0, dias: 0, diasConHuevo: 0, aptos: 0, pesos: [], ciclos: 0 };
-      x.n += f.n; x.dias += res.transcurridos; x.diasConHuevo += f.dias; x.aptos += f.aptos; x.pesos.push(...f.lista.map(h => h.peso_g)); x.ciclos += 1;
+      const x = acc.get(f.id) || { a: f.a, id: f.id, n: 0, dias: 0, diasConHuevo: 0, aptos: 0, pesos: [], ciclos: 0, inicio: c.inicio };
+      x.n += f.n; x.dias += res.transcurridos; x.diasConHuevo += f.diasConHuevo; x.aptos += f.aptos; x.pesos.push(...f.pesos); x.ciclos += 1;
+      if (c.inicio < x.inicio) x.inicio = c.inicio;
       acc.set(f.id, x);
     }
   }
-  return [...acc.values()].map(x => ({ ...x, puesta: x.dias ? Math.min(1, x.diasConHuevo / x.dias) : 0, media: x.pesos.length ? x.pesos.reduce((s, g) => s + g, 0) / x.pesos.length : null }))
-    .sort((p, q) => q.puesta - p.puesta);
+  const filas = [...acc.values()].map(x => conIndicadores(x, x.dias, x.inicio)).sort((p, q) => q.masa - p.masa || q.n - p.n);
+  return { filas, ...destacar(filas) };
 }
 
 // ---------------------------------------------------------------------------

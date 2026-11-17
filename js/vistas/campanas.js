@@ -3,6 +3,7 @@
 import * as datos from '../datos.js';
 import { REGLAS } from '../estandar.js';
 import { h, pintar, $, aviso, fecha, hoyISO } from '../ui.js';
+import { bloqueResultados } from './campana.js';
 
 const coma = (n, d = 1) => (n === null || n === undefined || !Number.isFinite(n) ? '—' : Number(n).toFixed(d).replace('.', ','));
 const pctTxt = (x) => `${Math.round(100 * x)} %`;
@@ -27,7 +28,7 @@ export default function (main) {
       <p><a href="#/puesta">← Puesta & RFID</a></p>
       <h1>Control de puesta</h1>
       <div class="aviso-caja info peq">Cada temporada se hacen <strong>${CP.ciclos} campañas de ${CP.dias} días</strong> repartidas entre febrero y junio.
-        Durante cada campaña se pesa y anota cada huevo de cada gallina controlada. Con los resultados se elige, en cada familia, la gallina más ponedora como madre del gallo de reposición.
+        Durante cada campaña se pesa y anota cada huevo de cada gallina controlada. Con los resultados la app destaca la que más pone, la de huevo más grande y la mejor en masa de huevo, y propone en cada familia la madre del gallo de reposición.
         <a href="#/programa?s=puesta">Cómo se hace, paso a paso →</a></div>
 
       <div class="fila" style="margin:.75rem 0">
@@ -68,12 +69,9 @@ export default function (main) {
           : h`<p class="muted">Aún no tienes gallinas en tu censo. <a href="#/alta">Da de alta tus gallinas</a> para poder organizar el control.</p>`}
       </form>` : h`<div class="aviso-caja ok">Los ${CP.ciclos} ciclos de ${temporada} están organizados.</div>`}
 
-      ${acumulado.length ? h`<div class="tarjeta"><h2>Acumulado de la temporada ${temporada}</h2>
-        <p class="muted peq">Suma de todas las campañas del año. La puesta es el porcentaje de días controlados en los que la gallina puso huevo.</p>
-        <div class="tabla-scroll"><table><thead><tr><th>Gallina</th><th>Fam.</th><th class="num">Ciclos</th><th class="num">Huevos</th><th class="num">Puesta</th><th class="num">Peso medio</th><th class="num">Aptos</th></tr></thead>
-          <tbody>${acumulado.map(x => h`<tr><td><a href="#/animal/${x.a.id}">${x.a.anilla}</a></td><td>${x.a.familia || '—'}</td>
-            <td class="num">${x.ciclos}</td><td class="num">${x.n}</td><td class="num">${pctTxt(x.puesta)}</td><td class="num">${coma(x.media)} g</td><td class="num">${x.aptos}</td></tr>`)}</tbody></table></div>
-      </div>` : ''}`);
+      ${acumulado.filas.length ? h`<h2 style="margin-top:1.25rem">Acumulado de la temporada ${temporada}</h2>
+        <p class="muted peq">Suma de todas las campañas del año${acumulado.filas.some(f => f.ciclos > 1) ? '' : ' (por ahora, un solo ciclo)'}.</p>
+        ${bloqueResultados(acumulado)}` : ''}`);
 
     $('#cp-temp', main).addEventListener('change', e => { temporada = Number(e.target.value); dibujar(); });
     const f = $('#cp-form', main);

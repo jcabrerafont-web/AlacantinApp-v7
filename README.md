@@ -53,7 +53,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - **Control de puesta por campañas:**
   - **3 ciclos de 15 días por temporada**, repartidos entre febrero y junio. Es el modelo del programa de conservación de la Castellana Negra.
   - El criador crea cada ciclo, eligiendo el primer día, las gallinas y el método: jaula individual, ponedero trampa o RFID. Durante la campaña, la pantalla de Puesta muestra el día y qué gallinas no tienen huevos anotados hoy.
-  - Resultados por gallina: huevos, % de puesta (días con huevo sobre días controlados), peso medio y aptos. Se marca la **más ponedora de cada familia** (★), candidata a madre del gallo de reposición según Gobe. Se avisa de los días con más de un huevo anotado.
+  - Resultados con **tres criterios en paralelo**:
+    - 🥚 puesta: días con huevo sobre días controlados;
+    - 🔶 tamaño: peso medio, solo con al menos 5 huevos;
+    - ⭐ **masa de huevo**: g/día, que es puesta × peso medio.
+
+    Se explican en la pantalla y en la Guía: la cantidad y el tamaño del huevo tienden a ir en sentido contrario, y la masa los equilibra. La madre propuesta del gallo de reposición de cada familia es la mejor en masa de huevo (`REGLAS.controlPuesta.criterioMadre`). Se muestra la edad de cada gallina y se avisa de los días con más de un huevo anotado.
   - Hay un acumulado de la temporada. En el servidor se guardan en la tabla `campanas` (un ciclo por criador y temporada, solo gallinas propias).
 - **Guía del criador** (`#/programa`, también para visitantes): explica en lenguaje sencillo el Libro (RN → RD → RM), las anillas, la calificación, las familias y la consanguinidad, el control de puesta y un calendario orientativo del año. Las cifras se leen de `REGLAS`, `BAREMO` y `ESTANDAR`, así que nunca contradice lo que la app aplica.
 - **Consanguinidad de Wright:**

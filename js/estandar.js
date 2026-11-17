@@ -124,7 +124,10 @@ export const REGLAS = Object.freeze({
   // Control de puesta por campañas (modelo del programa de conservación de la
   // Castellana Negra, manual GANECA): 15 días por gallina, 3 ciclos por temporada
   // repartidos entre febrero y junio.
-  controlPuesta: Object.freeze({ dias: 15, ciclos: 3, mesInicio: 2, mesFin: 6 }),
+  // Resultados en tres criterios paralelos: puesta (cantidad), peso medio (tamaño;
+  // mínimo de huevos para que cuente) y masa de huevo (g/día = puesta × peso medio).
+  // La madre propuesta del gallo de reposición sale de criterioMadre.
+  controlPuesta: Object.freeze({ dias: 15, ciclos: 3, mesInicio: 2, mesFin: 6, minHuevosPeso: 5, criterioMadre: 'masa' }),
   generacionesWright: 5,             // Profundidad del cálculo de consanguinidad
   fxPrecaucion: 0.0625,              // 6,25 %: equivalente a primos hermanos
   fxAlerta: 0.125,                   // 12,5 %: equivalente a medio hermanos

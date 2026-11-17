@@ -132,7 +132,7 @@ legend { font-weight: 700; padding: 0 .35rem; }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { text-align: left; padding: .45rem .4rem; border-bottom: 1px solid var(--borde); vertical-align: top; }
 th { color: var(--texto-2); font-size: .78rem; text-transform: uppercase; letter-spacing: .02em; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tabla-scroll { overflow-x: auto; }
 
 .aviso-caja { padding: .75rem; border-radius: 10px; margin-bottom: 1rem; font-size: .92rem; }

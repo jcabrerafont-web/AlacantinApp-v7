@@ -28,6 +28,7 @@ await ir('#/guia');
 ok((await page.$$('#guia-lista details')).length === 12, 'Guía de campo: 12 regiones');
 await ir('#/programa');
 ok((await page.$$('details.guia-sec')).length === 6 && (await page.innerText('main')).includes('Control de puesta'), 'Visitante: Guía del criador con 6 secciones');
+ok((await page.innerText('#sec-puesta')).length > 0 && await page.$eval('#sec-puesta', e => e.textContent.includes('masa de huevo')), 'Guía explica los tres criterios de puesta');
 await ir('#/programa?s=puesta');
 ok(await page.$eval('#sec-puesta', e => e.open), 'Guía: enlace directo a la sección de puesta');
 if (process.env.CAPTURAS) { await page.waitForTimeout(200); await page.screenshot({ path: `${process.env.CAPTURAS}/guia-puesta.png` }); }
@@ -119,6 +120,32 @@ const repetida = await page.evaluate(async () => {
   try { await d.crearCampana({ ciclo: 1, inicio: new Date().toISOString().slice(0, 10), gallinas: d.estado.campanas[0].gallinas }); return 'aceptada'; } catch (e) { return e.message; }
 });
 ok(repetida.includes('Ya tienes el ciclo 1'), 'No se repite un ciclo en la misma temporada');
+const txtRes = await page.innerText('main');
+ok(txtRes.includes('Huevo más grande') && txtRes.includes('Mejor masa de huevo') && txtRes.includes('Cómo leer estos resultados'), 'Resultados con los tres criterios y su explicación');
+const res3 = await page.evaluate(async () => {
+  const d = await import('./js/datos.js');
+  const r = d.resultadosCampana(d.estado.campanas[0]);
+  const f = r.filas.find(x => x.n === 3);
+  return { puesta: f.puesta, media: Math.round(f.media * 10) / 10, masa: Math.round(f.masa * 10) / 10, fiable: f.pesoFiable, lider: r.general };
+});
+ok(res3.puesta === 1 && res3.media === 62.5 && res3.masa === 62.5 && res3.fiable === false && res3.lider.peso === null && res3.lider.masa,
+  `Masa = puesta × peso medio; con menos de 5 huevos no cuenta para el tamaño (${JSON.stringify(res3)})`);
+const madre = await page.evaluate(async () => {
+  const d = await import('./js/datos.js');
+  const db = await import('./js/db.js');
+  const [g1, g2] = ['E2418000002', 'E2518000003'].map(an => d.estado.todos.find(a => a.anilla === an));
+  for (const g of [g1, g2]) await db.guardar('animales', { ...g, familia: 'A' });
+  await d.cargar();
+  const dia = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const c = await d.crearCampana({ ciclo: 2, inicio: dia(40), dias: 15, gallinas: [g1.id, g2.id] });
+  for (let i = 0; i < 12; i++) await d.registrarHuevos(g1.id, dia(40 - i), [52], 'Blanco crema');
+  for (let i = 0; i < 10; i++) await d.registrarHuevos(g2.id, dia(40 - i), [65], 'Blanco crema');
+  const r = d.resultadosCampana(d.estado.campanas.find(x => x.id === c.id));
+  const an = (id) => d.animal(id)?.anilla;
+  return { puesta: an(r.general.puesta), peso: an(r.general.peso), masa: an(r.general.masa), madre: an(r.filas.find(f => f.madreFamilia)?.id) };
+});
+ok(madre.puesta === 'E2418000002' && madre.peso === 'E2518000003' && madre.masa === 'E2518000003' && madre.madre === 'E2518000003',
+  `12 huevos de 52 g frente a 10 de 65 g: más pone la 1ª, más grande y más masa la 2ª, que es la madre propuesta (${JSON.stringify(madre)})`);
 await ir('#/puesta');
 ok((await page.innerText('#pu-campana')).includes('Día 1 de 15'), 'Puesta muestra la campaña en curso');
 if (process.env.CAPTURAS) { await page.screenshot({ path: `${process.env.CAPTURAS}/puesta-campana.png` }); await ir('#/campanas'); await page.waitForTimeout(3500); await page.screenshot({ path: `${process.env.CAPTURAS}/campanas.png`, fullPage: true }); }

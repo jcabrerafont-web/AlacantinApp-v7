@@ -59,15 +59,23 @@ export default function (main) {
       <p class="peq">${enlace('#/apareamientos', 'Planificar apareamientos →')}</p>`)}
 
     ${seccion('puesta', '5. Control de puesta', h`
-      <p>Saber cuánto y qué huevo pone cada gallina permite elegir como madres a las mejores <strong>sin perder variabilidad</strong>: dentro de cada familia, la más ponedora da el gallo de reposición.</p>
+      <p>Saber cuánto y qué huevo pone cada gallina permite elegir como madres a las mejores <strong>sin perder variabilidad</strong>: dentro de cada familia, la mejor gallina da el gallo de reposición.</p>
       <ol class="pasos">
         <li><strong>${CP.ciclos} campañas por temporada</strong>, de <strong>${CP.dias} días</strong> cada una, repartidas entre febrero y junio (por ejemplo, una en febrero–marzo, otra en abril y otra en mayo–junio). ${enlace('#/campanas', 'Organizar campañas →')}</li>
         <li><strong>Prepara cómo saber de quién es cada huevo:</strong> jaulas individuales durante la campaña, ponederos trampa o un ponedero con lector RFID.</li>
         <li><strong>Cada día:</strong> recoge los huevos, pésalos uno a uno con una báscula de cocina y anótalos en ${enlace('#/puesta', 'Puesta & RFID')} con su cáscara.</li>
         <li><strong>Huevo para incubar:</strong> desde <strong>${E.huevo.min} g</strong> y cáscara ${E.huevo.cascara.toLowerCase()}. El Estándar da ${E.huevo.min}–${E.huevo.habitualMax} g como rango habitual, pero un huevo más grande también vale.</li>
         <li><strong>Si cambias una gallina de gallo</strong>, espera unas dos semanas antes de incubar sus huevos: puede seguir fecundada por el anterior y la genealogía sería falsa.</li>
-        <li><strong>Al terminar</strong>, la app calcula para cada gallina los huevos, el porcentaje de puesta (días con huevo sobre días controlados), el peso medio y cuántos son aptos, y marca con ★ la más ponedora de cada familia.</li>
-      </ol>`)}
+        <li><strong>Al terminar</strong>, la app calcula para cada gallina los huevos, el porcentaje de puesta (días con huevo sobre días controlados), el peso medio, la masa de huevo y cuántos son aptos.</li>
+      </ol>
+      <h3>Tres maneras de ser buena ponedora</h3>
+      <ul>
+        <li>🥚 <strong>La que más pone</strong>: la que pone más días de la campaña.</li>
+        <li>🔶 <strong>La de huevo más grande</strong>: la de mayor peso medio, si ha puesto al menos ${CP.minHuevosPeso} huevos (con menos, el peso medio no es fiable).</li>
+        <li>⭐ <strong>La mejor en masa de huevo</strong>: los gramos de huevo que da al día (porcentaje de puesta × peso medio). Une cantidad y tamaño: una gallina con 10 huevos de 65 g produce más que una con 12 de 52 g.</li>
+      </ul>
+      <p>Las gallinas que más huevos ponen tienden a ponerlos algo más pequeños, y al revés. Si solo se premia la cantidad, el huevo se va haciendo más pequeño con las generaciones; si solo se premia el tamaño, baja la puesta. Por eso la app muestra las tres clasificaciones a la vez y propone como <strong>madre del gallo de reposición</strong> de cada familia a la mejor en <strong>masa de huevo</strong>.</p>
+      <p class="peq">Ten en cuenta la edad: las pollitas del primer año ponen huevos más pequeños que las gallinas adultas, y el huevo crece a lo largo de la temporada. Compara gallinas de la misma campaña.</p>`)}
 
     ${seccion('calendario', '6. Calendario orientativo del año', h`
       <div class="tabla-scroll"><table><tbody>
