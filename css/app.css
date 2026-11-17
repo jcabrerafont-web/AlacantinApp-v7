@@ -4,12 +4,15 @@
    sol en el gallinero; tema oscuro automático según el sistema.
    ========================================================================== */
 :root {
-  --azul: #1e40af; --azul-2: #1d4ed8; --azul-claro: #dbeafe;
+  /* Identidad del Club: azul del escudo (provincia de Alicante) y rojo de la cresta */
+  --azul: #22377f; --azul-2: #2b44a0; --azul-claro: #e3e8f7;
+  --cresta: #c0262d;
+  --letra-titulo: "Lora", "Iowan Old Style", Georgia, serif;
   --rojo: #b91c1c; --rojo-claro: #fee2e2;
   --verde: #15803d; --verde-claro: #dcfce7;
   --ambar: #b45309; --ambar-claro: #fef3c7;
-  --texto: #0f172a; --texto-2: #475569; --borde: #cbd5e1;
-  --fondo: #f1f5f9; --superficie: #ffffff;
+  --texto: #172033; --texto-2: #4a5568; --borde: #d5dbe6;
+  --fondo: #f2f4f8; --superficie: #ffffff;
   --radio: 12px; --sombra: 0 1px 2px rgb(15 23 42 / .08), 0 2px 8px rgb(15 23 42 / .06);
   --barra-alto: 64px;
   /* Color de TEXTO de cada tono (en oscuro, más claro para que se lea sobre fondo oscuro) */
@@ -74,6 +77,8 @@ a { color: var(--azul-t); }
 .cabecera-estado { display: flex; align-items: center; gap: .35rem; flex-shrink: 0; }
 
 main { max-width: 960px; margin: 0 auto; padding: 1rem .75rem 2rem; outline: none; }
+/* main recibe el foco al navegar (lectores de pantalla): sin recuadro visible */
+main:focus, main:focus-visible { outline: none; }
 .cargando { color: var(--texto-2); }
 
 /* Barra inferior */
@@ -343,3 +348,53 @@ body.escribiendo .banner-actualizar { display: none; }
 .texto-legal h2 { font-size: 1.05rem; margin-top: 1.25rem; }
 .texto-legal h2:first-child { margin-top: 0; }
 .texto-legal li { margin-bottom: .35rem; }
+
+
+/* ===== Identidad visual (v7.14) ===== */
+@font-face { font-family: "Lora"; src: url("../fonts/lora.woff") format("woff"); font-weight: 400 700; font-display: swap; }
+h1, h2, .kpi b, .marca strong, .doc-cab h1 { font-family: var(--letra-titulo); font-weight: 600; letter-spacing: -.005em; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; }
+.item-titulo { font-weight: 650; }
+/* Cabecera con el azul del Club */
+.cabecera { background: var(--azul); color: #fff; border-bottom: 0; }
+.cabecera .marca { color: #fff; }
+.cabecera .marca img { background: #fff; border-radius: 50%; padding: 2px; }
+.cabecera .marca small { color: rgb(255 255 255 / .78); }
+.cabecera .btn { background: transparent; color: #fff; border-color: rgb(255 255 255 / .55); }
+.cabecera .btn:hover { background: rgb(255 255 255 / .12); }
+.cabecera .chip-ok { background: #dcfce7; color: #14532d; }
+/* Barra: iconos de trazo y la pestaña activa marcada con el rojo de la cresta */
+.barra a .ico { line-height: 0; }
+.barra a .icono { width: 24px; height: 24px; }
+.barra a[aria-current="page"] { background: transparent; color: var(--azul-t); box-shadow: inset 0 3px 0 var(--cresta); }
+@media (min-width: 900px) { .barra a[aria-current="page"] { box-shadow: inset 3px 0 0 var(--cresta); } }
+.icono { flex-shrink: 0; vertical-align: -0.2em; }
+.btn .icono { width: 1.2em; height: 1.2em; }
+.tarea-ico { color: var(--azul-t); line-height: 0; }
+.tarea-ico .icono { width: 24px; height: 24px; }
+.boton-icono .icono { width: 22px; height: 22px; }
+/* Tarjetas más sobrias */
+.tarjeta { border-radius: 14px; box-shadow: 0 1px 0 rgb(23 32 51 / .04); }
+/* Cifras en una sola franja, separadas por filetes (antes, una tarjeta por cifra) */
+.kpis { gap: 1px; background: var(--borde); border: 1px solid var(--borde); border-radius: 14px; overflow: hidden; }
+.kpi { border: 0; border-radius: 0; background: var(--superficie); }
+.kpi b { font-size: 1.5rem; font-variant-numeric: lining-nums tabular-nums; }
+/* Etiquetas de tabla en minúscula (las versales gritaban) */
+th { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: .82rem; }
+/* Muestra del plumaje de cada variedad, con el sexo en una insignia */
+.ave { width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; position: relative; border: 1px solid #c9ced8; display: inline-block; }
+.ave-sexo { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--superficie); border: 1px solid var(--borde);
+  font-size: .75rem; font-weight: 800; line-height: 18px; text-align: center; color: var(--azul-t); }
+.ave.sexo-H .ave-sexo { color: var(--cresta); }
+.var-negra-moteada { background: radial-gradient(circle at 50% 50%, #f4f2ec 0 1.6px, transparent 2.1px) 0 0 / 9px 9px, radial-gradient(circle at 50% 50%, #f4f2ec 0 1.2px, transparent 1.7px) 4.5px 4.5px / 9px 9px, #1f2026; }
+.var-blanca { background: radial-gradient(circle at 35% 30%, #fff, #ecebe6 70%); }
+.var-pinta { background: conic-gradient(#1f2026 25%, #f4f2ec 0 50%, #1f2026 0 75%, #f4f2ec 0) 0 0 / 13px 13px; }
+.var-arminada { background: radial-gradient(circle at 50% 135%, #f7f6f1 58%, transparent 59%), repeating-linear-gradient(90deg, #1f2026 0 2px, #f7f6f1 2px 4px); }
+.var-milflores { background: radial-gradient(circle, #fff 0 1.4px, transparent 1.9px) 0 0 / 9px 9px, radial-gradient(circle, #1f2026 0 1.3px, transparent 1.8px) 4.5px 4.5px / 9px 9px, #9b5a2e; }
+/* Portada del Estándar */
+.portada { background: var(--azul); color: #fff; border-radius: 16px; padding: 1.25rem; display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+.portada img { width: 88px; height: 88px; border-radius: 50%; background: #fff; padding: 3px; }
+.portada h1 { color: #fff; font-size: 1.9rem; margin: 0 0 .15rem; line-height: 1.1; }
+.portada p { margin: 0; color: rgb(255 255 255 / .85); font-size: .92rem; }
+.portada .portada-raya { display: block; width: 44px; height: 3px; background: var(--cresta); border-radius: 2px; margin: .5rem 0; }
+@media (min-width: 640px) { .portada { padding: 1.75rem 2rem; } .portada img { width: 112px; height: 112px; } .portada h1 { font-size: 2.4rem; } }

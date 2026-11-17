@@ -8,6 +8,7 @@ import * as datos from './datos.js';
 import * as instalacion from './instalacion.js';
 import * as diagnostico from './diagnostico.js';
 import { $, aviso, esc } from './ui.js';
+import { svgIcono, nombreDeEmoji } from './iconos.js';
 
 // Rutas: [patrón, módulo, roles permitidos ('*' = todos, 'usuario' = cualquier sesión)]
 const RUTAS = [
@@ -115,7 +116,7 @@ function pintarBarra() {
   const nav = $('#barra');
   nav.dataset.columnas = String(items.length);
   nav.innerHTML = items.map(([ruta, ico, texto]) =>
-    `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${ico}</span><span>${esc(texto)}</span></a>`).join('');
+    `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('');
   marcarBarra(resolver(location.hash)?.base);
 }
 

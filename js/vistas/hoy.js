@@ -5,8 +5,9 @@ import * as instalacion from '../instalacion.js';
 import { ultimaCopia } from '../respaldo.js';
 import { supabaseConfigurado } from '../config.js';
 import { h, pintar, $, hoyISO } from '../ui.js';
+import { desdeEmoji } from '../iconos.js';
 
-const GRUPOS = [['hoy', 'Hoy'], ['pronto', 'Próximos días'], ['info', 'Para tener en cuenta']];
+const GRUPOS = [['hoy', 'Para hoy'], ['pronto', 'Próximos días'], ['info', 'Para tener en cuenta']];
 
 export const fechaLarga = (iso = hoyISO()) => { const t = new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); };
 
@@ -19,7 +20,7 @@ export async function estadoPasos() {
 }
 
 export const itemTarea = (x) => h`<li><a class="item tarea tarea-${x.nivel}" href="${x.href}">
-  <span class="tarea-ico" aria-hidden="true">${x.icono}</span>
+  <span class="tarea-ico" aria-hidden="true">${desdeEmoji(x.icono)}</span>
   <span class="item-principal"><span class="item-titulo">${x.texto}</span>${x.sub ? h`<span class="item-sub">${x.sub}</span>` : ''}</span>
   <span aria-hidden="true">›</span></a></li>`;
 
@@ -40,7 +41,7 @@ export default function (main) {
       ${pasos.ocultos ? '' : tarjetaPasos(pasos)}
       ${GRUPOS.map(([nivel, titulo]) => { const l = tareas.filter(x => x.nivel === nivel); return l.length ? h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">${l.map(itemTarea)}</ul></div>` : ''; })}
       ${!tareas.some(x => x.nivel !== 'info') ? h`<div class="aviso-caja ok">✓ Nada urgente para hoy.</div>` : ''}
-      <div class="tarjeta"><h2>Este mes</h2><a class="item tarea" href="${href}"><span class="tarea-ico" aria-hidden="true">${ico}</span><span class="item-principal"><span class="item-titulo">${texto}</span></span><span aria-hidden="true">›</span></a>
+      <div class="tarjeta"><h2>Este mes</h2><a class="item tarea" href="${href}"><span class="tarea-ico" aria-hidden="true">${desdeEmoji(ico)}</span><span class="item-principal"><span class="item-titulo">${texto}</span></span><span aria-hidden="true">›</span></a>
         <p class="peq muted" style="margin:.5rem 0 0">Calendario completo en la <a href="#/programa?s=calendario">Guía del criador</a>.</p></div>`);
     $('#pasos-ocultar', main)?.addEventListener('click', async () => { await db.metaSet(`pasos-ocultos:${p.id}`, true); dibujar(); });
   };

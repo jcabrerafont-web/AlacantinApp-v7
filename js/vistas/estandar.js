@@ -1,13 +1,17 @@
 import { ESTANDAR } from '../estandar.js';
 import { h, pintar } from '../ui.js';
 
-const kg = (g) => (g / 1000).toFixed(3).replace('.', ',');
+// 3000 → «3», 3500 → «3,5» (sin ceros de relleno)
+const kg = (g) => String(Math.round(g / 10) / 100).replace('.', ',');
 
 export default function (main) {
   const E = ESTANDAR;
   pintar(main, h`
-    <h1>Estándar oficial · Alacantina</h1>
-    <p class="muted">Código ${E.codigo} · Revisión ${E.revision} · Origen: ${E.origen}</p>
+    <header class="portada">
+      <img src="./icons/logo.png" alt="Escudo del Club de la Gallina Alacantina" width="112" height="112">
+      <div><h1>Gallina Alacantina</h1><span class="portada-raya" aria-hidden="true"></span>
+        <p>Raza autóctona de la provincia de Alicante. Estándar oficial ${E.codigo}, revisión del ${E.revision}.</p></div>
+    </header>
 
     <div class="tarjeta">
       <h2>Impresión general</h2>
@@ -25,7 +29,7 @@ export default function (main) {
       <h2>Variedades</h2>
       <ul class="lista">
         ${E.variedades.map(v => h`<li class="item"><div class="item-principal">
-          <div class="item-titulo">${v.nombre} ${v.oficial ? h`<span class="chip chip-ok">Oficial</span>` : h`<span class="chip chip-aviso">En proceso de reconocimiento</span>`}</div>
+          <div class="item-titulo"><span class="ave var-${v.id}" style="width:28px;height:28px;vertical-align:middle;margin-right:.4rem" aria-hidden="true"></span>${v.nombre} ${v.oficial ? h`<span class="chip chip-ok">Oficial</span>` : h`<span class="chip chip-aviso">En proceso de reconocimiento</span>`}</div>
           <div class="item-sub">${v.detalle}</div></div></li>`)}
       </ul>
     </div>

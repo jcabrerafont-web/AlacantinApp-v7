@@ -4,6 +4,7 @@ import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, sumarMeses, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
 import { nivelFx, generacionesEquivalentes, purezaVariedad } from '../genetica.js';
 import * as docs from '../documentos.js';
+import { icono, ave } from '../iconos.js';
 import { h, pintar, $, aviso, fecha, kg, pct, dialogo, confirmar, hoyISO } from '../ui.js';
 
 export default function (main, { id }) {
@@ -38,7 +39,7 @@ export default function (main, { id }) {
       <p><a href="#/censo">← Censo</a></p>
       <div class="tarjeta">
         <div class="fila entre">
-          <div class="fila"><span class="sexo sexo-${a.sexo}" role="img" aria-label="${a.sexo === 'M' ? 'Gallo' : 'Gallina'}">${a.sexo === 'M' ? '♂' : '♀'}</span>
+          <div class="fila">${ave(a)}
             <div><h1 style="margin:0">${a.anilla}</h1><div class="muted">${a.nombre || sexoTexto(a.sexo)}</div></div></div>
           <div class="fila">
             <span class="chip ${['RD', 'RM'].includes(a.seccion) ? 'chip-ok' : 'chip-info'}">${a.seccion === 'RM' ? '★ ' : ''}${a.seccion} · ${ESTANDAR.secciones[a.seccion]}</span>
@@ -67,10 +68,10 @@ export default function (main, { id }) {
       </div>
 
       <div class="fila" style="margin-bottom:1rem">
-        <a class="btn" href="#/pedigri/${a.id}">🌳 Pedigrí</a>
-        ${propio && a.estado !== 'baja' ? h`<a class="btn" href="#/editar/${a.id}">✏️ Editar</a>` : ''}
-        ${verPrivado ? h`<button class="btn" id="b-cert">📄 Certificado</button>` : ''}
-        ${auditor && a.estado !== 'baja' ? h`<a class="btn btn-primario" href="#/calificar/${a.id}">✅ Calificar</a>` : ''}
+        <a class="btn" href="#/pedigri/${a.id}">${icono('arbol')} Pedigrí</a>
+        ${propio && a.estado !== 'baja' ? h`<a class="btn" href="#/editar/${a.id}">${icono('lapiz')} Editar</a>` : ''}
+        ${verPrivado ? h`<button class="btn" id="b-cert">${icono('documento')} Certificado</button>` : ''}
+        ${auditor && a.estado !== 'baja' ? h`<a class="btn btn-primario" href="#/calificar/${a.id}">${icono('check')} Calificar</a>` : ''}
         ${admin && a.estado !== 'baja' ? h`<button class="btn" id="b-titular">Cambiar titular</button>` : ''}
         ${propio && a.estado !== 'baja' ? h`<button class="btn btn-peligro" id="b-baja">Dar de baja</button>` : ''}
       </div>
@@ -121,7 +122,7 @@ export default function (main, { id }) {
       </div>` : ''}
 
       ${hijos.length ? h`<div class="tarjeta"><h2>Descendencia (${hijos.length})</h2><ul class="lista">
-        ${hijos.map(x => h`<li><a class="item" href="#/animal/${x.id}"><span class="sexo sexo-${x.sexo}" role="img" aria-label="${x.sexo === 'M' ? 'Gallo' : 'Gallina'}">${x.sexo === 'M' ? '♂' : '♀'}</span>
+        ${hijos.map(x => h`<li><a class="item" href="#/animal/${x.id}">${ave(x)}
           <span class="item-principal"><span class="item-titulo">${x.anilla}</span><span class="item-sub">${fecha(x.fecha_nacimiento)} · ${x.seccion}</span></span></a></li>`)}</ul></div>` : ''}`);
 
     const titular = () => datos.estado.perfiles.find(x => x.id === completo.usuario_id) || (propio ? datos.estado.perfil : null);

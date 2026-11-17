@@ -4,6 +4,7 @@
 import * as datos from '../datos.js';
 import { ESTANDAR, REGLAS, huevoApto, huevoGrande } from '../estandar.js';
 import { h, pintar, $, aviso, fecha, hoyISO, confirmar } from '../ui.js';
+import { icono } from '../iconos.js';
 
 const coma = (n, d = 1) => (n === null || n === undefined ? '—' : Number(n).toFixed(d).replace('.', ','));
 
@@ -107,7 +108,7 @@ export default function (main) {
         <p class="peq">${pendientes.length ? h`Sin huevos anotados hoy: ${pendientes.map((x, i) => h`${i ? ', ' : ''}<a href="#/puesta?gallina=${x.id}" data-elegir="${x.id}">${x.a.anilla}</a>`)}` : 'Hoy ya has anotado huevos de todas las gallinas controladas.'}</p></div>`);
     } else {
       const prox = datos.misCampanas().find(x => datos.estadoCampana(x) === 'programada');
-      pintar(caja, h`<a class="tarjeta item" href="#/campanas" style="display:flex"><span style="font-size:1.4rem" aria-hidden="true">🗓️</span>
+      pintar(caja, h`<a class="tarjeta item" href="#/campanas" style="display:flex"><span class="tarea-ico" aria-hidden="true">${icono('calendario')}</span>
         <span class="item-principal"><span class="item-titulo">Control de puesta</span>
         <span class="item-sub">${prox ? `Próximo: ciclo ${prox.ciclo}, empieza el ${fecha(prox.inicio)}` : `${REGLAS.controlPuesta.ciclos} campañas de ${REGLAS.controlPuesta.dias} días entre febrero y junio. Organízalas aquí.`}</span></span><span aria-hidden="true">›</span></a>`);
     }

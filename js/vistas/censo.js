@@ -7,6 +7,7 @@ import { h, pintar, $, pct } from '../ui.js';
 import { copiaPendiente } from '../respaldo.js';
 import * as instalacion from '../instalacion.js';
 import { estadoPasos, itemTarea, fechaLarga } from './hoy.js';
+import { desdeEmoji, icono, ave } from '../iconos.js';
 import { supabaseConfigurado } from '../config.js';
 
 const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -19,7 +20,7 @@ export default function (main) {
 
   pintar(main, h`
     <div class="fila entre"><h1>${titulo}</h1>
-      ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">➕ Alta</a>` : ''}</div>
+      ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">${icono('alta')} Alta</a>` : ''}</div>
     ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
     <div id="censo-riesgo"></div>
@@ -55,7 +56,7 @@ export default function (main) {
       pintar(caja, h`<div class="tarjeta tarjeta-hoy"><div class="fila entre"><h2 style="margin:0">Hoy <span class="muted peq" style="font-weight:500">· ${fechaLarga()}</span></h2>
           <a class="peq" href="#/hoy">Ver todo ›</a></div>
         ${tareas.length ? h`<ul class="lista">${tareas.slice(0, 3).map(itemTarea)}</ul>${tareas.length > 3 ? h`<p class="peq" style="margin:.25rem 0 0"><a href="#/hoy">y ${tareas.length - 3} más →</a></p>` : ''}` : ''}
-        ${pasos.ocultos ? '' : h`<a class="item tarea" href="#/hoy"><span class="tarea-ico" aria-hidden="true">🚀</span><span class="item-principal"><span class="item-titulo">Primeros pasos: ${pasos.hechos} de ${pasos.pasos.length}</span><span class="item-sub">${pasos.pasos.find(x => !x.hecho)?.texto || ''}</span></span><span aria-hidden="true">›</span></a>`}
+        ${pasos.ocultos ? '' : h`<a class="item tarea" href="#/hoy"><span class="tarea-ico" aria-hidden="true">${desdeEmoji('🚀')}</span><span class="item-principal"><span class="item-titulo">Primeros pasos: ${pasos.hechos} de ${pasos.pasos.length}</span><span class="item-sub">${pasos.pasos.find(x => !x.hecho)?.texto || ''}</span></span><span aria-hidden="true">›</span></a>`}
       </div>`);
     }, 0);
     limpiar.push(() => clearTimeout(tHoy));
@@ -98,7 +99,7 @@ export default function (main) {
         const nf = nivelFx(f);
         const t = tramoEdad(a.fecha_nacimiento);
         return h`<li><a class="item" href="#/animal/${encodeURIComponent(a.id)}">
-          <span class="sexo sexo-${a.sexo}" role="img" aria-label="${a.sexo === 'M' ? 'Gallo' : 'Gallina'}">${a.sexo === 'M' ? '♂' : '♀'}</span>
+          ${ave(a)}
           <span class="item-principal">
             <span class="item-titulo">${a.anilla}${a.nombre ? h` · ${a.nombre}` : ''}</span>
             <span class="item-sub">${nombreVariedad(a.variedad)} · ${t ? t.nombre : 'Edad desconocida'}</span>

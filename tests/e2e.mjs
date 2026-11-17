@@ -20,7 +20,8 @@ const aviso = () => page.$eval('#aviso', e => e.textContent);
 await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a');
 // 1. Visitante
-ok(JSON.stringify(await barra()) === JSON.stringify(['📖 Estándar Racial', '📋 Guía de Campo', '🔍 Censo Público']), `Visitante: barra de 3 columnas ${JSON.stringify(await barra())}`);
+ok((await page.$$eval('#barra a svg.icono', x => x.length)) === 3, 'Barra con iconos propios (sin emoji)');
+ok(JSON.stringify(await barra()) === JSON.stringify(['Estándar Racial', 'Guía de Campo', 'Censo Público']), `Visitante: barra de 3 columnas ${JSON.stringify(await barra())}`);
 ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
 ok((await page.$$eval('#barra a', a => a.length)) === 3 && !(await page.$('#barra a[href="#/alta"]')), 'Alta Rápida no existe en el DOM del visitante');
 await ir('#/alta');
@@ -52,7 +53,7 @@ await page.click('#form-registro button[type=submit]');
 await page.waitForTimeout(1200);
 ok(page.url().endsWith('#/perfil'), 'Tras registrarse va a Mi aviario');
 ok(await page.$eval('#estado-cola', e => e.classList.contains('oculto')), 'Modo dispositivo: sin contador de cola');
-ok(JSON.stringify(await barra()) === JSON.stringify(['📚 Mi Censo', '➕ Alta Rápida', '🥚 Puesta & RFID', '🧰 Herramientas']), 'Usuario: barra de 4 columnas');
+ok(JSON.stringify(await barra()) === JSON.stringify(['Mi Censo', 'Alta Rápida', 'Puesta & RFID', 'Herramientas']), 'Usuario: barra de 4 columnas');
 await page.fill('#pf-rega', 'ES030140001234');
 await page.fill('#pf-mun', 'Elche');
 await page.fill('#pf-prov', 'Alicante');

@@ -3,6 +3,7 @@
 import * as datos from './datos.js';
 import { nombreVariedad } from './estandar.js';
 import { h, pintar } from './ui.js';
+import { ave } from './iconos.js';
 
 const MAX = 8;
 const normal = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -52,7 +53,7 @@ export function abrirBuscador() {
     resultados = buscarEjemplares(q.value);
     pintar(ul, !q.value.trim() ? '' : !resultados.length ? h`<li class="muted peq" style="padding:.5rem 0">Ninguna anilla coincide.</li>`
       : h`${resultados.slice(0, MAX).map((a, i) => h`<li><a class="item" href="#/animal/${encodeURIComponent(a.id)}" data-i="${i}">
-          <span class="sexo sexo-${a.sexo}" aria-hidden="true">${a.sexo === 'M' ? '♂' : '♀'}</span>
+          ${ave(a)}
           <span class="item-principal"><span class="item-titulo">${a.anilla}${a.nombre ? ` · ${a.nombre}` : ''}</span>
           <span class="item-sub">${nombreVariedad(a.variedad)} · ${a.seccion}${a.estado === 'baja' ? ' · baja' : ''}</span></span></a></li>`)}
         ${resultados.length > MAX ? h`<li class="muted peq" style="padding:.4rem 0">Y ${resultados.length - MAX} más: escribe más cifras.</li>` : ''}`);

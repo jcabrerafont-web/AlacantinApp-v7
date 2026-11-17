@@ -6,6 +6,7 @@ import { cerrarSesion } from '../app.js';
 import { h, pintar, $, confirmar, aviso } from '../ui.js';
 import * as instalacion from '../instalacion.js';
 import * as tema from '../tema.js';
+import { desdeEmoji } from '../iconos.js';
 
 export default function (main) {
   const p = datos.estado.perfil;
@@ -48,7 +49,7 @@ export default function (main) {
       <div class="opciones" role="radiogroup" aria-labelledby="h-pantalla-et">${Object.entries(tema.TEMAS).map(([k, v]) => h`<label><input type="radio" name="h-tema" value="${k}" ${tema.actual() === k ? h`checked` : ''}><span>${v}</span></label>`)}</div>
       <p class="ayuda">«Sol»: máximo contraste y letra más grande, para leer al aire libre. Se guarda en este dispositivo.</p></div>
     ${grupos.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">
-      ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span style="font-size:1.4rem" aria-hidden="true">${ico}</span>
+      ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span class="tarea-ico" aria-hidden="true">${desdeEmoji(ico)}</span>
         <span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}
     </ul></div>`)}
     <p class="muted peq">AlacantinApp ${CONFIG.version} · ${supabaseConfigurado() ? 'Conectada al Libro central' : 'Modo dispositivo (sin servidor)'}</p>`);
@@ -60,7 +61,7 @@ export default function (main) {
     const a = await instalacion.estadoAlmacen();
     const fotos = await (async () => { try { return (await (await caches.open('alacantinapp-fotos')).keys()).length; } catch { return 0; } })();
     const inst = instalacion.instalada();
-    pintar(caja, h`<h2 id="instalar">📲 La app en este dispositivo</h2>
+    pintar(caja, h`<h2 id="instalar">La app en este dispositivo</h2>
       <p>${inst ? '✓ Instalada: se abre desde su icono, a pantalla completa y sin conexión.' : 'Aún no está instalada.'}
         ${a.persistente === true ? h`<br>✓ Datos protegidos: el navegador no los borrará para liberar espacio.` : a.persistente === false ? h`<br><strong>Datos sin proteger:</strong> el navegador podría borrarlos si le falta espacio.` : ''}
         ${a.usoMB != null ? h`<br><span class="peq muted">Espacio usado: ${a.usoMB < 1 ? '< 1' : Math.round(a.usoMB)} MB${a.cuotaMB ? ` de ${Math.round(a.cuotaMB / 1024 * 10) / 10} GB disponibles` : ''} (las fotos son lo que más ocupa).</span>` : ''}</p>
