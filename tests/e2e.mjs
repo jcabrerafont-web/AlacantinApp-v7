@@ -324,6 +324,11 @@ ok(restauracion.vacio === 0 && restauracion.restaurados === restauracion.antes &
 ok(restauracion.basura.includes('no es una copia'), 'Rechaza archivos que no son copias de AlacantinApp');
 ok(restauracion.adoptada && restauracion.titular && restauracion.editable, 'Copia de otro móvil: sus ejemplares pasan a la cuenta actual y se pueden editar');
 
+// 6e. Las advertencias ámbar (aviso-caja aviso) se ven: no chocan con la clase de los mensajes emergentes
+await ir('#/copia');
+const ambar = await page.$$eval('.aviso-caja.aviso', els => els.map(e => { const c = getComputedStyle(e); return c.opacity === '1' && c.position !== 'fixed' && e.offsetHeight > 0; }));
+ok(ambar.length > 0 && ambar.every(Boolean), `Advertencias ámbar visibles (${ambar.length})`);
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');

@@ -36,7 +36,7 @@ export function aviso(texto, tipo = 'info') {
   const el = $('#aviso');
   if (!el) return;
   el.textContent = texto;
-  el.className = `aviso aviso-${tipo} visible`;
+  el.className = `toast toast-${tipo} visible`;
   el.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
   clearTimeout(temporizador);
   temporizador = setTimeout(() => el.classList.remove('visible'), tipo === 'error' ? 6000 : 3500);

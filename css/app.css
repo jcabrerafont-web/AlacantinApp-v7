@@ -179,13 +179,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .dialogo form { padding: 1.1rem; }
 .dialogo-cuerpo { max-height: 60vh; overflow: auto; }
 .dialogo menu { display: flex; justify-content: flex-end; gap: .5rem; padding: 0; margin: 1rem 0 0; flex-wrap: wrap; }
-.aviso {
+.toast {
   position: fixed; left: 50%; bottom: calc(var(--barra-alto) + 16px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
   max-width: min(92vw, 520px); padding: .7rem 1rem; border-radius: 12px; background: #0f172a; color: #fff; font-weight: 600;
   opacity: 0; pointer-events: none; transition: .2s; z-index: 50; white-space: pre-line;
 }
-.aviso.visible { opacity: 1; transform: translate(-50%, 0); }
-.aviso-error { background: var(--rojo); } .aviso-ok { background: var(--verde); }
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+.toast-error { background: var(--rojo); } .toast-ok { background: var(--verde); }
 
 /* Impresión de documentos oficiales */
 #impresion { display: none; }
