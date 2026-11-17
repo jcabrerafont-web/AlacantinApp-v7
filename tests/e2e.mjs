@@ -26,6 +26,11 @@ await ir('#/alta');
 ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');
 await ir('#/guia');
 ok((await page.$$('#guia-lista details')).length === 12, 'Guía de campo: 12 regiones');
+await ir('#/programa');
+ok((await page.$$('details.guia-sec')).length === 6 && (await page.innerText('main')).includes('Control de puesta'), 'Visitante: Guía del criador con 6 secciones');
+await ir('#/programa?s=puesta');
+ok(await page.$eval('#sec-puesta', e => e.open), 'Guía: enlace directo a la sección de puesta');
+if (process.env.CAPTURAS) { await page.waitForTimeout(200); await page.screenshot({ path: `${process.env.CAPTURAS}/guia-puesta.png` }); }
 
 // 2. Registro y Mi aviario
 await ir('#/acceso');
@@ -87,16 +92,36 @@ ok(herenciaRega, 'Las altas heredan REGA y municipio del aviario');
 // 4. Puesta
 await ir('#/puesta');
 await page.selectOption('#pu-gallina', { label: 'E2418000002 · <img src=x onerror="window.__xss=1">' });
-for (const g of ['61,5', '72', '58']) { await page.fill('#pu-peso', g); await page.press('#pu-peso', 'Enter'); }
+for (const g of ['61,5', '72', '54']) { await page.fill('#pu-peso', g); await page.press('#pu-peso', 'Enter'); }
 await page.click('#pu-guardar');
 await page.waitForTimeout(600);
-ok((await aviso()).includes('3 huevo(s) guardados · 2 aptos'), `Puesta individual (${await aviso()})`);
+ok((await aviso()).includes('3 huevo(s) guardados · 2 aptos'), `Puesta individual: 61,5 y 72 g aptos, 54 g no (${await aviso()})`);
 const huevoGallo = await page.evaluate(async () => {
   const d = await import('./js/datos.js');
   const g = d.estado.todos.find(a => a.anilla === 'E2420000001');
   try { await d.registrarHuevos(g.id, '2026-01-01', [60], 'Blanco crema'); return 'aceptado'; } catch (e) { return e.message; }
 });
 ok(huevoGallo.includes('solo para gallinas'), 'Huevo asignado a un gallo rechazado');
+
+// 4b. Campañas de control de puesta
+await ir('#/puesta');
+ok((await page.innerText('#pu-campana')).includes('Control de puesta'), 'Puesta: acceso a las campañas');
+await ir('#/campanas');
+await page.fill('#cp-inicio', await page.evaluate(() => new Date().toISOString().slice(0, 10)));
+await page.click('#cp-form button[type=submit]');
+await page.waitForTimeout(600);
+ok(page.url().includes('#/campana/'), `Ciclo 1 creado (${await aviso()})`);
+if (process.env.CAPTURAS) { await page.waitForTimeout(3500); await page.screenshot({ path: `${process.env.CAPTURAS}/campana.png`, fullPage: true }); }
+const txtCamp = await page.innerText('main');
+ok(txtCamp.includes('Día 1 de 15') && /Huevos\s*\n?\s*3|3\s*\n\s*Huevos/.test(txtCamp.replace(/\t/g, ' ')), 'Campaña en curso: día 1 de 15 y cuenta los huevos de hoy');
+const repetida = await page.evaluate(async () => {
+  const d = await import('./js/datos.js');
+  try { await d.crearCampana({ ciclo: 1, inicio: new Date().toISOString().slice(0, 10), gallinas: d.estado.campanas[0].gallinas }); return 'aceptada'; } catch (e) { return e.message; }
+});
+ok(repetida.includes('Ya tienes el ciclo 1'), 'No se repite un ciclo en la misma temporada');
+await ir('#/puesta');
+ok((await page.innerText('#pu-campana')).includes('Día 1 de 15'), 'Puesta muestra la campaña en curso');
+if (process.env.CAPTURAS) { await page.screenshot({ path: `${process.env.CAPTURAS}/puesta-campana.png` }); await ir('#/campanas'); await page.waitForTimeout(3500); await page.screenshot({ path: `${process.env.CAPTURAS}/campanas.png`, fullPage: true }); }
 
 // 5. Informes y exportación
 await ir('#/informes');

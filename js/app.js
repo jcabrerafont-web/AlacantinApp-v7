@@ -11,6 +11,7 @@ import { $, aviso, esc } from './ui.js';
 const RUTAS = [
   ['estandar', 'estandar', '*'],
   ['guia', 'guia', '*'],
+  ['programa', 'programa', '*'],
   ['censo', 'censo', '*'],
   ['animal/:id', 'ficha', '*'],
   ['pedigri/:id', 'pedigri', '*'],
@@ -18,6 +19,8 @@ const RUTAS = [
   ['alta', 'alta', 'usuario'],
   ['editar/:id', 'alta', 'usuario'],
   ['puesta', 'puesta', 'usuario'],
+  ['campanas', 'campanas', 'usuario'],
+  ['campana/:id', 'campana', 'usuario'],
   ['herramientas', 'herramientas', 'usuario'],
   ['perfil', 'perfil', 'usuario'],
   ['apareamientos', 'apareamientos', 'usuario'],

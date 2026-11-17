@@ -306,7 +306,8 @@ CREATE TABLE IF NOT EXISTS public.huevos (
   fecha       date NOT NULL CHECK (fecha <= current_date),
   peso_g      numeric(5,1) NOT NULL CHECK (peso_g BETWEEN 20 AND 120),
   cascara     text NOT NULL,
-  apto        boolean GENERATED ALWAYS AS (peso_g BETWEEN 55 AND 70 AND cascara = 'Blanco crema') STORED,
+  -- Apto desde 55 g con cáscara blanco crema; sin límite superior (criterio del Club)
+  apto        boolean GENERATED ALWAYS AS (peso_g >= 55 AND cascara = 'Blanco crema') STORED,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS huevos_animal_fecha ON public.huevos (animal_id, fecha);
@@ -325,16 +326,54 @@ CREATE TRIGGER trg_validar_huevo BEFORE INSERT OR UPDATE ON public.huevos
   FOR EACH ROW EXECUTE FUNCTION public.validar_huevo();
 
 -- ----------------------------------------------------------------------------
+-- 4b. Campañas de control de puesta: 15 días por gallina, 3 ciclos por temporada
+--     (los huevos se siguen registrando en public.huevos; la campaña define el
+--      periodo y las gallinas controladas)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.campanas (
+  id          uuid PRIMARY KEY,
+  usuario_id  uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  temporada   integer NOT NULL,
+  ciclo       integer NOT NULL CHECK (ciclo BETWEEN 1 AND 3),
+  inicio      date NOT NULL,
+  dias        integer NOT NULL DEFAULT 15 CHECK (dias BETWEEN 7 AND 30),
+  metodo      text NOT NULL DEFAULT 'jaula' CHECK (metodo IN ('jaula', 'ponedero', 'rfid')),
+  gallinas    jsonb NOT NULL CHECK (jsonb_typeof(gallinas) = 'array' AND jsonb_array_length(gallinas) > 0),
+  notas       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT temporada_inicio CHECK (temporada = extract(year FROM inicio)),
+  CONSTRAINT un_ciclo_por_temporada UNIQUE (usuario_id, temporada, ciclo)
+);
+
+CREATE OR REPLACE FUNCTION public.validar_campana() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT public.es_admin() THEN NEW.usuario_id := auth.uid(); END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(NEW.gallinas) g
+             LEFT JOIN public.animales a ON a.id = g::uuid
+             WHERE a.id IS NULL OR a.sexo <> 'H' OR a.usuario_id <> NEW.usuario_id) THEN
+    RAISE EXCEPTION 'La campaña solo puede incluir gallinas del propio criador' USING ERRCODE = '23514';
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_campana ON public.campanas;
+CREATE TRIGGER trg_validar_campana BEFORE INSERT OR UPDATE ON public.campanas
+  FOR EACH ROW EXECUTE FUNCTION public.validar_campana();
+
+-- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.perfiles       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.animales       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calificaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.huevos         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campanas       ENABLE ROW LEVEL SECURITY;
 
 DO $$ DECLARE r record; BEGIN
   FOR r IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
-           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos') LOOP
+           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas') LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
 END $$;
@@ -366,7 +405,17 @@ CREATE POLICY huevos_crear ON public.huevos FOR INSERT TO authenticated
 CREATE POLICY huevos_borrar ON public.huevos FOR DELETE TO authenticated
   USING (usuario_id = auth.uid());
 
+CREATE POLICY campanas_ver ON public.campanas FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor());
+CREATE POLICY campanas_crear ON public.campanas FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid() OR public.es_admin());
+CREATE POLICY campanas_editar ON public.campanas FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid()) WITH CHECK (usuario_id = auth.uid());
+CREATE POLICY campanas_borrar ON public.campanas FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid());
+
 GRANT SELECT ON public.censo_publico TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.perfiles, public.animales TO authenticated;
 GRANT SELECT, INSERT ON public.calificaciones TO authenticated;
 GRANT SELECT, INSERT, DELETE ON public.huevos TO authenticated;

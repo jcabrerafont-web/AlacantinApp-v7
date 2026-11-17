@@ -75,7 +75,7 @@ export default function (main, { id }) {
         ${puesta.n ? h`<div class="kpis">
           <div class="kpi"><b>${puesta.n}</b><span>Huevos pesados</span></div>
           <div class="kpi"><b>${puesta.media.toFixed(1).replace('.', ',')} g</b><span>Peso medio</span></div>
-          <div class="kpi"><b>${puesta.aptos}/${puesta.n}</b><span>Aptos (${ESTANDAR.huevo.min}–${ESTANDAR.huevo.max} g, blanco crema)</span></div></div>`
+          <div class="kpi"><b>${puesta.aptos}/${puesta.n}</b><span>Aptos (desde ${ESTANDAR.huevo.min} g, blanco crema)</span></div></div>`
           : h`<p class="muted">Sin huevos registrados.</p>`}</div>` : ''}
 
       ${verPrivado ? h`<div class="tarjeta"><h2>Calificaciones</h2>

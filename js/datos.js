@@ -16,6 +16,7 @@ export const estado = {
   idx: new Map(),
   calificaciones: [],
   huevos: [],
+  campanas: [],
   perfiles: [],
   pendientes: 0,
   online: navigator.onLine
@@ -33,8 +34,8 @@ const PRIVADOS = ['usuario_id', 'rega', 'latitud', 'longitud', 'notas', 'baja_ca
 export const versionPublica = (a) => Object.fromEntries(Object.entries(a).filter(([k]) => !PRIVADOS.includes(k)));
 
 export async function cargar() {
-  const [animales, calificaciones, huevos, perfiles] = await Promise.all(
-    ['animales', 'calificaciones', 'huevos', 'perfiles'].map(s => db.todos(s)));
+  const [animales, calificaciones, huevos, perfiles, campanas] = await Promise.all(
+    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas'].map(s => db.todos(s)));
   estado.todos = animales;
   estado.idx = indice(animales);
   const p = estado.perfil;
@@ -42,15 +43,18 @@ export async function cargar() {
     estado.calificaciones = [];
     estado.huevos = [];
     estado.perfiles = [];
+    estado.campanas = [];
   } else if (esAuditor(p.rol)) {
     estado.calificaciones = calificaciones;
     estado.huevos = huevos;
     estado.perfiles = perfiles;
+    estado.campanas = campanas;
   } else {
     const mios = new Set(animales.filter(a => a.usuario_id === p.id).map(a => a.id));
     estado.calificaciones = calificaciones.filter(c => mios.has(c.animal_id));
     estado.huevos = huevos.filter(h => mios.has(h.animal_id));
     estado.perfiles = perfiles.filter(x => x.id === p.id);
+    estado.campanas = campanas.filter(c => c.usuario_id === p.id);
   }
   estado.pendientes = await sync.pendientes();
   notificar();
@@ -194,6 +198,91 @@ export function resumenPuesta(animalId, desde = null, hasta = null) {
   const aptos = lista.filter(h => h.apto).length;
   const dias = new Set(lista.map(h => h.fecha)).size;
   return { n, aptos, media, min: n ? Math.min(...pesos) : null, max: n ? Math.max(...pesos) : null, dias, lista };
+}
+
+// ---------------------------------------------------------------------------
+// Campañas de control de puesta (15 días, 3 ciclos por temporada)
+// ---------------------------------------------------------------------------
+const masDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+export const finCampana = (c) => masDias(c.inicio, c.dias - 1);
+export const diaCampana = (c, hoy = new Date().toISOString().slice(0, 10)) =>
+  hoy < c.inicio ? 0 : Math.min(c.dias, Math.round((Date.parse(`${hoy}T12:00:00Z`) - Date.parse(`${c.inicio}T12:00:00Z`)) / 86400000) + 1);
+export const estadoCampana = (c, hoy = new Date().toISOString().slice(0, 10)) =>
+  hoy < c.inicio ? 'programada' : hoy > finCampana(c) ? 'terminada' : 'en curso';
+export const misCampanas = () => [...estado.campanas].sort((a, b) => b.inicio.localeCompare(a.inicio));
+export const campanaEnCurso = () => misCampanas().find(c => estadoCampana(c) === 'en curso') || null;
+
+export async function crearCampana({ ciclo, inicio, dias = REGLAS.controlPuesta.dias, metodo, gallinas, notas }) {
+  const p = estado.perfil;
+  if (!p) throw new Error('Inicia sesión para organizar campañas.');
+  const temporada = Number(String(inicio).slice(0, 4));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(inicio || ''))) throw new Error('Indica la fecha de inicio.');
+  if (![1, 2, 3].includes(Number(ciclo))) throw new Error('El ciclo debe ser 1, 2 o 3.');
+  const d = Number(dias);
+  if (!Number.isInteger(d) || d < 7 || d > 30) throw new Error('La campaña debe durar entre 7 y 30 días (el protocolo recomienda 15).');
+  const lista = [...new Set(gallinas || [])].filter(id => { const a = estado.idx.get(id); return a && a.sexo === 'H' && a.usuario_id === p.id && a.estado !== 'baja'; });
+  if (!lista.length) throw new Error('Elige al menos una gallina.');
+  if (estado.campanas.some(c => c.usuario_id === p.id && c.temporada === temporada && c.ciclo === Number(ciclo))) {
+    throw new Error(`Ya tienes el ciclo ${ciclo} de ${temporada}.`);
+  }
+  const nueva = { inicio, dias: d };
+  const solapa = estado.campanas.find(c => c.usuario_id === p.id && !(finCampana(nueva) < c.inicio || inicio > finCampana(c)));
+  if (solapa) throw new Error(`Se solapa con el ciclo ${solapa.ciclo} de ${solapa.temporada}.`);
+  const ahora = new Date().toISOString();
+  const c = { id: uuid(), usuario_id: p.id, temporada, ciclo: Number(ciclo), inicio, dias: d,
+    metodo: metodo || 'jaula', gallinas: lista, notas: notas || '', created_at: ahora, updated_at: ahora };
+  await db.guardar('campanas', c);
+  await sync.encolar('campanas', 'upsert', c);
+  await cargar();
+  return c;
+}
+
+export async function borrarCampana(id) {
+  const c = estado.campanas.find(x => x.id === id);
+  if (!c || c.usuario_id !== estado.perfil?.id) throw new Error('No autorizado.');
+  await db.borrar('campanas', id);
+  await sync.encolar('campanas', 'delete', { id });
+  await cargar();
+}
+
+// Resultados por gallina: huevos, % de puesta, peso medio, aptos para incubar.
+// Marca la más ponedora de cada familia (candidata a madre del gallo de reposición).
+export function resultadosCampana(c, hoy = new Date().toISOString().slice(0, 10)) {
+  const fin = finCampana(c);
+  const transcurridos = estadoCampana(c, hoy) === 'terminada' ? c.dias : diaCampana(c, hoy);
+  const filas = c.gallinas.map(id => {
+    const a = estado.idx.get(id);
+    const r = resumenPuesta(id, c.inicio, fin);
+    // Una gallina pone como mucho un huevo al día: la puesta se calcula con los días
+    // con huevo y se avisan los días con más de uno (doble anotación o error).
+    const porDia = {};
+    r.lista.forEach(x => { porDia[x.fecha] = (porDia[x.fecha] || 0) + 1; });
+    const diasDobles = Object.values(porDia).filter(n => n > 1).length;
+    return { a, id, ...r, diasDobles, puesta: transcurridos ? Math.min(1, r.dias / transcurridos) : 0, hoy: porDia[hoy] || 0 };
+  }).filter(f => f.a);
+  filas.sort((x, y) => y.n - x.n || (y.media || 0) - (x.media || 0));
+  const mejor = {};
+  for (const f of filas) { const fam = f.a.familia || '—'; if (f.n > 0 && !mejor[fam]) mejor[fam] = f.id; }
+  filas.forEach(f => { f.mejorDeFamilia = mejor[f.a.familia || '—'] === f.id && Boolean(f.a.familia); });
+  const total = filas.reduce((s, f) => s + f.n, 0);
+  const diasConHuevo = filas.reduce((s, f) => s + f.dias, 0);
+  return { filas, total, transcurridos, fin, puestaMedia: filas.length && transcurridos ? diasConHuevo / (filas.length * transcurridos) : 0 };
+}
+
+// Acumulado de la temporada (todas las campañas del año) por gallina
+export function temporadaPuesta(temporada) {
+  const camps = estado.campanas.filter(c => c.usuario_id === estado.perfil?.id && c.temporada === temporada && estadoCampana(c) !== 'programada');
+  const acc = new Map();
+  for (const c of camps) {
+    const res = resultadosCampana(c);
+    for (const f of res.filas) {
+      const x = acc.get(f.id) || { a: f.a, n: 0, dias: 0, diasConHuevo: 0, aptos: 0, pesos: [], ciclos: 0 };
+      x.n += f.n; x.dias += res.transcurridos; x.diasConHuevo += f.dias; x.aptos += f.aptos; x.pesos.push(...f.lista.map(h => h.peso_g)); x.ciclos += 1;
+      acc.set(f.id, x);
+    }
+  }
+  return [...acc.values()].map(x => ({ ...x, puesta: x.dias ? Math.min(1, x.diasConHuevo / x.dias) : 0, media: x.pesos.length ? x.pesos.reduce((s, g) => s + g, 0) / x.pesos.length : null }))
+    .sort((p, q) => q.puesta - p.puesta);
 }
 
 // ---------------------------------------------------------------------------

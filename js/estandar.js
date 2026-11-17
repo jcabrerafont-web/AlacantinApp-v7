@@ -22,8 +22,9 @@ export const ESTANDAR = Object.freeze({
   // Diámetro de las anillas (mm)
   anilla: Object.freeze({ M: 20, H: 18 }),
 
-  // Huevo: 55 a 70 g, cáscara blanco crema
-  huevo: Object.freeze({ min: 55, max: 70, cascara: 'Blanco crema' }),
+  // Huevo: el Estándar da 55–70 g como rango habitual y 55 g como mínimo.
+  // Criterio del Club: apto desde 55 g, sin límite superior (más de 70 g solo se señala).
+  huevo: Object.freeze({ min: 55, habitualMax: 70, cascara: 'Blanco crema' }),
 
   // Variedades (denominación en femenino). Solo las oficiales del Estándar
   // pueden acceder al Registro Definitivo; las "en proceso" se registran
@@ -120,6 +121,10 @@ export const REGLAS = Object.freeze({
     H: Object.freeze({ puntos: 80, hijosRD: 3 }),
     M: Object.freeze({ puntos: 85, hijosRD: 10 })
   }),
+  // Control de puesta por campañas (modelo del programa de conservación de la
+  // Castellana Negra, manual GANECA): 15 días por gallina, 3 ciclos por temporada
+  // repartidos entre febrero y junio.
+  controlPuesta: Object.freeze({ dias: 15, ciclos: 3, mesInicio: 2, mesFin: 6 }),
   generacionesWright: 5,             // Profundidad del cálculo de consanguinidad
   fxPrecaucion: 0.0625,              // 6,25 %: equivalente a primos hermanos
   fxAlerta: 0.125,                   // 12,5 %: equivalente a medio hermanos
@@ -143,8 +148,11 @@ export function pesoConforme(sexo, gramos) {
 
 export function huevoApto(gramos, cascara) {
   const g = Number(gramos);
-  return Number.isFinite(g) && g >= ESTANDAR.huevo.min && g <= ESTANDAR.huevo.max && cascara === ESTANDAR.huevo.cascara;
+  return Number.isFinite(g) && g >= ESTANDAR.huevo.min && cascara === ESTANDAR.huevo.cascara;
 }
+
+// Por encima del rango habitual del Estándar (no descalifica: solo se señala)
+export const huevoGrande = (gramos) => Number(gramos) > ESTANDAR.huevo.habitualMax;
 
 // 'AAAA-MM-DD' + n meses -> 'AAAA-MM-DD'
 export function sumarMeses(fechaISO, n) {

@@ -110,7 +110,7 @@ export async function descargar(usuarioId) {
     await fusionar('animales', pub.data.filter(a => !propios.has(a.id)));
   }
   if (usuarioId) {
-    for (const [tabla, store] of [['animales', 'animales'], ['calificaciones', 'calificaciones'], ['huevos', 'huevos'], ['perfiles', 'perfiles']]) {
+    for (const [tabla, store] of [['animales', 'animales'], ['calificaciones', 'calificaciones'], ['huevos', 'huevos'], ['perfiles', 'perfiles'], ['campanas', 'campanas']]) {
       const r = await cliente.from(tabla).select('*');
       if (!r.error) await fusionar(store, r.data);
     }

@@ -14,6 +14,8 @@ export default function (main) {
       ['#/sincronizacion', '☁️', 'Sincronización', supabaseConfigurado() ? `${datos.estado.pendientes} operación(es) pendientes` : 'Modo dispositivo: datos solo en este equipo']
     ]],
     ['Cría', [
+      ['#/programa', '🧭', 'Guía del criador', 'Qué hacer y cuándo: Libro, anillas, calificación, familias, puesta'],
+      ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],
       ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],

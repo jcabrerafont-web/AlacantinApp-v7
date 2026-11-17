@@ -18,7 +18,7 @@ export default function (main) {
       <div class="kpi"><b>${kg(E.peso.M.min)}–${kg(E.peso.M.max)} kg</b><span>Peso del gallo</span></div>
       <div class="kpi"><b>${kg(E.peso.H.min)}–${kg(E.peso.H.max)} kg</b><span>Peso de la gallina</span></div>
       <div class="kpi"><b>${E.anilla.M} / ${E.anilla.H} mm</b><span>Anilla gallo / gallina</span></div>
-      <div class="kpi"><b>${E.huevo.min}–${E.huevo.max} g</b><span>Huevo · cáscara ${E.huevo.cascara.toLowerCase()}</span></div>
+      <div class="kpi"><b>≥ ${E.huevo.min} g</b><span>Huevo · habitual ${E.huevo.min}–${E.huevo.habitualMax} g · cáscara ${E.huevo.cascara.toLowerCase()}</span></div>
     </div>
 
     <div class="tarjeta">
@@ -42,6 +42,10 @@ export default function (main) {
         <tbody>${E.regiones.map(r => h`<tr><th scope="row">${r.nombre}</th><td>${r.gallo}</td><td>${r.gallina}</td></tr>`)}</tbody>
       </table></div>
     </div>
+
+    <a class="tarjeta item" href="#/programa" style="display:flex"><span style="font-size:1.4rem" aria-hidden="true">🧭</span>
+      <span class="item-principal"><span class="item-titulo">¿Quieres criar Alacantinas para el Libro?</span>
+      <span class="item-sub">Guía del criador: anillas, calificación, familias y control de puesta</span></span><span aria-hidden="true">›</span></a>
 
     <p><a class="btn" href="./docs/Estandar-Alacantina2025.pdf" target="_blank" rel="noopener">📄 Ver el Estándar oficial (PDF)</a></p>
   `);

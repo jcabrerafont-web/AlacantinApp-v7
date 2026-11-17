@@ -1,8 +1,8 @@
-// Puesta y RFID: pesaje individual de cada huevo (55–70 g, cáscara blanco crema).
+// Puesta y RFID: pesaje individual de cada huevo (apto desde 55 g, cáscara blanco crema; sin límite superior).
 // Lectores RFID en modo teclado (Bluetooth/USB HID): leer el chip en el campo
 // "Chip" selecciona la gallina automáticamente.
 import * as datos from '../datos.js';
-import { ESTANDAR, huevoApto } from '../estandar.js';
+import { ESTANDAR, REGLAS, huevoApto, huevoGrande } from '../estandar.js';
 import { h, pintar, $, aviso, fecha, hoyISO, confirmar } from '../ui.js';
 
 const coma = (n, d = 1) => (n === null || n === undefined ? '—' : Number(n).toFixed(d).replace('.', ','));
@@ -17,6 +17,7 @@ export default function (main) {
 
   pintar(main, h`
     <h1>Puesta & RFID</h1>
+    <div id="pu-campana"></div>
     <form id="form-puesta" class="tarjeta" novalidate>
       <div class="rejilla rejilla-2">
         <div class="campo"><label for="pu-chip">Chip RFID</label>
@@ -30,7 +31,7 @@ export default function (main) {
       <div class="campo"><label for="pu-peso">Peso del huevo (g)</label>
         <div class="fila"><input id="pu-peso" type="text" inputmode="decimal" autocomplete="off" pattern="[0-9]+([.,][0-9])?" style="flex:1" placeholder="Ej.: 61,5">
           <button class="btn" type="button" id="pu-anadir">Añadir</button></div>
-        <p class="ayuda">Pulsa Intro o «Añadir» por cada huevo. Rango del Estándar: ${ESTANDAR.huevo.min}–${ESTANDAR.huevo.max} g.</p></div>
+        <p class="ayuda">Pulsa Intro o «Añadir» por cada huevo. Apto para incubar desde ${ESTANDAR.huevo.min} g y cáscara blanco crema. El Estándar da ${ESTANDAR.huevo.min}–${ESTANDAR.huevo.habitualMax} g como rango habitual; los más grandes también valen.</p></div>
       <div id="pu-pesos" class="fila" style="margin-bottom:.75rem"></div>
       <button class="btn btn-primario btn-bloque" type="submit" id="pu-guardar" disabled>Guardar huevos</button>
     </form>
@@ -48,9 +49,27 @@ export default function (main) {
 
   const pintarPesos = () => {
     const cascara = $('#pu-cascara', f).value;
-    pintar($('#pu-pesos', f), h`${pesos.map((g, i) => h`<button type="button" class="chip chip-boton ${huevoApto(g, cascara) ? 'chip-ok' : 'chip-aviso'}" data-quitar="${i}" title="Quitar">${coma(g)} g ✕</button>`)}`);
+    pintar($('#pu-pesos', f), h`${pesos.map((g, i) => h`<button type="button" class="chip chip-boton ${huevoApto(g, cascara) ? 'chip-ok' : 'chip-aviso'}" data-quitar="${i}" title="Quitar">${coma(g)} g${huevoGrande(g) ? ' ↑' : ''} ✕</button>`)}`);
     $('#pu-guardar', f).disabled = pesos.length === 0 || !sel.value;
     $('#pu-guardar', f).textContent = pesos.length ? `Guardar ${pesos.length} huevo(s)` : 'Guardar huevos';
+  };
+
+  const pintarCampana = () => {
+    const c = datos.campanaEnCurso();
+    const caja = $('#pu-campana', main);
+    if (c) {
+      const r = datos.resultadosCampana(c);
+      const pendientes = r.filas.filter(x => !x.hoy);
+      pintar(caja, h`<div class="tarjeta"><div class="fila entre"><strong>Control de puesta · ciclo ${c.ciclo}</strong>
+          <a class="chip chip-ok" href="#/campana/${c.id}">Día ${datos.diaCampana(c)} de ${c.dias}</a></div>
+        <div class="progreso"><span style="width:${Math.round(100 * datos.diaCampana(c) / c.dias)}%"></span></div>
+        <p class="peq">${pendientes.length ? h`Sin huevos anotados hoy: ${pendientes.map((x, i) => h`${i ? ', ' : ''}<a href="#/puesta?gallina=${x.id}" data-elegir="${x.id}">${x.a.anilla}</a>`)}` : 'Hoy ya has anotado huevos de todas las gallinas controladas.'}</p></div>`);
+    } else {
+      const prox = datos.misCampanas().find(x => datos.estadoCampana(x) === 'programada');
+      pintar(caja, h`<a class="tarjeta item" href="#/campanas" style="display:flex"><span style="font-size:1.4rem" aria-hidden="true">🗓️</span>
+        <span class="item-principal"><span class="item-titulo">Control de puesta</span>
+        <span class="item-sub">${prox ? `Próximo: ciclo ${prox.ciclo}, empieza el ${fecha(prox.inicio)}` : `${REGLAS.controlPuesta.ciclos} campañas de ${REGLAS.controlPuesta.dias} días entre febrero y junio. Organízalas aquí.`}</span></span><span aria-hidden="true">›</span></a>`);
+    }
   };
 
   const pintarResumen = () => {
@@ -74,7 +93,7 @@ export default function (main) {
       ${recientes.length ? h`<div class="tarjeta"><h2>Últimos registros</h2><ul class="lista">${recientes.map(x => {
         const a = datos.animal(x.animal_id);
         return h`<li class="item"><div class="item-principal"><div class="item-titulo">${coma(x.peso_g)} g · ${a?.anilla || ''}</div>
-          <div class="item-sub">${fecha(x.fecha)} · ${x.cascara}</div></div>
+          <div class="item-sub">${fecha(x.fecha)} · ${x.cascara}${huevoGrande(x.peso_g) ? ` · por encima de ${ESTANDAR.huevo.habitualMax} g (habitual)` : ''}</div></div>
           <span class="chip ${x.apto ? 'chip-ok' : 'chip-aviso'}">${x.apto ? 'Apto' : 'No apto'}</span>
           <button class="btn btn-pequeno" data-borrar="${x.id}" aria-label="Borrar registro">🗑</button></li>`;
       })}</ul></div>` : ''}`);
@@ -127,8 +146,15 @@ export default function (main) {
     }
   });
 
+  main.addEventListener('click', e => {
+    const id = e.target.closest('[data-elegir]')?.dataset.elegir;
+    if (!id) return;
+    e.preventDefault(); seleccion = id; sel.value = id; pintarPesos(); $('#pu-peso', f).focus();
+  });
+
   pintarSelect();
   pintarPesos();
+  pintarCampana();
   pintarResumen();
-  return datos.suscribir(() => { pintarSelect(); pintarResumen(); });
+  return datos.suscribir(() => { pintarSelect(); pintarCampana(); pintarResumen(); });
 }

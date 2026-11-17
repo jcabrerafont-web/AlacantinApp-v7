@@ -32,7 +32,7 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
 - **Pesos y anillas:**
   - Gallo: 3,000–3,500 kg, anilla de 20 mm.
   - Gallina: 2,200–2,600 kg, anilla de 18 mm.
-- **Huevo:** de 55 a 70 g con cáscara blanco crema. Cada huevo se pesa y se registra por separado.
+- **Huevo:** apto para incubar **desde 55 g** con cáscara blanco crema, **sin límite superior**. El Estándar da 55–70 g como rango habitual; un huevo de más de 70 g se acepta y solo se señala. Cada huevo se pesa y se registra por separado.
 - **Calificación morfológica (baremo de 100 puntos, en fase de propuesta):**
   - El Estándar ESGA025 no fija baremo. Se puntúan sobre 100 las **12 regiones** en que se agrupa el Estándar, con el texto oficial del gallo y de la gallina en cada una. Las que más puntúan son las que definen la impresión general de la raza y las de los defectos graves. Precedente de método: programa de cría de la Castellana Negra (BOE 15/02/2019).
   - Reparto: impresión general y tronco 15 · cabeza, cara, ojos y pico 6 · cresta 10 · barbillas 5 · orejillas 10 · cuello y esclavina 6 · dorso 8 · alas 4 · pecho y abdomen 10 · cola 10 · muslos, tarsos y dedos 6 · plumaje y color de la variedad 10. Se puntúa de 0 al máximo en pasos de 0,5.
@@ -50,6 +50,12 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - Acceden ejemplares del **RF o del RD**, de variedad oficial, que tengan una calificación (no descalificada) de **80 puntos o más las gallinas y 85 los gallos**, y **3 (gallinas) o 10 (gallos) descendientes** en el Registro Definitivo.
   - Vía alternativa, tomada del reglamento de la Gallina del Sobrarbe: con la misma calificación mínima, un **premio en feria, concurso o exposición**, que debe describirse.
   - La app muestra en la ficha el camino al RM y, en Informes, la lista de candidatos. La inscripción la confirma un **administrador**, y el servidor vuelve a comprobar los requisitos (`comprobar_rm`). Los umbrales están en `REGLAS.rm`.
+- **Control de puesta por campañas:**
+  - **3 ciclos de 15 días por temporada**, repartidos entre febrero y junio. Es el modelo del programa de conservación de la Castellana Negra.
+  - El criador crea cada ciclo, eligiendo el primer día, las gallinas y el método: jaula individual, ponedero trampa o RFID. Durante la campaña, la pantalla de Puesta muestra el día y qué gallinas no tienen huevos anotados hoy.
+  - Resultados por gallina: huevos, % de puesta (días con huevo sobre días controlados), peso medio y aptos. Se marca la **más ponedora de cada familia** (★), candidata a madre del gallo de reposición según Gobe. Se avisa de los días con más de un huevo anotado.
+  - Hay un acumulado de la temporada. En el servidor se guardan en la tabla `campanas` (un ciclo por criador y temporada, solo gallinas propias).
+- **Guía del criador** (`#/programa`, también para visitantes): explica en lenguaje sencillo el Libro (RN → RD → RM), las anillas, la calificación, las familias y la consanguinidad, el control de puesta y un calendario orientativo del año. Las cifras se leen de `REGLAS`, `BAREMO` y `ESTANDAR`, así que nunca contradice lo que la app aplica.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.

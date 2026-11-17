@@ -53,9 +53,10 @@ t('Estándar: 3 variedades oficiales + 2 en proceso', () => {
   assert.equal(ESTANDAR.regiones.length, 12);
   assert.equal(ESTANDAR.defectosGraves.length, 5);
 });
-t('Huevo apto: 55–70 g y blanco crema', () => {
+t('Huevo apto: desde 55 g y blanco crema, sin límite superior', () => {
   assert.equal(huevoApto(55, 'Blanco crema'), true);
   assert.equal(huevoApto(70, 'Blanco crema'), true);
+  assert.equal(huevoApto(78.5, 'Blanco crema'), true);
   assert.equal(huevoApto(54.9, 'Blanco crema'), false);
   assert.equal(huevoApto(62, 'Tostada'), false);
 });

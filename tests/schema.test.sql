@@ -138,3 +138,20 @@ UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', 
 \echo '   12f hija en RD sin calificación suficiente (esperado: error 23514)'
 UPDATE animales SET seccion = 'RM', rm_fecha = current_date, rm_via = 'premio', rm_motivo = '' WHERE anilla = 'E2518000030';
 RESET ROLE;
+
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+\echo '== 13. Campañas de control de puesta'
+\echo '   13a campaña con gallina propia -> OK'
+INSERT INTO campanas (id, usuario_id, temporada, ciclo, inicio, dias, gallinas) VALUES
+ (gen_random_uuid(), auth.uid(), 2026, 1, '2026-02-02', 15, '["10000000-0000-0000-0000-000000000002"]');
+\echo '   13b mismo ciclo y temporada (esperado: error unique)'
+INSERT INTO campanas (id, usuario_id, temporada, ciclo, inicio, dias, gallinas) VALUES
+ (gen_random_uuid(), auth.uid(), 2026, 1, '2026-03-02', 15, '["10000000-0000-0000-0000-000000000002"]');
+\echo '   13c con un gallo (esperado: error 23514)'
+INSERT INTO campanas (id, usuario_id, temporada, ciclo, inicio, dias, gallinas) VALUES
+ (gen_random_uuid(), auth.uid(), 2026, 2, '2026-04-06', 15, '["10000000-0000-0000-0000-000000000001"]');
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+\echo '   13d otro criador no la ve (esperado: 0)'
+SELECT count(*) AS campanas_ajenas FROM campanas;
+RESET ROLE;

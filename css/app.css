@@ -151,6 +151,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .segmentado input:focus-visible + span { outline: 3px solid #f59e0b; outline-offset: -3px; }
 .check-grande { display: flex; gap: .6rem; align-items: center; padding: .55rem .6rem; border: 1px solid var(--borde); border-radius: 10px; margin-bottom: .4rem; font-weight: 600; cursor: pointer; }
 .check-grande:has(input:checked) { background: var(--rojo-claro); border-color: var(--rojo); }
+.check-grande.neutro:has(input:checked) { background: var(--verde-claro); border-color: var(--verde); }
 
 /* Pedigrí: en móvil, una generación debajo de otra; en escritorio, columnas */
 .pedigri { display: grid; gap: .75rem; }
@@ -211,3 +212,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .marcador b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
 .lista-simple { list-style: none; padding: 0; margin: .25rem 0 .5rem; }
 .lista-simple li { padding: .3rem 0; }
+
+/* Progreso de campañas y guía del criador */
+.progreso { height: 8px; background: var(--borde); border-radius: 999px; overflow: hidden; margin: .5rem 0; }
+.progreso span { display: block; height: 100%; background: var(--verde); }
+.pasos { padding-left: 1.2rem; }
+.pasos li { margin-bottom: .6rem; }
+.guia-sec summary { cursor: pointer; }
