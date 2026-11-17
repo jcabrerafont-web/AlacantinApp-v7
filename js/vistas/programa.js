@@ -39,7 +39,7 @@ const CLUB = [
 ];
 
 export default function (main) {
-  const R = REGLAS, E = ESTANDAR, CP = REGLAS.controlPuesta;
+  const R = REGLAS, E = ESTANDAR, CP = REGLAS.controlPuesta, RP = REGLAS.reproduccion;
   const usuario = !datos.esVisitante();
   const enlace = (href, texto) => (usuario ? h`<a href="${href}">${texto}</a>` : h`<span>${texto}</span>`);
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -87,7 +87,17 @@ export default function (main) {
         <li><strong>Rotación:</strong> el gallo nuevo se queda en la familia de su padre; las pollitas pasan a otra familia, nunca con el gallo de la suya. La app usa las familias ${E.familias.join(', ')} en círculo.</li>
         <li><strong>Consanguinidad:</strong> antes de juntar un gallo con una gallina, mira la consanguinidad esperada de sus pollitos. La app avisa con <em>precaución</em> desde ${String(R.fxPrecaucion * 100).replace('.', ',')} % (como entre primos hermanos) y con <em>alerta</em> desde ${String(R.fxAlerta * 100).replace('.', ',')} % (como entre medio hermanos).</li>
       </ul>
-      <p class="peq">${enlace('#/apareamientos', 'Planificar apareamientos →')}</p>`)}
+      <p class="peq">${enlace('#/apareamientos', 'Planificar apareamientos →')}</p>
+      <h3>De la familia al pollito anotado</h3>
+      <ol class="pasos">
+        <li><strong>Forma el lote</strong> en ${enlace('#/reproduccion', 'Reproducción e incubación')}: el gallo, sus gallinas y el día en que los juntas. La app muestra la consanguinidad de los pollitos con cada gallina.</li>
+        <li><strong>Espera ${RP.diasEsperaCambioGallo} días</strong> antes de incubar los huevos de una gallina que viene de otro gallo: la app marca esos huevos como «dudosos».</li>
+        <li><strong>Incuba huevos de no más de ${RP.diasMaxHuevo} días</strong>, marcados a lápiz con la gallina. La app propone los huevos aptos registrados en Puesta.</li>
+        <li><strong>Día ${RP.miraje}: miraje.</strong> Al trasluz, retira y anota los huevos claros (sin embrión). Así sale la <em>fertilidad</em> de cada gallina.</li>
+        <li><strong>Día ${RP.nacedora}: nacedora.</strong> Deja de voltear y separa los huevos de cada gallina en su cestillo, para saber de quién es cada pollito.</li>
+        <li><strong>Día ${RP.eclosion}: nacimiento.</strong> Anota los nacidos (sale el <em>porcentaje de nacimiento</em>) y marca cada pollito hasta ponerle la anilla. Al darlo de alta desde la incubación, la app ya pone el padre, la madre y la fecha.</li>
+      </ol>
+      <p class="peq">Un pollito sin padre o madre conocidos nunca podrá pasar al Registro Definitivo: la filiación es la base del Libro.</p>`)}
 
     ${seccion('puesta', '5. Control de puesta', h`
       <p>Saber cuánto y qué huevo pone cada gallina permite elegir como madres a las mejores <strong>sin perder variabilidad</strong>: dentro de cada familia, la mejor gallina da el gallo de reposición.</p>

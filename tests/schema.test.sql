@@ -173,3 +173,28 @@ RESET ROLE;
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 SELECT count(*) AS historial_visible_para_criador FROM historial;
 RESET ROLE;
+
+\echo '== 15. Reproducción: lotes e incubaciones'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+\echo '   15a lote con gallo y gallina propios -> OK'
+INSERT INTO lotes (id, usuario_id, temporada, familia, gallo_id, gallinas, inicio) VALUES
+ ('30000000-0000-0000-0000-000000000001', auth.uid(), 2026, 'A', '10000000-0000-0000-0000-000000000001', '["10000000-0000-0000-0000-000000000002"]', '2026-02-01');
+\echo '   15b gallina como gallo (esperado: error 23514)'
+INSERT INTO lotes (id, usuario_id, temporada, gallo_id, gallinas, inicio) VALUES
+ (gen_random_uuid(), auth.uid(), 2026, '10000000-0000-0000-0000-000000000002', '["10000000-0000-0000-0000-000000000002"]', '2026-02-01');
+\echo '   15c gallina ya vendida a otro criador (esperado: error 23514)'
+INSERT INTO lotes (id, usuario_id, temporada, gallo_id, gallinas, inicio) VALUES
+ (gen_random_uuid(), auth.uid(), 2026, '10000000-0000-0000-0000-000000000001', '["10000000-0000-0000-0000-000000000003"]', '2026-02-01');
+\echo '   15d incubación coherente -> OK'
+INSERT INTO incubaciones (id, usuario_id, entrada, filas) VALUES
+ ('40000000-0000-0000-0000-000000000001', auth.uid(), '2026-03-01',
+  '[{"madre_id":"10000000-0000-0000-0000-000000000002","padre_id":"10000000-0000-0000-0000-000000000001","puestos":8,"claros":1,"nacidos":6,"pollitos":[]}]');
+\echo '   15e más nacidos que huevos fértiles (esperado: error 23514)'
+UPDATE incubaciones SET filas = jsonb_set(filas, '{0,nacidos}', '8') WHERE id = '40000000-0000-0000-0000-000000000001';
+\echo '   15f pollito que no es hijo de esa gallina (esperado: error 23514)'
+UPDATE incubaciones SET filas = jsonb_set(filas, '{0,pollitos}', '["10000000-0000-0000-0000-000000000001"]') WHERE id = '40000000-0000-0000-0000-000000000001';
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+\echo '   15g otro criador no ve lotes ni incubaciones ajenos (esperado: 0 0)'
+SELECT (SELECT count(*) FROM lotes) AS lotes_ajenos, (SELECT count(*) FROM incubaciones) AS incubaciones_ajenas;
+RESET ROLE;

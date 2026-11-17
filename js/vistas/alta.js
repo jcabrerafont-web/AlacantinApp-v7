@@ -1,7 +1,7 @@
 // Alta rápida / edición de ejemplar. Campos mínimos visibles; el resto en "Más datos".
 import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
-import { ESTANDAR, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
+import { ESTANDAR, REGLAS, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
 import { h, pintar, $, aviso, pct, hoyISO, comprimirFoto } from '../ui.js';
 
@@ -98,6 +98,15 @@ export default function (main, params) {
   $('#a-variedad', f).value = a.variedad || '';
   $('#a-padre', f).value = a.padre_id || '';
   $('#a-madre', f).value = a.madre_id || '';
+  // Alta de un pollito desde una incubación: padre, madre y fecha de nacimiento ya puestos
+  let propuestoPara = null; // propone el padre una sola vez por madre elegida
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  const desdeInc = !previo && q.get('inc') ? { inc: q.get('inc'), madre: q.get('madre') } : null;
+  if (desdeInc) {
+    if (q.get('madre') && datos.animal(q.get('madre'))) $('#a-madre', f).value = q.get('madre');
+    if (q.get('padre') && datos.animal(q.get('padre'))) $('#a-padre', f).value = q.get('padre');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(q.get('fecha') || '')) $('#a-fecha', f).value = q.get('fecha');
+  }
   $('#a-familia', f).value = a.familia || '';
 
   const pintarFoto = (k) => {
@@ -133,8 +142,16 @@ export default function (main, params) {
     const conf = pesoConforme(sexo, peso);
     $('#a-peso-ayuda', f).textContent = !r ? 'Elige el sexo para ver el rango del Estándar.'
       : `Estándar: ${r.min}–${r.max} g${conf === null ? '' : conf ? ' · ✓ dentro del rango' : ' · fuera del rango'}`;
-    const padre = $('#a-padre', f).value;
     const madre = $('#a-madre', f).value;
+    // Padre propuesto por el lote de reproducción en el que estaba la madre (fecha de puesta ≈ nacimiento − 21 días)
+    if (madre && madre !== propuestoPara && !$('#a-padre', f).value && !previo) {
+      propuestoPara = madre;
+      const nac = $('#a-fecha', f).value;
+      const puesta = nac ? new Date(new Date(`${nac}T12:00:00Z`).getTime() - REGLAS.reproduccion.eclosion * 864e5).toISOString().slice(0, 10) : undefined;
+      const pd = datos.padreDe(madre, puesta);
+      if (pd && datos.animal(pd.gallo_id)) { $('#a-padre', f).value = pd.gallo_id; aviso(`Padre propuesto por el lote de reproducción: ${datos.animal(pd.gallo_id).anilla}${pd.fiable ? '' : ' (dudoso: menos de 15 días juntos)'}.`); }
+    }
+    const padre = $('#a-padre', f).value;
     const caja = $('#a-fx', f);
     if (padre && madre) {
       const fx = fxDescendencia(padre, madre, datos.estado.idx);
@@ -188,6 +205,7 @@ export default function (main, params) {
         fotos_fecha: fotosFecha
       });
       f.dataset.sucio = '';
+      if (desdeInc) await datos.vincularPollito(desdeInc.inc, guardado.madre_id || desdeInc.madre, guardado.id).catch(() => {});
       aviso(`${previo ? 'Guardado' : 'Registrado'} ${guardado.anilla}${navigator.onLine ? '' : ' (se sincronizará al tener cobertura)'}`, 'ok');
       location.hash = `#/animal/${guardado.id}`;
     } catch (e) {

@@ -218,6 +218,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .progreso span { display: block; height: 100%; background: var(--verde); }
 .pasos { padding-left: 1.2rem; }
 .pasos li { margin-bottom: .6rem; }
+.pasos.calendario li.hecho strong { color: var(--verde); }
+.pasos.calendario li.hecho strong::before { content: '✓ '; }
+.sub-form { border-top: 1px solid var(--borde); padding-top: .75rem; margin: .5rem 0 1rem; }
 .guia-sec summary { cursor: pointer; }
 .lista-normas { list-style: none; padding: 0; }
 .lista-normas li { padding: .55rem 0; border-bottom: 1px solid var(--borde); }

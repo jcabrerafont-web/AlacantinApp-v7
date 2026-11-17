@@ -372,6 +372,85 @@ CREATE TRIGGER trg_validar_campana BEFORE INSERT OR UPDATE ON public.campanas
   FOR EACH ROW EXECUTE FUNCTION public.validar_campana();
 
 -- ----------------------------------------------------------------------------
+-- 4d. Reproducción: lotes (gallo + gallinas desde una fecha) e incubaciones
+--     (una fila por madre: huevos, claros en el miraje, nacidos y pollitos dados de alta)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.lotes (
+  id          uuid PRIMARY KEY,
+  usuario_id  uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  temporada   integer NOT NULL,
+  familia     text,
+  gallo_id    uuid NOT NULL REFERENCES public.animales(id),
+  gallinas    jsonb NOT NULL CHECK (jsonb_typeof(gallinas) = 'array' AND jsonb_array_length(gallinas) > 0),
+  inicio      date NOT NULL,
+  fin         date,
+  notas       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT lote_temporada CHECK (temporada = extract(year FROM inicio)),
+  CONSTRAINT lote_fechas CHECK (fin IS NULL OR fin >= inicio)
+);
+
+CREATE OR REPLACE FUNCTION public.validar_lote() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT public.es_admin() THEN NEW.usuario_id := auth.uid(); END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.animales WHERE id = NEW.gallo_id AND sexo = 'M' AND usuario_id = NEW.usuario_id) THEN
+    RAISE EXCEPTION 'El gallo del lote debe ser un macho del propio criador' USING ERRCODE = '23514';
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(NEW.gallinas) g
+             LEFT JOIN public.animales a ON a.id = g::uuid
+             WHERE a.id IS NULL OR a.sexo <> 'H' OR a.usuario_id <> NEW.usuario_id) THEN
+    RAISE EXCEPTION 'El lote solo puede incluir gallinas del propio criador' USING ERRCODE = '23514';
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_lote ON public.lotes;
+CREATE TRIGGER trg_validar_lote BEFORE INSERT OR UPDATE ON public.lotes
+  FOR EACH ROW EXECUTE FUNCTION public.validar_lote();
+
+CREATE TABLE IF NOT EXISTS public.incubaciones (
+  id          uuid PRIMARY KEY,
+  usuario_id  uuid NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  entrada     date NOT NULL,
+  filas       jsonb NOT NULL CHECK (jsonb_typeof(filas) = 'array' AND jsonb_array_length(filas) > 0),
+  notas       text,
+  cerrada     boolean NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION public.validar_incubacion() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE f jsonb; puestos int; claros int; nacidos int;
+BEGIN
+  IF NOT public.es_admin() THEN NEW.usuario_id := auth.uid(); END IF;
+  FOR f IN SELECT * FROM jsonb_array_elements(NEW.filas) LOOP
+    IF NOT EXISTS (SELECT 1 FROM public.animales WHERE id = (f->>'madre_id')::uuid AND sexo = 'H' AND usuario_id = NEW.usuario_id) THEN
+      RAISE EXCEPTION 'Cada fila de la incubación debe ser de una gallina del propio criador' USING ERRCODE = '23514';
+    END IF;
+    IF f->>'padre_id' IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.animales WHERE id = (f->>'padre_id')::uuid AND sexo = 'M') THEN
+      RAISE EXCEPTION 'El padre indicado no es un macho del Libro' USING ERRCODE = '23514';
+    END IF;
+    puestos := (f->>'puestos')::int; claros := coalesce((f->>'claros')::int, 0); nacidos := coalesce((f->>'nacidos')::int, 0);
+    IF puestos IS NULL OR puestos <= 0 OR claros < 0 OR claros > puestos OR nacidos < 0 OR nacidos > puestos - claros THEN
+      RAISE EXCEPTION 'Huevos, claros y nacidos incoherentes (nacidos ≤ huevos − claros)' USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(coalesce(f->'pollitos', '[]'::jsonb)) p
+               LEFT JOIN public.animales a ON a.id = p::uuid
+               WHERE a.id IS NULL OR a.madre_id IS DISTINCT FROM (f->>'madre_id')::uuid) THEN
+      RAISE EXCEPTION 'Un pollito vinculado no es hijo de esa gallina' USING ERRCODE = '23514';
+    END IF;
+  END LOOP;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_incubacion ON public.incubaciones;
+CREATE TRIGGER trg_validar_incubacion BEFORE INSERT OR UPDATE ON public.incubaciones
+  FOR EACH ROW EXECUTE FUNCTION public.validar_incubacion();
+
+-- ----------------------------------------------------------------------------
 -- 4c. Historial de cambios del Libro (para el control oficial: quién, cuándo, qué)
 --     Solo lo escriben los triggers; lo leen la administración y la inspección.
 -- ----------------------------------------------------------------------------
@@ -412,10 +491,12 @@ ALTER TABLE public.calificaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.huevos         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campanas       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.historial      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.lotes          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.incubaciones   ENABLE ROW LEVEL SECURITY;
 
 DO $$ DECLARE r record; BEGIN
   FOR r IN SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
-           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial') LOOP
+           AND tablename IN ('perfiles', 'animales', 'calificaciones', 'huevos', 'campanas', 'historial', 'lotes', 'incubaciones') LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
 END $$;
@@ -456,11 +537,29 @@ CREATE POLICY campanas_editar ON public.campanas FOR UPDATE TO authenticated
 CREATE POLICY campanas_borrar ON public.campanas FOR DELETE TO authenticated
   USING (usuario_id = auth.uid());
 
+CREATE POLICY lotes_ver ON public.lotes FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor());
+CREATE POLICY lotes_crear ON public.lotes FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid() OR public.es_admin());
+CREATE POLICY lotes_editar ON public.lotes FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid()) WITH CHECK (usuario_id = auth.uid());
+CREATE POLICY lotes_borrar ON public.lotes FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid());
+
+CREATE POLICY incubaciones_ver ON public.incubaciones FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid() OR public.es_auditor());
+CREATE POLICY incubaciones_crear ON public.incubaciones FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid() OR public.es_admin());
+CREATE POLICY incubaciones_editar ON public.incubaciones FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid()) WITH CHECK (usuario_id = auth.uid());
+CREATE POLICY incubaciones_borrar ON public.incubaciones FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid());
+
 CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
 
 GRANT SELECT ON public.censo_publico TO anon, authenticated;
 GRANT SELECT ON public.historial TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.campanas, public.lotes, public.incubaciones TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.perfiles, public.animales TO authenticated;
 GRANT SELECT, INSERT ON public.calificaciones TO authenticated;
 GRANT SELECT, INSERT, DELETE ON public.huevos TO authenticated;

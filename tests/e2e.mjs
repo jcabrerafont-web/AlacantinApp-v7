@@ -329,6 +329,65 @@ await ir('#/copia');
 const ambar = await page.$$eval('.aviso-caja.aviso', els => els.map(e => { const c = getComputedStyle(e); return c.opacity === '1' && c.position !== 'fixed' && e.offsetHeight > 0; }));
 ok(ambar.length > 0 && ambar.every(Boolean), `Advertencias ámbar visibles (${ambar.length})`);
 
+// 6f. Reproducción e incubación: lote -> incubadora -> miraje y nacimiento -> alta del pollito con sus padres
+const diasAtras = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+await ir('#/herramientas');
+ok(!!(await page.$('main a[href="#/reproduccion"]')), 'Herramientas enlaza Reproducción e incubación');
+await ir('#/reproduccion');
+await page.click('#r-nuevo-lote');
+await page.selectOption('#l-familia', 'A');
+await page.selectOption('#l-gallo', { label: 'E2420000001' });
+await page.fill('#l-inicio', diasAtras(60));
+const fxLote = await page.$$eval('#l-gallinas label', ls => ls.map(l => l.textContent.replace(/\s+/g, ' ').trim()));
+ok(fxLote.some(t => t.includes('E2518000003') && t.includes('Fx 25')), `Lote: muestra la consanguinidad de los pollitos con cada gallina (padre × hija = 25 %) (${fxLote.join(' | ').slice(0, 120)})`);
+await page.check('#l-gallinas input[value]:not([disabled]) >> nth=0');
+const idGallinaLote = await page.$eval('#l-gallinas input:checked', i => i.value);
+await page.click('#f-lote button[type=submit]');
+await page.waitForTimeout(500);
+ok((await aviso()).includes('Lote guardado') && await page.$eval('main', m => m.textContent.includes('activo')), `Lote guardado y activo (${(await aviso()).slice(0, 90)})`);
+const repetido = await page.evaluate(async (g) => { const d = await import('./js/datos.js'); const gallo = d.estado.todos.find(a => a.anilla === 'E2420000001'); try { await d.guardarLote({ gallo_id: gallo.id, gallinas: [g], inicio: new Date().toISOString().slice(0, 10) }); return 'aceptado'; } catch (e) { return e.message; } }, idGallinaLote);
+ok(repetido.includes('ya está en el lote'), `Una gallina no puede estar en dos lotes a la vez (${repetido.slice(0, 70)})`);
+await page.click('#r-nueva-inc');
+await page.fill('#i-entrada', diasAtras(25));
+await page.dispatchEvent('#i-entrada', 'change');
+const filaPadre = await page.$eval(`#i-filas [data-madre="${idGallinaLote}"]`, i => i.closest('tr').textContent);
+ok(filaPadre.includes('E2420000001'), 'Incubación: el padre sale del lote');
+await page.$$eval('#i-filas [data-madre]', is => is.forEach(i => { i.value = ''; }));
+await page.fill(`#i-filas [data-madre="${idGallinaLote}"]`, '6');
+await page.click('#f-inc button[type=submit]');
+await page.waitForTimeout(600);
+ok(page.url().includes('#/incubacion/'), 'Incubación creada: abre su detalle');
+ok((await page.$$('.pasos.calendario li.hecho')).length === 4, 'Calendario: entrada, miraje (día 7), nacedora (día 18) y nacimiento (día 21) ya pasados');
+await page.fill('[data-claros="0"]', '1');
+await page.fill('[data-nacidos="0"]', '4');
+await page.click('#f-inc-det button[type=submit]');
+await page.waitForTimeout(500);
+const kpisInc = await page.$$eval('.kpi b', bs => bs.map(b => b.textContent.trim()));
+ok(kpisInc[0] === '6' && kpisInc[1] === '83 %' && kpisInc[2] === '80 %', `Fertilidad 5/6 = 83 % y nacimiento 4/5 = 80 % (${kpisInc.join(' · ')})`);
+const malos = await page.evaluate(async () => { const d = await import('./js/datos.js'); const inc = d.estado.incubaciones[0]; try { await d.actualizarIncubacion(inc.id, { filas: [{ nacidos: 6 }] }); return 'aceptado'; } catch (e) { return e.message; } });
+ok(malos.includes('máximo 5'), `No admite más nacidos que huevos fértiles (${malos.slice(0, 60)})`);
+await page.click('main a.btn-primario[href^="#/alta?inc="]');
+await page.waitForTimeout(500);
+const pre = await page.evaluate(() => ({ madre: document.querySelector('#a-madre').value, padre: document.querySelector('#a-padre').selectedOptions[0]?.textContent, fecha: document.querySelector('#a-fecha').value }));
+ok(pre.madre === idGallinaLote && pre.padre.includes('E2420000001') && pre.fecha === diasAtras(4), `Alta del pollito con madre, padre y fecha de nacimiento ya puestos (${pre.padre} · ${pre.fecha})`);
+await page.fill('#a-num', '40');
+await page.selectOption('#a-sexo', 'H');
+await page.selectOption('#a-variedad', 'blanca');
+await page.click('#form-alta button[type=submit]');
+await page.waitForTimeout(800);
+ok(page.url().includes('#/animal/'), `Pollito dado de alta (${(await aviso()).slice(0, 80)})`);
+const vinc = await page.evaluate(async () => { const d = await import('./js/datos.js'); const f = d.estado.incubaciones[0].filas[0]; return { pollitos: f.pollitos.length, pendientes: d.pollitosPendientes().reduce((s, x) => s + x.pendientes, 0) }; });
+ok(vinc.pollitos === 1 && vinc.pendientes === 3, `El pollito queda unido a su incubación (quedan ${vinc.pendientes} por dar de alta)`);
+const sugerido = await page.evaluate(async (g) => {
+  location.hash = '#/censo'; await new Promise(r => setTimeout(r, 300)); location.hash = '#/alta'; await new Promise(r => setTimeout(r, 400));
+  const f = document.querySelector('#form-alta'); f.querySelector('#a-fecha').value = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+  f.querySelector('#a-madre').value = g; f.querySelector('#a-madre').dispatchEvent(new Event('change', { bubbles: true }));
+  return f.querySelector('#a-padre').selectedOptions[0]?.textContent || '';
+}, idGallinaLote);
+ok(sugerido.includes('E2420000001'), `Alta normal: al elegir la madre, propone el gallo de su lote (${sugerido})`);
+if (process.env.CAPTURAS) { await ir('#/reproduccion'); await page.screenshot({ path: `${process.env.CAPTURAS}/reproduccion.png`, fullPage: true }); }
+await ir('#/censo');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');
@@ -362,7 +421,7 @@ await ctx.setOffline(true);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a', { timeout: 8000 });
 await ir('#/censo');
-ok((await page.$$('#censo-lista a.item')).length === 4, 'Sin cobertura: la app abre y el censo sigue disponible (4 ejemplares tras la restauración)');
+ok((await page.$$('#censo-lista a.item')).length === 5, 'Sin cobertura: la app abre y el censo sigue disponible (5 ejemplares: 4 tras la restauración + el pollito)');
 ok((await page.innerText('#estado-red')).includes('Sin cobertura'), 'Indicador de cobertura');
 await ctx.setOffline(false);
 

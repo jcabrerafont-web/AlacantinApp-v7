@@ -128,6 +128,13 @@ export const REGLAS = Object.freeze({
   // mínimo de huevos para que cuente) y masa de huevo (g/día = puesta × peso medio).
   // La madre propuesta del gallo de reposición sale de criterioMadre.
   controlPuesta: Object.freeze({ dias: 15, ciclos: 3, mesInicio: 2, mesFin: 6, minHuevosPeso: 5, criterioMadre: 'masa' }),
+  // Reproducción e incubación (manual GANECA; manejo avícola habitual)
+  reproduccion: Object.freeze({
+    diasEsperaCambioGallo: 15,   // fecundidad residual del gallo anterior
+    gallinasPorGallo: Object.freeze([5, 15]),
+    diasMaxHuevo: 10,            // huevos de más edad incuban peor
+    miraje: 7, nacedora: 18, eclosion: 21
+  }),
   generacionesWright: 5,             // Profundidad del cálculo de consanguinidad
   fxPrecaucion: 0.0625,              // 6,25 %: equivalente a primos hermanos
   fxAlerta: 0.125,                   // 12,5 %: equivalente a medio hermanos

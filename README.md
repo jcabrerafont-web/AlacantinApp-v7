@@ -75,10 +75,16 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - En el alta hay consejos para hacer una foto útil, y se guarda la fecha de cada foto (`fotos_fecha`) para saber la edad del animal en ella.
   - La Dirección Técnica tiene el **Dossier fotográfico** (`#/dossier`): mejores fotos de perfil por variedad, sexo y edad, qué falta para el Catálogo y para FESACOCUR, e impresión en PDF.
 - **Copia de seguridad** (`#/copia`, Herramientas):
-  - Descarga en JSON de todo el Libro del dispositivo: ejemplares, calificaciones, huevos, campañas y perfiles; fotos opcionales. Nunca incluye contraseñas ni la sesión.
+  - Descarga en JSON de todo el Libro del dispositivo: ejemplares, calificaciones, huevos, campañas, lotes, incubaciones y perfiles; fotos opcionales. Nunca incluye contraseñas ni la sesión.
   - Restauración de dos formas: «fusionar», que conserva la versión más reciente de cada registro, o «reemplazar». Los archivos que no son copias o los registros incompletos se rechazan.
   - En modo dispositivo, la copia de otra cuenta local (un móvil anterior) se adopta como propia. Con servidor, lo propio se reenvía al Libro central.
   - Mi censo recuerda hacer la copia si nunca se ha hecho o tiene más de 30 días.
+- **Reproducción e incubación** (`#/reproduccion`, Herramientas → Cría):
+  - **Lotes:** gallo + gallinas (5 a 15) de una familia desde una fecha, con la consanguinidad de los pollitos con cada gallina. Una gallina o un gallo no pueden estar en dos lotes a la vez.
+  - Los huevos se atribuyen al gallo del lote a partir de 15 días después de juntarlos; antes se marcan como «dudosos» (fecundidad residual del gallo anterior).
+  - **Incubaciones:** se proponen los huevos aptos de los últimos 10 días de cada gallina; calendario día 0 / 7 (miraje) / 18 (nacedora) / 21 (nacimiento); fertilidad (fértiles ÷ huevos) y nacimiento (nacidos ÷ fértiles) por gallina.
+  - **Alta del pollito** desde la incubación con madre, padre y fecha ya puestos, y unido a su incubación. En un alta normal, al elegir la madre se propone el gallo de su lote.
+  - En el servidor, `lotes` e `incubaciones` validan que gallo y gallinas son del criador y que nacidos ≤ huevos − claros.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.
@@ -137,9 +143,9 @@ docs/                 Estándar oficial en PDF
 ## Pruebas
 
 ```bash
-node tests/genetica.test.mjs                  # 20 pruebas: Wright, Ne, Gobe, Estándar
+node tests/genetica.test.mjs                  # 25 pruebas: Wright, Ne, Gobe, Estándar
 python3 -m http.server 8820 &                 # servir la app
-npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 30 comprobaciones en Chrome (Playwright)
+npx playwright install chromium; node tests/e2e.mjs http://localhost:8820   # 81 comprobaciones en Chrome (Playwright)
 # SQL: sobre PostgreSQL 15+ ejecutar tests/supabase_stub.sql, supabase/schema.sql y tests/schema.test.sql
 ```
 

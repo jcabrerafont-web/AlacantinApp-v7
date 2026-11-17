@@ -17,6 +17,7 @@ export default function (main) {
     ['Cría', [
       ['#/programa', '🧭', 'Guía del criador', 'Qué hacer y cuándo: Libro, anillas, calificación, familias, puesta'],
       ['#/campanas', '🥚', 'Control de puesta', 'Campañas de 15 días y resultados por gallina'],
+      ['#/reproduccion', '🐣', 'Reproducción e incubación', 'Lotes gallo + gallinas, incubadora y alta de pollitos con sus padres'],
       ['#/apareamientos', '💞', 'Apareamientos', 'Rotación de Gobe y consanguinidad esperada'],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],

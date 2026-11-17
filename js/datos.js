@@ -17,6 +17,8 @@ export const estado = {
   calificaciones: [],
   huevos: [],
   campanas: [],
+  lotes: [],
+  incubaciones: [],
   perfiles: [],
   pendientes: 0,
   online: navigator.onLine
@@ -34,8 +36,8 @@ const PRIVADOS = ['usuario_id', 'rega', 'latitud', 'longitud', 'notas', 'baja_ca
 export const versionPublica = (a) => Object.fromEntries(Object.entries(a).filter(([k]) => !PRIVADOS.includes(k)));
 
 export async function cargar() {
-  const [animales, calificaciones, huevos, perfiles, campanas] = await Promise.all(
-    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas'].map(s => db.todos(s)));
+  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones] = await Promise.all(
+    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones'].map(s => db.todos(s)));
   estado.todos = animales;
   estado.idx = indice(animales);
   const p = estado.perfil;
@@ -44,17 +46,23 @@ export async function cargar() {
     estado.huevos = [];
     estado.perfiles = [];
     estado.campanas = [];
+    estado.lotes = [];
+    estado.incubaciones = [];
   } else if (esAuditor(p.rol)) {
     estado.calificaciones = calificaciones;
     estado.huevos = huevos;
     estado.perfiles = perfiles;
     estado.campanas = campanas;
+    estado.lotes = lotes;
+    estado.incubaciones = incubaciones;
   } else {
     const mios = new Set(animales.filter(a => a.usuario_id === p.id).map(a => a.id));
     estado.calificaciones = calificaciones.filter(c => mios.has(c.animal_id));
     estado.huevos = huevos.filter(h => mios.has(h.animal_id));
     estado.perfiles = perfiles.filter(x => x.id === p.id);
     estado.campanas = campanas.filter(c => c.usuario_id === p.id);
+    estado.lotes = lotes.filter(l => l.usuario_id === p.id);
+    estado.incubaciones = incubaciones.filter(i => i.usuario_id === p.id);
   }
   estado.pendientes = await sync.pendientes();
   notificar();
@@ -377,6 +385,143 @@ export function temporadaPuesta(temporada) {
   const filas = [...acc.values()].map(x => conIndicadores(x, x.dias, x.inicio)).sort((p, q) => q.masa - p.masa || q.n - p.n);
   return { filas, ...destacar(filas) };
 }
+
+// ---------------------------------------------------------------------------
+// Reproducción: lotes (gallo + gallinas de una familia, desde una fecha)
+// ---------------------------------------------------------------------------
+const RP = () => REGLAS.reproduccion;
+const sumaDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const hoyIso = () => new Date().toISOString().slice(0, 10);
+export const misLotes = () => [...estado.lotes].sort((a, b) => b.inicio.localeCompare(a.inicio));
+export const loteActivo = (l, dia = hoyIso()) => l.inicio <= dia && (!l.fin || l.fin >= dia);
+// Desde qué día los huevos del lote se atribuyen al gallo (fecundidad residual del anterior)
+export const fechaFiable = (l) => sumaDias(l.inicio, RP().diasEsperaCambioGallo);
+
+export async function guardarLote({ id, familia, gallo_id, gallinas, inicio, fin = null, notas = '' }) {
+  const p = estado.perfil;
+  if (!p) throw new Error('Inicia sesión para organizar la reproducción.');
+  const g = estado.idx.get(gallo_id);
+  if (!g || g.sexo !== 'M' || g.usuario_id !== p.id || g.estado === 'baja') throw new Error('Elige un gallo tuyo y activo.');
+  const lista = [...new Set(gallinas || [])].filter(x => { const a = estado.idx.get(x); return a && a.sexo === 'H' && a.usuario_id === p.id && a.estado !== 'baja'; });
+  if (!lista.length) throw new Error('Elige al menos una gallina.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(inicio || ''))) throw new Error('Indica desde cuándo están juntos.');
+  if (fin && fin < inicio) throw new Error('La fecha de fin es anterior a la de inicio.');
+  // Una gallina no puede estar en dos lotes a la vez
+  const solapa = (l) => l.id !== id && !(fin && fin < l.inicio) && !(l.fin && l.fin < inicio);
+  for (const l of estado.lotes.filter(solapa)) {
+    const repetidas = l.gallinas.filter(x => lista.includes(x));
+    if (repetidas.length) throw new Error(`${repetidas.map(x => estado.idx.get(x)?.anilla).join(', ')} ya está en el lote de la familia ${l.familia || '—'} en esas fechas. Cierra antes ese lote.`);
+    if (l.gallo_id === gallo_id) throw new Error(`Ese gallo ya está en el lote de la familia ${l.familia || '—'} en esas fechas.`);
+  }
+  const previo = id ? estado.lotes.find(x => x.id === id) : null;
+  const ahora = new Date().toISOString();
+  const l = { ...(previo || {}), id: previo?.id || uuid(), usuario_id: p.id, temporada: Number(inicio.slice(0, 4)), familia: familia || null,
+    gallo_id, gallinas: lista, inicio, fin: fin || null, notas: notas || '', created_at: previo?.created_at || ahora, updated_at: ahora };
+  await db.guardar('lotes', l);
+  await sync.encolar('lotes', 'upsert', l);
+  await cargar();
+  return l;
+}
+
+export async function cerrarLote(id, fin = hoyIso()) {
+  const l = estado.lotes.find(x => x.id === id);
+  if (!l || l.usuario_id !== estado.perfil?.id) throw new Error('No autorizado.');
+  return guardarLote({ ...l, fin });
+}
+
+// Padre probable de un huevo puesto por una gallina en una fecha
+export function padreDe(madreId, fecha = hoyIso()) {
+  const l = estado.lotes.find(x => x.gallinas.includes(madreId) && x.inicio <= fecha && (!x.fin || x.fin >= fecha));
+  if (!l) return null;
+  return { gallo_id: l.gallo_id, lote: l, fiable: fecha >= fechaFiable(l) };
+}
+
+// ---------------------------------------------------------------------------
+// Incubaciones: una fila por madre (huevos puestos, claros en el miraje, nacidos)
+// ---------------------------------------------------------------------------
+export const misIncubaciones = () => [...estado.incubaciones].sort((a, b) => b.entrada.localeCompare(a.entrada));
+export const calendarioIncubacion = (entrada) => ({
+  entrada, miraje: sumaDias(entrada, RP().miraje), nacedora: sumaDias(entrada, RP().nacedora), eclosion: sumaDias(entrada, RP().eclosion)
+});
+export function faseIncubacion(inc, dia = hoyIso()) {
+  const c = calendarioIncubacion(inc.entrada);
+  if (inc.cerrada) return 'cerrada';
+  if (dia < c.miraje) return 'incubando';
+  if (dia < c.nacedora) return 'miraje';
+  if (dia < c.eclosion) return 'nacedora';
+  return 'eclosion';
+}
+// Huevos aptos de una gallina, recientes y aún no incubados
+export function huevosDisponibles(madreId, dia = hoyIso()) {
+  const usados = new Set(estado.incubaciones.flatMap(i => i.filas.flatMap(f => f.huevos || [])));
+  const desde = sumaDias(dia, -RP().diasMaxHuevo);
+  return estado.huevos.filter(x => x.animal_id === madreId && x.apto && x.fecha >= desde && x.fecha <= dia && !usados.has(x.id));
+}
+
+export async function crearIncubacion({ entrada, filas, notas = '' }) {
+  const p = estado.perfil;
+  if (!p) throw new Error('Inicia sesión para registrar incubaciones.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entrada || ''))) throw new Error('Indica la fecha de entrada en la incubadora.');
+  const limpias = (filas || []).map(f => {
+    const m = estado.idx.get(f.madre_id);
+    const n = Math.round(Number(f.puestos));
+    if (!m || m.sexo !== 'H' || m.usuario_id !== p.id || !Number.isFinite(n) || n <= 0) return null;
+    const pd = padreDe(m.id, entrada);
+    return { madre_id: m.id, padre_id: f.padre_id ?? pd?.gallo_id ?? null, padre_fiable: f.padre_id ? true : Boolean(pd?.fiable),
+      puestos: n, huevos: (f.huevos || []).slice(0, n), claros: null, nacidos: null, pollitos: [] };
+  }).filter(Boolean);
+  if (!limpias.length) throw new Error('Indica cuántos huevos de cada gallina entran en la incubadora.');
+  const ahora = new Date().toISOString();
+  const inc = { id: uuid(), usuario_id: p.id, entrada, filas: limpias, notas, cerrada: false, created_at: ahora, updated_at: ahora };
+  await db.guardar('incubaciones', inc);
+  await sync.encolar('incubaciones', 'upsert', inc);
+  await cargar();
+  return inc;
+}
+
+export async function actualizarIncubacion(id, cambios) {
+  const inc = estado.incubaciones.find(x => x.id === id);
+  if (!inc || inc.usuario_id !== estado.perfil?.id) throw new Error('No autorizado.');
+  const filas = inc.filas.map((f, i) => {
+    const c = cambios.filas?.[i] || {};
+    const claros = c.claros === undefined ? f.claros : c.claros === '' || c.claros === null ? null : Math.round(Number(c.claros));
+    const nacidos = c.nacidos === undefined ? f.nacidos : c.nacidos === '' || c.nacidos === null ? null : Math.round(Number(c.nacidos));
+    if (claros !== null && (!Number.isFinite(claros) || claros < 0 || claros > f.puestos)) throw new Error(`Claros fuera de rango para ${estado.idx.get(f.madre_id)?.anilla}.`);
+    const fertiles = f.puestos - (claros ?? 0);
+    if (nacidos !== null && (!Number.isFinite(nacidos) || nacidos < 0 || nacidos > fertiles)) throw new Error(`Nacidos fuera de rango para ${estado.idx.get(f.madre_id)?.anilla} (máximo ${fertiles}).`);
+    if (nacidos !== null && nacidos < f.pollitos.length) throw new Error(`Ya hay ${f.pollitos.length} pollito(s) dados de alta de ${estado.idx.get(f.madre_id)?.anilla}.`);
+    return { ...f, claros, nacidos };
+  });
+  const r = { ...inc, filas, cerrada: cambios.cerrada ?? inc.cerrada, notas: cambios.notas ?? inc.notas, updated_at: new Date().toISOString() };
+  await db.guardar('incubaciones', r);
+  await sync.encolar('incubaciones', 'upsert', r);
+  await cargar();
+  return r;
+}
+
+export function resultadoIncubacion(inc) {
+  const tot = inc.filas.reduce((a, f) => ({ puestos: a.puestos + f.puestos, claros: a.claros + (f.claros ?? 0), nacidos: a.nacidos + (f.nacidos ?? 0),
+    conMiraje: a.conMiraje && f.claros !== null, conNacidos: a.conNacidos && f.nacidos !== null }), { puestos: 0, claros: 0, nacidos: 0, conMiraje: true, conNacidos: true });
+  const fertiles = tot.puestos - tot.claros;
+  return { ...tot, fertiles, fertilidad: tot.conMiraje && tot.puestos ? fertiles / tot.puestos : null,
+    nacimiento: tot.conNacidos && fertiles ? tot.nacidos / fertiles : null, nacimientoTotal: tot.conNacidos && tot.puestos ? tot.nacidos / tot.puestos : null };
+}
+
+// Une un pollito dado de alta a su fila de incubación (trazabilidad huevo -> ejemplar)
+export async function vincularPollito(incId, madreId, animalId) {
+  const inc = estado.incubaciones.find(x => x.id === incId);
+  if (!inc) return;
+  const filas = inc.filas.map(f => (f.madre_id === madreId && !f.pollitos.includes(animalId) ? { ...f, pollitos: [...f.pollitos, animalId] } : f));
+  const r = { ...inc, filas, updated_at: new Date().toISOString() };
+  await db.guardar('incubaciones', r);
+  await sync.encolar('incubaciones', 'upsert', r);
+  await cargar();
+}
+
+// Pollitos nacidos pendientes de dar de alta (por anillar)
+export const pollitosPendientes = () => misIncubaciones().flatMap(inc => inc.filas
+  .filter(f => (f.nacidos ?? 0) > f.pollitos.length)
+  .map(f => ({ inc, fila: f, pendientes: f.nacidos - f.pollitos.length, nacimiento: calendarioIncubacion(inc.entrada).eclosion })));
 
 // ---------------------------------------------------------------------------
 // Calificación morfológica (baremo de 100 puntos) — solo inspectores
