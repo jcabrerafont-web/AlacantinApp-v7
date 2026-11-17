@@ -32,7 +32,7 @@ const CLUB = [
   ['Asociación con personalidad jurídica, estatutos y reglamento interno sin discriminación entre socios', 'RD 45/2019, art. 26.4 a y f'],
   ['Personal cualificado: Dirección Técnica del Libro e inspectores calificadores', 'RD 45/2019, arts. 26.4 b y 3 e'],
   ['Programa de cría escrito y aprobado por la autoridad competente: la comunidad autónoma con más reproductoras o, si el censo está repartido en al menos tres y ninguna supera el 60 %, el Ministerio', 'RD 45/2019, arts. 9 y 26.5'],
-  ['Solicitud de inclusión de la raza en el Catálogo Oficial, avalada por el informe de una entidad científica (historia, morfología, censos, caracterización genética, Ne…)', 'RD 45/2019, art. 6; Protocolo CNZ 2025, 3.1'],
+  ['Solicitud de inclusión de la raza en el Catálogo Oficial, avalada por el informe de una entidad científica (historia, morfología con fotos de ambos sexos, edades y variedades, censos, caracterización genética, Ne…). La app reúne las fotos en el Dossier fotográfico', 'RD 45/2019, art. 6; Protocolo CNZ 2025, 3.1'],
   ['Ratificar el baremo de calificación y las reglas que la app aplica como propuesta', 'RD 45/2019, art. 26.5 a y d'],
   ['Conservación fuera del aviario (banco de germoplasma) y, si se usan, análisis de ADN en un laboratorio reconocido', 'RD 45/2019, arts. 8.2 f, 15 y 18'],
   ['Reconocimiento de la Armiñada y la Milflores: ante FESACOCUR para exposiciones y, como variedad de la raza, con cinco generaciones en aislamiento reproductivo', 'RD 45/2019, art. 3 b; Protocolo CNZ 2025, 3.3']

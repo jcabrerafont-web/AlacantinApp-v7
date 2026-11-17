@@ -69,6 +69,11 @@ La v7 es una reescritura completa de la v6. Ocupa unas 3.200 líneas frente a la
   - **Criador de origen** (`criador_id`), que no cambia nunca. **Cambio de titular** por la administración para ventas o cesiones entre socios: el animal sigue en el Libro.
   - **Historial de cambios** en el servidor (`historial`), solo legible por inspección y administración, para el control oficial.
   - **Relación de criadores y explotaciones con sus efectivos** en CSV (art. 14.5).
+- **Fotos y dossier fotográfico:**
+  - Las fotos no son obligatorias para inscribir un animal: ni el RD 45/2019 ni el Reglamento las exigen.
+  - Sí las piden los expedientes de reconocimiento: el Protocolo CNZ 2025 (3.1 c: ambos sexos, varias edades y cada variedad) y el dossier técnico de FESACOCUR (gallo y gallina de perfil, fondo uniforme, misma variedad).
+  - En el alta hay consejos para hacer una foto útil, y se guarda la fecha de cada foto (`fotos_fecha`) para saber la edad del animal en ella.
+  - La Dirección Técnica tiene el **Dossier fotográfico** (`#/dossier`): mejores fotos de perfil por variedad, sexo y edad, qué falta para el Catálogo y para FESACOCUR, e impresión en PDF.
 - **Consanguinidad de Wright:**
   - Método tabular exacto, a 5 generaciones.
   - Umbrales (criterio técnico del Club, confirmado el 16/11/2026; la normativa no los fija): precaución a partir del 6,25 % (primos hermanos) y alerta a partir del 12,5 % (medio hermanos). Solo avisan, no bloquean el apareamiento. Se configuran en `REGLAS`.

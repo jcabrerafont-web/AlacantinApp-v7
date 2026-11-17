@@ -221,3 +221,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .guia-sec summary { cursor: pointer; }
 .lista-normas { list-style: none; padding: 0; }
 .lista-normas li { padding: .55rem 0; border-bottom: 1px solid var(--borde); }
+
+/* Dossier fotográfico */
+.dossier-fila { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: .75rem; }
+.dossier-celda { display: flex; flex-direction: column; border: 1px solid var(--borde); border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit; font-size: .75rem; }
+.dossier-celda img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--borde); }
+.dossier-celda span { padding: .35rem .45rem; }
+.dossier-celda.falta { border-style: dashed; justify-content: center; min-height: 110px; color: var(--texto-2); background: transparent; }
+@media print { .dossier-fila { grid-template-columns: repeat(3, 1fr); } .dossier-celda { break-inside: avoid; } }

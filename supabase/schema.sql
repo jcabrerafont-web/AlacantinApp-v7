@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS public.animales (
   latitud          double precision,
   longitud         double precision,
   fotos            jsonb NOT NULL DEFAULT '{}'::jsonb,
+  fotos_fecha      jsonb NOT NULL DEFAULT '{}'::jsonb,   -- fecha de cada foto (edad del animal en ella)
   notas            text,
   estado           text NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'baja')),
   baja_fecha       date,
@@ -206,7 +207,7 @@ CREATE TRIGGER trg_validar_animal BEFORE INSERT OR UPDATE ON public.animales
 -- Censo público: sin titular, REGA, coordenadas ni notas (RGPD)
 CREATE OR REPLACE VIEW public.censo_publico WITH (security_invoker = false) AS
   SELECT id, anilla, sexo, variedad, fecha_nacimiento, seccion, padre_id, madre_id, familia, nombre,
-         peso_g, municipio, provincia, estado, fotos, created_at, updated_at
+         peso_g, municipio, provincia, estado, fotos, fotos_fecha, created_at, updated_at
   FROM public.animales
   WHERE estado = 'activo' OR id IN (SELECT padre_id FROM public.animales UNION SELECT madre_id FROM public.animales);
 
@@ -391,8 +392,8 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   INSERT INTO public.historial (tabla, registro, operacion, usuario_id, antes, despues)
   VALUES (TG_TABLE_NAME, coalesce(NEW.id, OLD.id), TG_OP, auth.uid(),
-          CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) - 'fotos' END,
-          CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) - 'fotos' END);
+          CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) - 'fotos' - 'fotos_fecha' END,
+          CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) - 'fotos' - 'fotos_fecha' END);
   RETURN coalesce(NEW, OLD);
 END $$;
 DROP TRIGGER IF EXISTS trg_historial_animales ON public.animales;

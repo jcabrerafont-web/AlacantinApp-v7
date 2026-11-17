@@ -265,6 +265,24 @@ ok((await page.innerText('main')).includes('Registro de Méritos'), 'Ficha muest
 if (process.env.CAPTURAS) { await page.$eval('main', m => [...m.querySelectorAll('h2')].find(x => x.textContent.includes('Méritos'))?.scrollIntoView({ block: 'center' })); await page.screenshot({ path: `${process.env.CAPTURAS}/ficha-rm.png` }); }
 await cambiarRolLocal('inspector');
 
+// 6c. Dossier fotográfico (Dirección Técnica)
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const d = await import('./js/datos.js');
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const g = d.estado.todos.find(a => a.anilla === 'E2418000002');
+  await db.guardar('animales', { ...g, fotos: { ...(g.fotos || {}), lateral: png }, fotos_fecha: { lateral: '2025-06-01' } });
+  await d.cargar();
+});
+await ir('#/dossier');
+const txtDossier = await page.innerText('main');
+ok((await page.$$('#app .dossier-celda img, main .dossier-celda img')).length === 1 && txtDossier.includes('falta gallo'),
+  'Dossier: la foto aparece en su casilla (gallina adulta, Negra moteada) y señala que falta el gallo adulto');
+ok((await page.$$('main .dossier-celda.falta')).length === 29, 'Dossier: marca las 29 casillas sin foto (5 variedades × 2 sexos × 3 edades − 1)');
+if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/dossier.png`, fullPage: true });
+await ir('#/alta');
+ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Club') || await page.$eval('main', m => m.textContent.includes('Cómo hacer una foto que sirva al Club')), 'Alta: consejos para la foto de perfil');
+
 // 7. Sincronización con servidor simulado: un error no borra la operación
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');

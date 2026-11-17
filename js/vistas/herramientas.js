@@ -24,7 +24,7 @@ export default function (main) {
       ['#/guia', '📋', 'Guía de Campo', 'Las 12 regiones y los defectos graves']
     ]]
   ];
-  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»']]]);
+  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
   if (r === 'administrador') grupos.push(['Administración', [['#/usuarios', '🛡️', 'Usuarios y roles', 'Asignar inspectores y administradores']]]);
 
   pintar(main, h`

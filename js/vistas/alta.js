@@ -16,6 +16,7 @@ export default function (main, params) {
   }
   const a = previo || { sexo: '', variedad: '', fecha_nacimiento: '', seccion: 'RN', fotos: {} };
   const fotos = { ...(a.fotos || {}) };
+  const fotosFecha = { ...(a.fotos_fecha || {}) };
   const pa = parsearAnilla(a.anilla);
   const machos = datos.estado.todos.filter(x => x.sexo === 'M' && x.estado !== 'baja' && x.id !== a.id);
   const hembras = datos.estado.todos.filter(x => x.sexo === 'H' && x.estado !== 'baja' && x.id !== a.id);
@@ -71,6 +72,13 @@ export default function (main, params) {
               <option value="RF">RF · Registro Fundacional</option><option value="RA">RA · Registro Auxiliar</option></select></div>` : ''}
         </div>
         <fieldset><legend>Fotografías (recomendadas)</legend>
+          <details class="peq" style="margin-bottom:.5rem"><summary>📷 Cómo hacer una foto que sirva al Club</summary>
+            <ul>
+              <li><strong>De perfil</strong>, el animal entero, de pie y tranquilo (la vista lateral es la más importante).</li>
+              <li><strong>Fondo liso</strong> y claro (una pared o una tela), sin otros animales ni objetos.</li>
+              <li>Buena luz natural, sin contraluz; cámara a la altura del animal.</li>
+              <li>Las fotos de perfil de gallos y gallinas de cada variedad y edad forman el expediente del Club para el Catálogo Oficial y para FESACOCUR.</li>
+            </ul></details>
           <div class="fotos">${FOTOS.map(([k, t]) => h`<label class="foto" id="foto-${k}">
             <span>${t}</span><input type="file" accept="image/*" capture="environment" data-foto="${k}" aria-label="${t}"></label>`)}</div>
         </fieldset>
@@ -149,6 +157,10 @@ export default function (main, params) {
     if (!archivo) return;
     try {
       fotos[inp.dataset.foto] = await comprimirFoto(archivo);
+      // Fecha de la foto (la del archivo, si es coherente): sirve para saber la edad del animal en ella
+      const f0 = new Date(archivo.lastModified || Date.now()).toISOString().slice(0, 10);
+      const nac = $('#a-fecha', f).value;
+      fotosFecha[inp.dataset.foto] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
       pintarFoto(inp.dataset.foto);
     } catch { aviso('No se pudo procesar la foto.', 'error'); }
   }));
@@ -172,7 +184,8 @@ export default function (main, params) {
         rfid: $('#a-rfid', f).value.replace(/\D/g, '') || null,
         seccion: previo ? previo.seccion : ($('#a-seccion', f)?.value || 'RN'),
         notas: $('#a-notas', f).value.trim() || null,
-        fotos
+        fotos,
+        fotos_fecha: fotosFecha
       });
       f.dataset.sucio = '';
       aviso(`${previo ? 'Guardado' : 'Registrado'} ${guardado.anilla}${navigator.onLine ? '' : ' (se sincronizará al tener cobertura)'}`, 'ok');
