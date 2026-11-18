@@ -110,6 +110,12 @@ try {
   const servidasAntes = fotosServidas;
   ok(enCache === 1 && await cargarFoto(), `Sin cobertura se sigue viendo la foto guardada (en caché: ${enCache}; la caché de fotos no se borra al actualizar)`);
   ok(fotosServidas === servidasAntes, 'Sin cobertura la foto no se pide al servidor');
+  // 6. El PDF del Estándar se abre como PDF (no como la app), también sin cobertura
+  const resPdf = page.waitForResponse(r => r.url().endsWith('/docs/Estandar-Alacantina2025.pdf'), { timeout: 8000 });
+  await page.evaluate(() => { const f = document.createElement('iframe'); f.src = './docs/Estandar-Alacantina2025.pdf'; f.id = 'pdf-prueba'; document.body.appendChild(f); });
+  const rp = await resPdf;
+  ok(rp.status() === 200 && /application\/pdf/.test(rp.headers()['content-type'] || '') && rp.fromServiceWorker(),
+    `Sin cobertura, abrir el PDF del Estándar devuelve el PDF desde el móvil (${rp.status()} ${rp.headers()['content-type']})`);
   ok(errores.length === 0, `Sin errores de página${errores.length ? ': ' + errores.join(' | ') : ''}`);
 } finally {
   await browser.close();

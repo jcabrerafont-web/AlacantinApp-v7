@@ -1,5 +1,6 @@
 import { ESTANDAR } from '../estandar.js';
 import { h, pintar } from '../ui.js';
+import { icono } from '../iconos.js';
 
 // 3000 → «3», 3500 → «3,5» (sin ceros de relleno)
 const kg = (g) => String(Math.round(g / 10) / 100).replace('.', ',');
@@ -47,11 +48,11 @@ export default function (main) {
       </table></div>
     </div>
 
-    <a class="tarjeta item" href="#/programa" style="display:flex"><span style="font-size:1.4rem" aria-hidden="true">🧭</span>
+    <a class="tarjeta item" href="#/programa" style="display:flex"><span class="tarea-ico" aria-hidden="true">${icono('brujula')}</span>
       <span class="item-principal"><span class="item-titulo">¿Quieres criar Alacantinas para el Libro?</span>
       <span class="item-sub">Guía del criador: anillas, calificación, familias y control de puesta</span></span><span aria-hidden="true">›</span></a>
 
-    <p><a class="btn" href="./docs/Estandar-Alacantina2025.pdf" target="_blank" rel="noopener">📄 Ver el Estándar oficial (PDF)</a></p>
+    <p><a class="btn" href="./docs/Estandar-Alacantina2025.pdf" target="_blank" rel="noopener">${icono('documento')} Ver el Estándar oficial (PDF)</a></p>
     <p class="peq muted"><a href="#/privacidad">Política de privacidad</a></p>
   `);
 }

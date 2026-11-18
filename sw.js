@@ -12,7 +12,7 @@
 //    archivos de dos versiones.
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.14.1';
+const VERSION = '7.14.2';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 // Fotos del servidor (Supabase Storage): se guardan al verlas para poder verlas sin cobertura.
@@ -80,7 +80,7 @@ async function redPrimero(req, clave) {
     return res;
   } catch {
     return (await c.match(clave || req, { ignoreSearch: true })) ||
-      (req.mode === 'navigate' ? await c.match('./index.html') : null) ||
+      (clave === './index.html' ? await c.match('./index.html') : null) ||
       new Response('Sin conexión', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 }
@@ -91,7 +91,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     // sw.js nunca pasa por aquí (el navegador lo pide directamente). El resto, de la caché de la versión.
-    e.respondWith(cachePrimero(req, req.mode === 'navigate' ? './index.html' : undefined));
+    // Solo la navegación a la app (/, /index.html) se sirve con index.html; abrir un archivo
+    // (p. ej. el PDF del Estándar en otra pestaña) devuelve ese archivo.
+    const esApp = req.mode === 'navigate' && (url.pathname.endsWith('/') || url.pathname.endsWith('/index.html'));
+    e.respondWith(cachePrimero(req, esApp ? './index.html' : undefined));
     return;
   }
   if (CDN.includes(url.href)) {
