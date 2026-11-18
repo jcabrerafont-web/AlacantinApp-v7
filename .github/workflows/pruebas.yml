@@ -27,6 +27,8 @@ jobs:
           sleep 1
       - name: Pruebas en el navegador (flujo completo)
         run: npm run test:e2e
+      - name: Correos de Supabase (recuperar contraseña, confirmar cuenta) con servidor simulado
+        run: npm run test:recuperacion
       - name: Service Worker (cobertura mala y actualizaciones)
         run: npm run test:pwa
       - name: Accesibilidad (temas claro, oscuro y sol)

@@ -20,6 +20,7 @@ const RUTAS = [
   ['animal/:id', 'ficha', '*'],
   ['pedigri/:id', 'pedigri', '*'],
   ['acceso', 'acceso', '*'],
+  ['nueva-clave', 'nuevaclave', 'usuario'],
   ['alta', 'alta', 'usuario'],
   ['editar/:id', 'alta', 'usuario'],
   ['puesta', 'puesta', 'usuario'],
@@ -167,8 +168,29 @@ async function arrancar() {
   diagnostico.vigilar();
   // Espera breve al cliente Supabase (script diferido); si no carga, modo dispositivo
   for (let i = 0; i < 20 && !window.supabase && navigator.onLine; i++) await new Promise(r => setTimeout(r, 50));
+  // ¿Venimos del enlace de un correo de Supabase? Se lee antes de crear el cliente
+  const retorno = auth.leerRetornoCorreo();
   const cliente = auth.crearCliente();
   sync.usarCliente(cliente);
+  let avisoRetorno = null;
+  if (retorno) {
+    let p = null;
+    if (!retorno.error) { try { p = await auth.completarRetornoCorreo(); } catch (e) { console.warn('[auth]', e); } }
+    let destino = '#/acceso';
+    if (retorno.error) {
+      avisoRetorno = [retorno.codigoError === 'otp_expired' || /expired|invalid/i.test(retorno.error)
+        ? 'El enlace del correo ha caducado o ya se usó. Pide uno nuevo.' : `No se pudo completar el enlace del correo: ${retorno.error}`, 'error'];
+    } else if (p && retorno.tipo === 'recovery') {
+      destino = '#/nueva-clave';
+    } else if (p) {
+      destino = '#/censo';
+      avisoRetorno = [`Correo confirmado. Bienvenido/a, ${p.nombre || p.email}.`, 'ok'];
+    } else {
+      avisoRetorno = [retorno.tipo === 'recovery' ? 'No se pudo abrir el enlace sin conexión. Inténtalo de nuevo con cobertura.' : 'Correo confirmado. Ya puedes entrar con tu contraseña.', retorno.tipo === 'recovery' ? 'error' : 'ok'];
+    }
+    // Quita los códigos de la dirección (no deben quedar en el historial)
+    history.replaceState(null, '', location.pathname + location.search + destino);
+  }
 
   try {
     datos.estado.perfil = await auth.sesionGuardada();
@@ -222,6 +244,7 @@ async function arrancar() {
   pintarCabecera();
   if (!location.hash || location.hash === '#' || location.hash === '#/') location.replace(inicio());
   await navegar();
+  if (avisoRetorno) aviso(...avisoRetorno);
   registrarServiceWorker();
 }
 

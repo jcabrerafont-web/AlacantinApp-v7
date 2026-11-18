@@ -1,16 +1,17 @@
 {
   "name": "alacantinapp",
-  "version": "7.14.3",
+  "version": "7.15.0",
   "private": true,
   "description": "Libro Genealógico de la Gallina Alacantina (ESGA025): PWA sin compilación. Este archivo solo sirve para las pruebas.",
   "type": "module",
   "scripts": {
-    "servir": "python3 -m http.server 8820",
+    "servir": "node tests/servidor.mjs 8820",
     "test:unidad": "node tests/genetica.test.mjs",
     "test:e2e": "node tests/e2e.mjs http://localhost:8820",
     "test:pwa": "node tests/pwa.mjs",
     "test:accesibilidad": "node tests/accesibilidad.mjs http://localhost:8820",
-    "test:sql": "bash tests/sql.sh"
+    "test:sql": "bash tests/sql.sh",
+    "test:recuperacion": "node tests/recuperacion.mjs http://localhost:8820"
   },
   "devDependencies": {
     "playwright": "1.63.0"

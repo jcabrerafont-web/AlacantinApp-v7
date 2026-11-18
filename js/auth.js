@@ -32,6 +32,43 @@ export function crearCliente() {
 }
 export const obtenerCliente = () => cliente;
 
+// ---- Enlaces de los correos (confirmar la cuenta, recuperar la contraseña) ----
+// Supabase vuelve a la app con los datos en el fragmento: #access_token=…&type=recovery,
+// o #error=…&error_code=otp_expired si el enlace ha caducado. El enrutador también usa el «#»,
+// así que se lee antes de crear el cliente (que es quien canjea el código por la sesión).
+export function leerRetornoCorreo(hash = location.hash) {
+  const frag = String(hash || '').replace(/^#/, '');
+  if (!/(^|&)(access_token|error|error_description)=/.test(frag)) return null;
+  const p = new URLSearchParams(frag);
+  return { tipo: p.get('type') || '', error: p.get('error_description') || p.get('error') || '', codigoError: p.get('error_code') || '' };
+}
+
+/** Tras abrir el enlace de un correo: si Supabase ha creado la sesión, la deja iniciada. */
+export async function completarRetornoCorreo() {
+  if (!cliente) return null;
+  const { data } = await cliente.auth.getSession();
+  const user = data?.session?.user;
+  if (!user) return null;
+  const p = await perfilServidor(user);
+  await db.metaSet('sesion', p.id);
+  return p;
+}
+
+const direccionApp = () => location.origin + location.pathname;
+
+/** Envía el correo con el enlace para poner una contraseña nueva. */
+export async function pedirRecuperacion(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Escribe el correo con el que creaste la cuenta.');
+  if (!cliente) throw new Error('Recuperar la contraseña necesita la conexión con el Libro central.');
+  if (!navigator.onLine) throw new Error('Recuperar la contraseña necesita conexión a internet.');
+  const { error } = await cliente.auth.resetPasswordForEmail(email, { redirectTo: direccionApp() });
+  if (error) {
+    throw new Error(error.status === 429 || /rate|seconds|security purposes/i.test(error.message)
+      ? 'Ya se ha enviado un correo hace poco. Espera un minuto y vuelve a intentarlo.' : error.message);
+  }
+}
+
 // ---- PBKDF2 ---------------------------------------------------------------
 const b64 = (u8) => btoa(String.fromCharCode(...u8));
 const deb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -117,7 +154,7 @@ export async function registrar({ nombre, email, password, telefono }) {
   if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
   if (supabaseConfigurado()) {
     if (!cliente || !navigator.onLine) throw new Error('El registro de cuentas necesita conexión a internet.');
-    const { data, error } = await cliente.auth.signUp({ email, password, options: { data: { nombre, telefono } } });
+    const { data, error } = await cliente.auth.signUp({ email, password, options: { data: { nombre, telefono }, emailRedirectTo: direccionApp() } });
     if (error) throw new Error(error.message);
     if (!data.session) {
       return { pendienteConfirmacion: true };

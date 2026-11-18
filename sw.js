@@ -12,7 +12,7 @@
 //    archivos de dos versiones.
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.14.3';
+const VERSION = '7.15.0';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 // Fotos del servidor (Supabase Storage): se guardan al verlas para poder verlas sin cobertura.
@@ -29,7 +29,7 @@ const APP = [
   './js/vistas/censo.js', './js/vistas/estandar.js', './js/vistas/ficha.js', './js/vistas/guia.js',
   './js/vistas/herramientas.js', './js/vistas/informes.js', './js/vistas/pedigri.js', './js/vistas/perfil.js',
   './js/vistas/puesta.js', './js/vistas/sincronizacion.js', './js/vistas/usuarios.js',
-  './js/vistas/programa.js', './js/vistas/campanas.js', './js/vistas/campana.js', './js/vistas/dossier.js', './js/vistas/copia.js', './js/respaldo.js', './js/instalacion.js', './js/buscar.js', './js/iconos.js', './fonts/lora.woff', './js/tema.js', './js/tema-inicial.js', './js/diagnostico.js', './js/vistas/problema.js', './js/vistas/privacidad.js', './js/vistas/reproduccion.js', './js/vistas/incubacion.js', './js/vistas/inspeccion.js', './js/vistas/inspecciones.js', './js/vistas/auditoria.js', './js/vistas/acta.js', './js/vistas/hoy.js',
+  './js/vistas/programa.js', './js/vistas/campanas.js', './js/vistas/campana.js', './js/vistas/dossier.js', './js/vistas/copia.js', './js/respaldo.js', './js/instalacion.js', './js/buscar.js', './js/iconos.js', './fonts/lora.woff', './js/tema.js', './js/tema-inicial.js', './js/diagnostico.js', './js/vistas/problema.js', './js/vistas/privacidad.js', './js/vistas/reproduccion.js', './js/vistas/incubacion.js', './js/vistas/inspeccion.js', './js/vistas/inspecciones.js', './js/vistas/auditoria.js', './js/vistas/acta.js', './js/vistas/hoy.js', './js/vistas/nuevaclave.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/icon-maskable-192.png', './icons/apple-touch-icon.png',
   './icons/logo.png', './docs/Estandar-Alacantina2025.pdf'
 ];

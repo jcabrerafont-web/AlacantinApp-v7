@@ -24,6 +24,16 @@ export default function (main) {
         <div class="campo"><label for="e-pass">Contraseña</label>
           <input id="e-pass" type="password" autocomplete="current-password" required></div>
         <button class="btn btn-primario btn-bloque" type="submit">Entrar</button>
+        ${local ? '' : h`<p class="peq" style="margin:.75rem 0 0;text-align:center"><button class="enlace" type="button" id="e-olvido">¿Has olvidado la contraseña?</button></p>`}
+      </form>
+
+      <form id="form-olvido" novalidate hidden>
+        <h2>Recuperar la contraseña</h2>
+        <p class="peq muted">Te enviaremos un correo con un enlace para poner una contraseña nueva. Ábrelo en este mismo móvil u ordenador.</p>
+        <div class="campo"><label for="o-email">Correo de tu cuenta</label>
+          <input id="o-email" type="email" autocomplete="username" required></div>
+        <button class="btn btn-primario btn-bloque" type="submit">Enviar el enlace</button>
+        <p class="peq" style="margin:.75rem 0 0;text-align:center"><button class="enlace" type="button" id="o-volver">Volver a Entrar</button></p>
       </form>
 
       <form id="form-registro" novalidate hidden>
@@ -50,7 +60,20 @@ export default function (main) {
     tabs.forEach(x => x.setAttribute('aria-selected', String(x === b)));
     $('#form-entrar', main).hidden = b.dataset.tab !== 'entrar';
     $('#form-registro', main).hidden = b.dataset.tab !== 'registro';
+    $('#form-olvido', main).hidden = true;
   }));
+
+  // ¿Has olvidado la contraseña?
+  $('#e-olvido', main)?.addEventListener('click', () => {
+    $('#o-email', main).value = $('#e-email', main).value.trim();
+    $('#form-entrar', main).hidden = true;
+    $('#form-olvido', main).hidden = false;
+    $('#o-email', main).focus();
+  });
+  $('#o-volver', main).addEventListener('click', () => {
+    $('#form-olvido', main).hidden = true;
+    $('#form-entrar', main).hidden = false;
+  });
 
   const ocupado = (form, si) => form.querySelectorAll('button,input').forEach(el => { el.disabled = si; });
 
@@ -68,6 +91,23 @@ export default function (main) {
     } finally { ocupado(f, false); }
   });
 
+  $('#form-olvido', main).addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f = ev.currentTarget;
+    ocupado(f, true);
+    let enviado = false;
+    try {
+      await auth.pedirRecuperacion($('#o-email', f).value);
+      enviado = true;
+    } catch (e) {
+      aviso(e.message, 'error');
+    } finally { ocupado(f, false); }
+    if (enviado) {
+      $('#o-volver', f).click();
+      aviso('Si hay una cuenta con ese correo, en unos minutos te llegará el enlace. Mira también en «Spam» o «Promociones».', 'ok');
+    }
+  });
+
   $('#form-registro', main).addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const f = ev.currentTarget;
@@ -78,7 +118,7 @@ export default function (main) {
     try {
       const r = await auth.registrar(datosForm);
       if (r.pendienteConfirmacion) {
-        aviso('Te hemos enviado un correo para confirmar la cuenta. Después, entra con tu contraseña.', 'ok');
+        aviso('Te hemos enviado un correo para confirmar la cuenta: ábrelo y pulsa el enlace. Mira también en «Spam» o «Promociones».', 'ok');
         tabs[0].click();
         return;
       }
