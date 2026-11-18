@@ -4,6 +4,7 @@ import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
 import { h, pintar, $, aviso, pct, hoyISO, fechaLocal, comprimirFoto } from '../ui.js';
+import { icono } from '../iconos.js';
 
 const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
 
@@ -76,15 +77,22 @@ export default function (main, params) {
               <option value="RF">RF · Registro Fundacional</option><option value="RA">RA · Registro Auxiliar</option></select></div>` : ''}
         </div>
         <fieldset><legend>Fotografías (recomendadas)</legend>
-          <details class="peq" style="margin-bottom:.5rem"><summary>📷 Cómo hacer una foto que sirva al Club</summary>
+          <details class="peq" style="margin-bottom:.5rem"><summary>Cómo hacer una foto que sirva al Club</summary>
             <ul>
               <li><strong>De perfil</strong>, el animal entero, de pie y tranquilo (la vista lateral es la más importante).</li>
               <li><strong>Fondo liso</strong> y claro (una pared o una tela), sin otros animales ni objetos.</li>
               <li>Buena luz natural, sin contraluz; cámara a la altura del animal.</li>
               <li>Las fotos de perfil de gallos y gallinas de cada variedad y edad forman el expediente del Club para el Catálogo Oficial y para FESACOCUR.</li>
             </ul></details>
-          <div class="fotos">${FOTOS.map(([k, t]) => h`<label class="foto" id="foto-${k}">
-            <span>${t}</span><input type="file" accept="image/*" capture="environment" data-foto="${k}" aria-label="${t}"></label>`)}</div>
+          <div class="fotos">${FOTOS.map(([k, t]) => h`<div class="foto-hueco">
+            <label class="foto" id="foto-${k}">
+              <span class="foto-vacio">${icono('camara')}<span class="solo-tactil">Hacer foto</span><span class="solo-raton">Elegir foto</span></span>
+              <input type="file" accept="image/*" capture="environment" data-foto="${k}" aria-label="${t}: hacer foto con la cámara"></label>
+            <span class="foto-nombre">${t}</span>
+            <label class="btn btn-pequeno foto-galeria solo-tactil">Galería
+              <input type="file" accept="image/*" data-foto="${k}" aria-label="${t}: elegir de la galería"></label>
+          </div>`)}</div>
+          <p class="ayuda solo-tactil">Pulsa el recuadro para usar la cámara, o «Galería» para elegir una foto ya hecha.</p>
         </fieldset>
         <div class="campo"><label for="a-notas">Notas</label><textarea id="a-notas">${a.notas || ''}</textarea></div>
       </details>
@@ -128,7 +136,8 @@ export default function (main, params) {
     if (fotos[k]) {
       if (img) img.src = fotos[k];
       else { const i = document.createElement('img'); i.alt = ''; i.src = fotos[k]; cont.prepend(i); }
-      cont.querySelector('span').hidden = true;
+      cont.querySelector('.foto-vacio').hidden = true;
+      cont.classList.add('con-foto');
     }
   };
   FOTOS.forEach(([k]) => pintarFoto(k));
@@ -193,6 +202,7 @@ export default function (main, params) {
       fotosFecha[inp.dataset.foto] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
       pintarFoto(inp.dataset.foto);
     } catch { aviso('No se pudo procesar la foto.', 'error'); }
+    inp.value = '';
   }));
 
   f.addEventListener('submit', async (ev) => {

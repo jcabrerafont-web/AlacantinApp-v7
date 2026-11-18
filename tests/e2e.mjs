@@ -291,6 +291,15 @@ if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}
 await ir('#/alta');
 ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Club') || await page.$eval('main', m => m.textContent.includes('Cómo hacer una foto que sirva al Club')), 'Alta: consejos para la foto de perfil');
 
+{ // Fotos: cada una con cámara (capture) y galería (sin capture); la de galería también se guarda
+  const huecos = await page.$$eval('main .foto-hueco', hs => hs.map(h => [...h.querySelectorAll('input[type=file]')].map(i => i.hasAttribute('capture'))));
+  ok(huecos.length === 3 && huecos.every(x => x.length === 2 && x[0] === true && x[1] === false), 'Alta: cada foto se puede hacer con la cámara o elegir de la galería');
+  await page.click('main details summary >> text=Más datos');
+  const png1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
+  await page.waitForSelector('#foto-cabeza img', { timeout: 5000 });
+  ok(await page.$eval('#foto-cabeza', e => e.classList.contains('con-foto') && e.querySelector('.foto-vacio').hidden), 'Alta: la foto elegida de la galería aparece en su recuadro');
+}
 // 6d. Copia de seguridad
 await ir('#/censo');
 ok((await page.innerText('#censo-copia')).includes('copia de seguridad'), 'Mi censo recuerda hacer la copia de seguridad');
