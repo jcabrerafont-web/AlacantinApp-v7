@@ -441,7 +441,7 @@ export function temporadaPuesta(temporada) {
 // Reproducción: lotes (gallo + gallinas de una familia, desde una fecha)
 // ---------------------------------------------------------------------------
 const RP = () => REGLAS.reproduccion;
-const sumaDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+export const sumaDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const hoyIso = () => hoyISO();
 export const misLotes = () => [...estado.lotes].sort((a, b) => b.inicio.localeCompare(a.inicio));
 export const loteActivo = (l, dia = hoyIso()) => l.inicio <= dia && (!l.fin || l.fin >= dia);
@@ -867,6 +867,8 @@ export function agendaHoy(dia = hoyIso()) {
     const porLlamar = abiertas.filter(x => x.estado === 'pendiente').length;
     if (porLlamar) add('hoy', '📞', `${porLlamar} solicitud(es) de inspección por llamar`, '#/inspecciones');
     const visitas = abiertas.filter(x => x.estado === 'programada' && x.fecha_visita >= dia && x.fecha_visita <= sumaDias(dia, 7));
+    const sinCerrar = abiertas.filter(x => x.estado === 'programada' && x.fecha_visita && x.fecha_visita < dia && (!x.inspector_id || x.inspector_id === p.id)).length;
+    if (sinCerrar) add('hoy', '🩺', `${sinCerrar} visita(s) sin cerrar`, '#/inspecciones', 'Califica los ejemplares y márcalas como realizadas.');
     for (const v of visitas) {
       const c = estado.perfiles.find(x => x.id === v.usuario_id);
       add(v.fecha_visita === dia ? 'hoy' : 'pronto', '🚗', `Visita ${v.fecha_visita === dia ? 'hoy' : `el ${fechaCorta(v.fecha_visita)}`}: ${c?.nombre || 'criador'}${c?.municipio ? ` (${c.municipio})` : ''}`, '#/inspecciones', `${v.animales.length} ejemplar(es).`);
@@ -1039,5 +1041,30 @@ export function tareasAdmin({ hoy = hoyIso() } = {}) {
   const aspirantes = otros.filter(u => u.rol === 'aspirante').length;
   if (aspirantes) t.push({ nivel: 'info', icono: '👥', texto: `${aspirantes} aspirante(s) sin REGA`,
     sub: 'Pasarán a Criador en cuanto añadan el REGA de su explotación en «Mi aviario»', href: '#/usuarios?rol=aspirante' });
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Panel de inspección: llamadas, visitas de hoy y de la semana, y visitas que
+// quedaron sin cerrar. Las de otro inspector no se cuentan como propias.
+// ---------------------------------------------------------------------------
+export function tareasInspector({ hoy = hoyIso() } = {}) {
+  if (!esAuditor(rol())) return [];
+  const yo = estado.perfil.id;
+  const t = [];
+  const quien = (s) => { const c = estado.perfiles.find(x => x.id === s.usuario_id); return `${c?.nombre || 'criador'}${c?.municipio ? ` (${c.municipio})` : ''}`; };
+  const abiertas = solicitudesTodas().filter(solicitudAbiertaEs);
+  const porLlamar = abiertas.filter(s => s.estado === 'pendiente');
+  if (porLlamar.length) t.push({ nivel: 'hoy', icono: '📞', texto: `${porLlamar.length} solicitud(es) por llamar`,
+    sub: 'Llama al criador, acordad el día y programa la visita', href: '#/inspecciones' });
+  const mias = abiertas.filter(s => s.estado === 'programada' && s.fecha_visita && (!s.inspector_id || s.inspector_id === yo));
+  for (const s of mias.filter(x => x.fecha_visita < hoy).sort((a, b) => a.fecha_visita.localeCompare(b.fecha_visita))) {
+    t.push({ nivel: 'hoy', icono: '🩺', texto: `Visita del ${fechaCorta(s.fecha_visita)} sin cerrar: ${quien(s)}`,
+      sub: 'Califica los ejemplares y márcala como realizada (o anúlala con el motivo)', href: '#/inspecciones' });
+  }
+  for (const s of mias.filter(x => x.fecha_visita >= hoy && x.fecha_visita <= sumaDias(hoy, 7)).sort((a, b) => a.fecha_visita.localeCompare(b.fecha_visita))) {
+    t.push({ nivel: s.fecha_visita === hoy ? 'hoy' : 'pronto', icono: '🚗', texto: `Visita ${s.fecha_visita === hoy ? 'hoy' : `el ${fechaCorta(s.fecha_visita)}`}: ${quien(s)}`,
+      sub: `${s.animales.length} ejemplar(es) por calificar`, href: '#/inspecciones' });
+  }
   return t;
 }

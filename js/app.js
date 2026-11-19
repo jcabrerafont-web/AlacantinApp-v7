@@ -44,6 +44,7 @@ const RUTAS = [
   ['inspecciones', 'inspecciones', ['inspector', 'administrador']],
   ['usuarios', 'usuarios', ['administrador']],
   ['admin', 'admin', ['administrador']],
+  ['inspector', 'inspector', ['inspector', 'administrador']],
   ['admin/libro', 'adminlibro', ['administrador']],
   ['admin/supabase', 'adminsupabase', ['administrador']]
 ];
@@ -121,20 +122,24 @@ const ANCHO = window.matchMedia('(min-width: 900px)');
 
 function pintarBarra() {
   const items = datos.estado.perfil ? BARRA.usuario : BARRA.visitante;
-  const admin = datos.rol() === 'administrador';
+  // Quinta opción del menú lateral (ordenador): el panel propio del rol
+  const extra = { administrador: ['admin', 'escudo', 'Administración'], inspector: ['inspector', 'revision', 'Inspección'] }[datos.rol()];
   const nav = $('#barra');
   nav.dataset.columnas = String(items.length);
   nav.innerHTML = items.map(([ruta, ico, texto]) =>
     `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('')
-    + (admin ? `<a href="#/admin" data-ruta="admin" class="solo-ancho"><span class="ico" aria-hidden="true">${svgIcono('escudo')}</span><span>Administración</span></a>` : '');
+    + (extra ? `<a href="#/${extra[0]}" data-ruta="${extra[0]}" class="solo-ancho"><span class="ico" aria-hidden="true">${svgIcono(extra[1])}</span><span>${extra[2]}</span></a>` : '');
   pintarInsignia();
   marcarBarra(resolver(location.hash)?.base);
 }
 
-// Número de tareas de administración pendientes, sobre Herramientas (móvil) y Administración (ordenador)
+// Tareas pendientes del panel del rol, sobre Herramientas (móvil) y sobre el panel (ordenador)
 function pintarInsignia() {
-  const n = datos.rol() === 'administrador' ? datos.tareasAdmin().filter(x => x.nivel !== 'info').length : 0;
-  document.querySelectorAll('#barra a[data-ruta="herramientas"], #barra a[data-ruta="admin"]').forEach(a => {
+  const r = datos.rol();
+  const tareas = r === 'administrador' ? datos.tareasAdmin() : r === 'inspector' ? datos.tareasInspector() : [];
+  const n = tareas.filter(x => x.nivel !== 'info').length;
+  const que = r === 'inspector' ? 'de inspección' : 'de administración';
+  document.querySelectorAll('#barra a[data-ruta="herramientas"], #barra a[data-ruta="admin"], #barra a[data-ruta="inspector"]').forEach(a => {
     a.querySelector('.insignia')?.remove();
     a.removeAttribute('aria-label');
     if (!n) return;
@@ -144,15 +149,16 @@ function pintarInsignia() {
     b.setAttribute('aria-hidden', 'true');
     b.textContent = n > 9 ? '9+' : String(n);
     a.querySelector('.ico').appendChild(b);
-    a.setAttribute('aria-label', `${nombre} · ${n} tarea(s) de administración pendiente(s)`);
+    a.setAttribute('aria-label', `${nombre} · ${n} tarea(s) ${que} pendiente(s)`);
   });
 }
 
 function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
-    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', admin: 'admin' };
+    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
   let activo = equivalencias[base] || base;
-  if (activo === 'admin' && !(ANCHO.matches && document.querySelector('#barra a[data-ruta="admin"]'))) activo = 'herramientas';
+  if (activo === 'inspector' && !document.querySelector('#barra a[data-ruta="inspector"]') && document.querySelector('#barra a[data-ruta="admin"]')) activo = 'admin';
+  if (['admin', 'inspector'].includes(activo) && !(ANCHO.matches && document.querySelector(`#barra a[data-ruta="${activo}"]`))) activo = 'herramientas';
   document.querySelectorAll('#barra a').forEach(a => {
     if (a.dataset.ruta === activo) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });

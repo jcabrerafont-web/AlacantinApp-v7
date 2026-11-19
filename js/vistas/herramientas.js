@@ -35,7 +35,8 @@ export default function (main) {
       ['#/guia', '📋', 'Guía de Campo', 'Las 12 regiones y los defectos graves']
     ]]
   ];
-  if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/inspecciones', '📞', 'Solicitudes de inspección', (() => { const n = datos.solicitudesTodas().filter(datos.solicitudAbiertaEs).length; return n ? `${n} abierta(s): llamar, programar y calificar` : 'No hay solicitudes abiertas'; })()], ['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
+  if (r === 'inspector') grupos.unshift(['Inspección', [['#/inspector', '🩺', 'Panel de inspección', (() => { const n = datos.tareasInspector().filter(x => x.nivel !== 'info').length; return n ? `${n} tarea(s) pendiente(s): llamadas, visitas y calificaciones` : 'Todo al día · llamadas, visitas y calificaciones'; })()]]]);
+  else if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/inspecciones', '📞', 'Solicitudes de inspección', (() => { const n = datos.solicitudesTodas().filter(datos.solicitudAbiertaEs).length; return n ? `${n} abierta(s): llamar, programar y calificar` : 'No hay solicitudes abiertas'; })()], ['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
   if (r === 'administrador') grupos.unshift(['Administración', [['#/admin', '🛡️', 'Panel de administración', (() => { const n = datos.tareasAdmin().filter(x => x.nivel !== 'info').length; return n ? `${n} tarea(s) pendiente(s): usuarios, Libro, inspecciones y servidor` : 'Todo al día · usuarios, Libro, inspecciones y servidor'; })()]]]);
 
   pintar(main, h`
@@ -48,7 +49,7 @@ export default function (main) {
     <div class="tarjeta"><h2 id="h-pantalla-et">Pantalla</h2>
       <div class="opciones" role="radiogroup" aria-labelledby="h-pantalla-et">${Object.entries(tema.TEMAS).map(([k, v]) => h`<label><input type="radio" name="h-tema" value="${k}" ${tema.actual() === k ? h`checked` : ''}><span>${v}</span></label>`)}</div>
       <p class="ayuda">«Sol»: máximo contraste y letra más grande, para leer al aire libre. Se guarda en este dispositivo.</p></div>
-    ${grupos.map(([titulo, items]) => h`<div class="tarjeta${titulo === 'Administración' ? ' solo-estrecho' : ''}"><h2>${titulo}</h2><ul class="lista">
+    ${grupos.map(([titulo, items]) => h`<div class="tarjeta${titulo === 'Administración' || (titulo === 'Inspección' && r === 'inspector') ? ' solo-estrecho' : ''}"><h2>${titulo}</h2><ul class="lista">
       ${items.map(([href, ico, t, sub]) => h`<li><a class="item" href="${href}"><span class="tarea-ico" aria-hidden="true">${desdeEmoji(ico)}</span>
         <span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}
     </ul></div>`)}

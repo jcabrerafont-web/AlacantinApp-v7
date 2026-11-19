@@ -317,6 +317,31 @@ ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supab
 await cambiarRolLocal('inspector');
 ok(!(await page.$('main a[href="#/admin"]')) && await (async () => { await ir('#/admin'); return !page.url().includes('#/admin'); })(), 'El panel de administración no existe para el inspector');
 
+// 6b-ter. Panel de inspección (con una solicitud por llamar: tarea pendiente)
+await page.evaluate(async () => {
+  const db = await import('./js/db.js'); const d = await import('./js/datos.js');
+  const a = d.estado.todos.find(x => x.estado !== 'baja');
+  await db.guardar('solicitudes', { id: '00000000-0000-4000-8000-0000000050a1', usuario_id: '00000000-0000-4000-8000-00000000a1a1', animales: [a.id], telefono: '612345678', horario: 'mañanas', estado: 'pendiente', fecha_visita: null, inspector_id: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  await d.cargar();
+});
+await ir('#/herramientas');
+{ const ins = await page.evaluate(async () => { const d = await import('./js/datos.js'); const n = d.tareasInspector().filter(x => x.nivel !== 'info').length; const a = document.querySelector('#barra a[data-ruta="herramientas"]'); return [n, a.querySelector('.insignia')?.textContent || '0', a.getAttribute('aria-label') || '']; });
+  ok(Boolean(await page.$('main a[href="#/inspector"]')) && ins[0] > 0 && ins[1] === String(ins[0]) && ins[2].includes('de inspección'),
+    `Inspector: «Panel de inspección» en Herramientas y número de tareas sobre Herramientas (${ins[0]})`); }
+await ir('#/inspector');
+{ const t = await page.innerText('main');
+  ok(t.includes('Qué hay que hacer') && t.includes('solicitud(es) por llamar') && t.includes('casillas del dossier'), 'Panel de inspección: llamadas pendientes y huecos del dossier'); }
+await page.fill('#in-buscar', '0001'); await page.waitForTimeout(200);
+ok((await page.$$eval('#in-resultados a', l => l.map(a => a.getAttribute('href')))).every(h => h.startsWith('#/calificar/')) && (await page.$$('#in-resultados a')).length > 0, 'Panel de inspección: buscar por anilla abre la hoja de calificación');
+await page.setViewportSize({ width: 1280, height: 800 });
+await ir('#/inspecciones');
+ok(await page.$eval('#barra a[data-ruta="inspector"]', a => getComputedStyle(a).display !== 'none' && a.getAttribute('aria-current') === 'page') && !(await page.$('#barra a[data-ruta="admin"]')),
+  'Menú lateral del inspector (ordenador): «Inspección», marcada en sus pantallas, sin «Administración»');
+await ir('#/herramientas');
+ok(await page.$eval('main a[href="#/inspector"]', a => a.offsetParent === null), 'Ordenador: Herramientas no repite «Panel de inspección»');
+await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(async () => { const db = await import('./js/db.js'); const d = await import('./js/datos.js'); await db.borrar?.('solicitudes', '00000000-0000-4000-8000-0000000050a1'); await d.cargar(); });
+
 // 6c. Dossier fotográfico (Dirección Técnica)
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
@@ -476,7 +501,7 @@ ok(trasSol.texto.includes('Pendiente') && trasSol.texto.includes('Tardes') && tr
 ok(trasSol.otra.includes('Ya tienes una solicitud abierta'), 'Solo una solicitud abierta a la vez');
 await cambiarRolLocal('inspector');
 await ir('#/herramientas');
-ok(await page.$eval('main a[href="#/inspecciones"]', a => a.textContent.includes('1 abierta')), 'Herramientas del inspector: 1 solicitud abierta');
+ok(await page.$eval('main a[href="#/inspector"]', a => a.textContent.includes('1 tarea(s) pendiente(s)')), 'Herramientas del inspector: el Panel de inspección avisa de 1 tarea (la solicitud por llamar)');
 await ir('#/inspecciones');
 const panel = await page.evaluate(() => ({ tel: document.querySelector('form[data-sol] a[href^="tel:"]')?.getAttribute('href'), wa: document.querySelector('form[data-sol] a[href^="https://wa.me/"]')?.getAttribute('href') || '', calificar: !!document.querySelector('form[data-sol] a[href^="#/calificar/"]'), realizadaOff: document.querySelector('[data-accion="realizada"]')?.disabled }));
 ok(panel.tel === 'tel:+34612345678' && panel.wa.startsWith('https://wa.me/34612345678?text='), `Panel: llamar y WhatsApp con prefijo 34 (${panel.tel})`);

@@ -18,6 +18,7 @@ const SECCIONES = [
     ['#/informes', '📊', 'Informes y exportaciones', 'Censos, Ne, consanguinidad y archivos CSV']
   ]],
   ['Inspección', [
+    ['#/inspector', '🩺', 'Panel de inspección', 'Llamadas, visitas de la semana y calificar por anilla'],
     ['#/inspecciones', '📞', 'Solicitudes de inspección', 'Llamar, programar la visita y calificar'],
     ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']
   ]],
