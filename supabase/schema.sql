@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.perfiles (
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE public.perfiles ADD COLUMN IF NOT EXISTS baja date;  -- fecha de la baja RGPD (perfil anonimizado)
 
 CREATE OR REPLACE FUNCTION public.rol_actual() RETURNS text
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
@@ -67,7 +68,11 @@ BEGIN
   ELSIF NEW.rol IS DISTINCT FROM OLD.rol AND NOT public.es_admin() THEN
     NEW.rol := OLD.rol;
   END IF;
-  IF TG_OP = 'UPDATE' THEN NEW.email := OLD.email; END IF;
+  -- El correo y la fecha de baja solo los cambia la baja RGPD (limpiar_perfil_baja), nunca un UPDATE normal
+  IF TG_OP = 'UPDATE' AND current_setting('alacantinapp.baja', true) IS DISTINCT FROM OLD.id::text THEN
+    NEW.email := OLD.email; NEW.baja := OLD.baja;
+  ELSIF TG_OP = 'INSERT' THEN NEW.baja := NULL;
+  END IF;
   IF NEW.rol = 'aspirante' AND NEW.rega ~ '^ES[0-9]{12}$' THEN NEW.rol := 'criador'; END IF;
   IF NEW.rol = 'criador' AND (NEW.rega IS NULL OR NEW.rega !~ '^ES[0-9]{12}$') THEN NEW.rol := 'aspirante'; END IF;
   NEW.updated_at := now();
@@ -564,7 +569,7 @@ BEGIN
   RETURN OLD;
 END $$;
 DO $$ DECLARE t text; BEGIN
-  FOREACH t IN ARRAY ARRAY['huevos', 'campanas', 'lotes', 'incubaciones'] LOOP
+  FOREACH t IN ARRAY ARRAY['huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes'] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.%I', t);
     EXECUTE format('CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado()', t);
   END LOOP;
@@ -601,6 +606,78 @@ CREATE TRIGGER trg_historial_animales AFTER INSERT OR UPDATE OR DELETE ON public
 DROP TRIGGER IF EXISTS trg_historial_calificaciones ON public.calificaciones;
 CREATE TRIGGER trg_historial_calificaciones AFTER INSERT ON public.calificaciones
   FOR EACH ROW EXECUTE FUNCTION public.anotar_historial();
+
+-- ----------------------------------------------------------------------------
+-- 4g. Baja de un usuario (RGPD, art. 17). La pide la persona; la ejecuta la administración.
+--   · El perfil ya no depende de auth.users: al borrar la cuenta de acceso, el perfil
+--     anonimizado (solo el nombre) se conserva como criador o titular del Libro.
+--   · Si la persona no figura en ningún registro del Libro, el perfil se borra del todo.
+--   · Borrar la cuenta en el panel de Supabase hace lo mismo (trigger en auth.users).
+-- ----------------------------------------------------------------------------
+DO $$ DECLARE c text; BEGIN
+  FOR c IN SELECT conname FROM pg_constraint
+           WHERE conrelid = 'public.perfiles'::regclass AND contype = 'f' AND confrelid = 'auth.users'::regclass LOOP
+    EXECUTE format('ALTER TABLE public.perfiles DROP CONSTRAINT %I', c);
+  END LOOP;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.anotar_borrado_perfil() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.borrados (tabla, registro, usuario_id) VALUES ('perfiles', OLD.id, OLD.id);
+  RETURN OLD;
+END $$;
+DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.perfiles;
+CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.perfiles FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado_perfil();
+
+CREATE OR REPLACE FUNCTION public.limpiar_perfil_baja(p_id uuid) RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.perfiles WHERE id = p_id) THEN RETURN 'sin_perfil'; END IF;
+  -- Sus solicitudes de inspección llevan su teléfono: se borran (las calificaciones siguen en el Libro)
+  DELETE FROM public.solicitudes WHERE usuario_id = p_id;
+  IF NOT EXISTS (SELECT 1 FROM public.animales WHERE usuario_id = p_id OR criador_id = p_id)
+     AND NOT EXISTS (SELECT 1 FROM public.calificaciones WHERE inspector_id = p_id)
+     AND NOT EXISTS (SELECT 1 FROM public.huevos WHERE usuario_id = p_id)
+     AND NOT EXISTS (SELECT 1 FROM public.solicitudes WHERE inspector_id = p_id) THEN
+    DELETE FROM public.perfiles WHERE id = p_id;   -- en cascada: campañas, lotes e incubaciones
+    RETURN 'borrado';
+  END IF;
+  PERFORM set_config('alacantinapp.baja', p_id::text, true);
+  UPDATE public.perfiles SET email = NULL, telefono = NULL, numero_socio = NULL, rega = NULL, municipio = NULL,
+         provincia = NULL, latitud = NULL, longitud = NULL, baja = public.hoy()
+   WHERE id = p_id;
+  PERFORM set_config('alacantinapp.baja', '', true);
+  RETURN 'anonimizado';
+END $$;
+-- Interna: nadie la llama desde la app (Supabase concede EXECUTE por defecto a anon y authenticated)
+REVOKE ALL ON FUNCTION public.limpiar_perfil_baja(uuid) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.baja_por_cuenta_borrada() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM public.limpiar_perfil_baja(OLD.id);
+  RETURN OLD;
+END $$;
+DROP TRIGGER IF EXISTS trg_baja_cuenta ON auth.users;
+CREATE TRIGGER trg_baja_cuenta AFTER DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION public.baja_por_cuenta_borrada();
+
+-- Desde la app (Panel de administración › Usuarios): datos personales y, si se puede, la cuenta de acceso
+CREATE OR REPLACE FUNCTION public.dar_baja_usuario(p_id uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE r text; cuenta text := 'borrada';
+BEGIN
+  IF NOT public.es_admin() THEN RAISE EXCEPTION 'Solo un administrador puede dar de baja a un usuario' USING ERRCODE = '42501'; END IF;
+  IF p_id = auth.uid() THEN RAISE EXCEPTION 'No puedes darte de baja a ti mismo desde aquí' USING ERRCODE = '42501'; END IF;
+  r := public.limpiar_perfil_baja(p_id);
+  BEGIN
+    DELETE FROM auth.users WHERE id = p_id;
+  EXCEPTION WHEN insufficient_privilege THEN cuenta := 'pendiente';
+  END;
+  RETURN jsonb_build_object('perfil', r, 'cuenta', cuenta);
+END $$;
+REVOKE ALL ON FUNCTION public.dar_baja_usuario(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.dar_baja_usuario(uuid) TO authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)

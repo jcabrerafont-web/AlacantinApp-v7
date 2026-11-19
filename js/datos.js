@@ -7,7 +7,7 @@ import * as db from './db.js';
 import * as sync from './sync.js';
 import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
 import { indice, fxAnimal, creaCiclo, animalesEnCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes, heredarMemoria } from './genetica.js';
-import { esAuditor, actualizarPerfil } from './auth.js';
+import { esAuditor, actualizarPerfil, obtenerCliente } from './auth.js';
 import { uuid, hoyISO } from './ui.js';
 
 export const estado = {
@@ -1005,6 +1005,96 @@ export async function cambiarRol(perfilId, nuevoRol) {
   await db.guardar('perfiles', nuevo);
   await sync.encolar('perfiles', 'upsert', { id: p.id, rol: nuevoRol, updated_at: nuevo.updated_at });
   await cargar();
+}
+
+// ---------------------------------------------------------------------------
+// Baja de un usuario (RGPD, art. 17). La hace el servidor en una sola operación:
+// borra sus datos personales y su cuenta, y conserva el Libro (sus ejemplares,
+// calificaciones y puesta quedan a nombre del criador, sin contacto ni REGA).
+// Solo con conexión: no se puede encolar porque es irreversible.
+// ---------------------------------------------------------------------------
+const CAMPOS_PERSONALES = ['email', 'telefono', 'numero_socio', 'rega', 'municipio', 'provincia', 'latitud', 'longitud'];
+const servidor = (para) => {
+  const c = obtenerCliente();
+  if (!c || !navigator.onLine) throw new Error(`${para} necesita conexión con el Libro central. Inténtalo cuando tengas cobertura.`);
+  return c;
+};
+
+export async function darDeBajaUsuario(perfilId) {
+  if (rol() !== 'administrador') throw new Error('Solo un administrador puede dar de baja a un usuario.');
+  if (perfilId === estado.perfil.id) throw new Error('No puedes darte de baja a ti mismo desde aquí.');
+  const p = estado.perfiles.find(x => x.id === perfilId);
+  if (!p) throw new Error('Usuario no encontrado.');
+  const { data, error } = await servidor('La baja').rpc('dar_baja_usuario', { p_id: perfilId });
+  if (error) throw new Error(error.message || String(error));
+  const r = { perfil: data?.perfil || 'anonimizado', cuenta: data?.cuenta || 'pendiente', email: p.email || '' };
+  if (r.perfil === 'borrado') await db.borrar('perfiles', perfilId);
+  else await db.guardar('perfiles', { ...p, ...Object.fromEntries(CAMPOS_PERSONALES.map(k => [k, null])), baja: hoyIso(), updated_at: new Date().toISOString() });
+  for (const s of estado.solicitudes.filter(x => x.usuario_id === perfilId)) await db.borrar('solicitudes', s.id);
+  await cargar();
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// Historial de cambios del Libro (quién cambió qué y cuándo). Lo escriben los
+// triggers del servidor; solo lo leen administración e inspección, y solo en línea.
+// ---------------------------------------------------------------------------
+export const TAM_HISTORIAL = 50;
+const NOMBRES_CAMPO = {
+  anilla: 'anilla', nombre: 'nombre', sexo: 'sexo', variedad: 'variedad', fecha_nacimiento: 'nacimiento', padre_id: 'padre', madre_id: 'madre',
+  familia: 'familia', peso_g: 'peso', rfid: 'RFID', rega: 'REGA', municipio: 'municipio', provincia: 'provincia', latitud: 'ubicación', longitud: 'ubicación',
+  estado: 'estado', baja_fecha: 'fecha de baja', baja_causa: 'causa de baja', seccion: 'sección del Libro', usuario_id: 'titular', criador_id: 'criador',
+  notas: 'notas', rm_fecha: 'Registro de Méritos', rm_via: 'Registro de Méritos', rm_motivo: 'Registro de Méritos', rm_origen: 'Registro de Méritos'
+};
+const IGNORAR = new Set(['updated_at', 'sync_ts', 'created_at', 'fotos', 'fotos_fecha']);
+
+export function cambiosHistorial(e) {
+  if (e.operacion !== 'UPDATE' || !e.antes || !e.despues) return [];
+  return Object.keys({ ...e.antes, ...e.despues })
+    .filter(k => !IGNORAR.has(k) && JSON.stringify(e.antes[k] ?? null) !== JSON.stringify(e.despues[k] ?? null))
+    .map(k => NOMBRES_CAMPO[k] || k.replace(/_/g, ' '))
+    .filter((n, i, l) => l.indexOf(n) === i);
+}
+
+export function describirHistorial(e) {
+  const fila = e.despues || e.antes || {};
+  const nombrePerfil = (id) => estado.perfiles.find(p => p.id === id)?.nombre || null;
+  const quien = e.usuario_id ? (nombrePerfil(e.usuario_id) || 'Usuario dado de baja') : 'El servidor';
+  if (e.tabla === 'calificaciones') {
+    const a = animal(fila.animal_id);
+    return { quien, que: `Calificó ${a ? a.anilla : 'un ejemplar'}${fila.total != null ? ` (${fila.total} puntos)` : ''}`, enlace: a ? `#/animal/${a.id}` : null };
+  }
+  const anilla = fila.anilla || animal(e.registro)?.anilla || 'un ejemplar';
+  const enlace = animal(e.registro) ? `#/animal/${e.registro}` : null;
+  if (e.operacion === 'INSERT') return { quien, que: `Alta de ${anilla}`, enlace };
+  if (e.operacion === 'DELETE') return { quien, que: `Borró ${anilla}`, enlace: null };
+  const c = cambiosHistorial(e);
+  return { quien, que: c.length ? `Cambió ${c.join(', ')} de ${anilla}` : `Guardó ${anilla} sin cambios en el Libro`, enlace };
+}
+
+export async function historialServidor({ tabla = '', pagina = 0 } = {}) {
+  if (!esAuditor(rol())) throw new Error('El historial solo lo pueden ver administración e inspección.');
+  let q = servidor('El historial').from('historial').select('*');
+  if (tabla) q = q.eq('tabla', tabla);
+  const { data, error } = await q.order('fecha', { ascending: false }).order('id', { ascending: false })
+    .range(pagina * TAM_HISTORIAL, pagina * TAM_HISTORIAL + TAM_HISTORIAL - 1);
+  if (error) throw new Error(error.message || String(error));
+  return data || [];
+}
+
+// ---------------------------------------------------------------------------
+// Copia completa del Libro (administración): vuelve a bajar todo lo que el
+// servidor le deja ver al administrador —que es todo— antes de hacer la copia.
+// ---------------------------------------------------------------------------
+export async function refrescarTodoDesdeServidor() {
+  if (rol() !== 'administrador') throw new Error('Solo un administrador puede bajar el Libro completo.');
+  servidor('Bajar el Libro completo');
+  await sync.drenar();
+  await sync.reiniciarMarcas(estado.perfil.id);
+  const r = await sync.descargar(estado.perfil.id);
+  if (r === false) throw new Error('No se pudo conectar con el Libro central.');
+  await cargar();
+  return r;
 }
 
 // ---------------------------------------------------------------------------

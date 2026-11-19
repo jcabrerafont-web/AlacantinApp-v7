@@ -267,3 +267,40 @@ CONTEXT:  PL/pgSQL function validar_solicitud() line 19 at RAISE
 -------------
  t
 
+== 18. Baja RGPD de un usuario
+   18a un usuario normal no puede dar de baja a otro (esperado: error 42501)
+psql:tests/schema.test.sql:273: ERROR:  Solo un administrador puede dar de baja a un usuario
+CONTEXT:  PL/pgSQL function dar_baja_usuario(uuid) line 4 at RAISE
+   18b ni llamar a la limpieza interna (esperado: permiso denegado)
+psql:tests/schema.test.sql:275: ERROR:  permission denied for function limpiar_perfil_baja
+   18c ni cambiar su correo ni marcarse de baja con un UPDATE (esperado: criador@x.es, sin baja)
+    email     | sin_baja 
+--------------+----------
+ criador@x.es | t
+
+   18d el administrador no puede darse de baja a sí mismo (esperado: error 42501)
+psql:tests/schema.test.sql:282: ERROR:  No puedes darte de baja a ti mismo desde aquí
+CONTEXT:  PL/pgSQL function dar_baja_usuario(uuid) line 5 at RAISE
+   18e sin registros en el Libro: se borran el perfil y la cuenta (esperado: borrado, borrada)
+              dar_baja_usuario              
+--------------------------------------------
+ {"cuenta": "borrada", "perfil": "borrado"}
+
+ perfiles | cuentas | anotado_para_los_moviles 
+----------+---------+--------------------------
+        0 |       0 |                        1
+
+   18f con ejemplares: se conserva el nombre y se borran los datos personales y sus solicitudes (esperado: anonimizado, borrada)
+                dar_baja_usuario                
+------------------------------------------------
+ {"cuenta": "borrada", "perfil": "anonimizado"}
+
+ nombre | email | telefono | rega | municipio | baja_hoy | ejemplares_conservados | solicitudes | cuentas 
+--------+-------+----------+------+-----------+----------+------------------------+-------------+---------
+ Otro   |       |          |      |           | t        |                      1 |           0 |       0
+
+   18g borrar la cuenta directamente en el panel de Supabase hace lo mismo (esperado: Inspector, sin correo)
+  nombre   | sin_correo | baja_hoy 
+-----------+------------+----------
+ Inspector | t          | t
+

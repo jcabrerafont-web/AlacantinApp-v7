@@ -8,13 +8,14 @@ const NOMBRES = { animales: 'ejemplares', calificaciones: 'calificaciones', huev
 
 export default function (main) {
   const p = datos.estado.perfil;
+  const completa = datos.rol() === 'administrador' && supabaseConfigurado();
   let copia = null;
 
   const dibujar = async () => {
     const u = await respaldo.ultimaCopia();
     const dias = u ? Math.floor((Date.now() - Date.parse(u)) / 86400000) : null;
     pintar(main, h`
-      <p><a href="#/herramientas">← Herramientas</a></p>
+      <p>${completa ? h`<a href="#/admin">← Administración</a>` : h`<a href="#/herramientas">← Herramientas</a>`}</p>
       <h1>Copia de seguridad</h1>
       ${supabaseConfigurado() ? h`<div class="aviso-caja info peq">Tus datos se guardan también en el Libro central del Club. La copia es una garantía adicional y sirve para llevarte tus datos.</div>`
         : h`<div class="aviso-caja aviso peq"><strong>Modo dispositivo:</strong> tus datos solo están en este móvil u ordenador. Si se pierde, se rompe o borras los datos del navegador, se pierden. Haz una copia con frecuencia y guárdala fuera del móvil: en el correo, en la nube o en un ordenador.</div>`}
@@ -22,8 +23,10 @@ export default function (main) {
       <div class="tarjeta"><h2>1. Descargar copia</h2>
         <p class="peq">${u ? `Última copia: ${fecha(u.slice(0, 10))} (hace ${dias} día${dias === 1 ? '' : 's'}).` : 'Todavía no has hecho ninguna copia en este dispositivo.'}</p>
         <label class="check-grande neutro"><input type="checkbox" id="cp-fotos" checked> Incluir las fotos (el archivo ocupa más)</label>
-        <button class="btn btn-primario btn-bloque" id="cp-descargar">⬇️ Descargar copia de seguridad</button>
-        <p class="ayuda">Se descarga un archivo <code>.json</code> con tus ejemplares, calificaciones, huevos y campañas. No incluye contraseñas.</p>
+        ${completa ? h`<p class="peq">Como administrador, la copia es del <strong>Libro completo</strong>: antes de hacerla se baja de nuevo todo del servidor (ejemplares, calificaciones y puesta de todos los criadores, y los perfiles de los socios).</p>` : ''}
+        <button class="btn btn-primario btn-bloque" id="cp-descargar">⬇️ ${completa ? 'Descargar copia completa del Libro' : 'Descargar copia de seguridad'}</button>
+        <p class="ayuda">${completa ? h`Lleva datos personales de los socios (correo, teléfono, REGA): guárdala en un sitio protegido del Club, no en un móvil ni en un correo reenviado. No incluye contraseñas.`
+          : h`Se descarga un archivo <code>.json</code> con tus ejemplares, calificaciones, huevos y campañas. No incluye contraseñas.`}</p>
       </div>
 
       <div class="tarjeta"><h2>2. Restaurar una copia</h2>
@@ -33,13 +36,16 @@ export default function (main) {
       </div>`);
 
     $('#cp-descargar', main).addEventListener('click', async () => {
+      const boton = $('#cp-descargar', main);
+      const fotos = $('#cp-fotos', main).checked;
       try {
-        const c = await respaldo.crearCopia(p, { incluirFotos: $('#cp-fotos', main).checked });
-        descargar(JSON.stringify(c), `AlacantinApp_copia_${hoyISO()}.json`, 'application/json');
+        if (completa) { boton.disabled = true; boton.textContent = 'Bajando el Libro del servidor…'; await datos.refrescarTodoDesdeServidor(); }
+        const c = await respaldo.crearCopia(p, { incluirFotos: fotos });
+        descargar(JSON.stringify(c), `AlacantinApp_${completa ? 'Libro_completo' : 'copia'}_${hoyISO()}.json`, 'application/json');
         await respaldo.marcarCopiaHecha();
         aviso(`Copia descargada: ${c.datos.animales.length} ejemplares. Guárdala fuera de este dispositivo.`, 'ok');
         dibujar();
-      } catch (e) { aviso(`No se pudo crear la copia: ${e.message}`, 'error'); }
+      } catch (e) { aviso(`No se pudo crear la copia: ${e.message}`, 'error'); boton.disabled = false; dibujar(); }
     });
 
     $('#cp-archivo', main).addEventListener('change', async (e) => {

@@ -55,12 +55,11 @@ export default function (main) {
       'Dile que mire también en «Spam» o «Promociones». El enlace caduca en 1 hora.'
     ])}
 
-    ${tarea('sb-baja', 'Dar de baja una cuenta que no tiene ejemplares', 'Cuando alguien pide la baja o se registró por error y no ha inscrito ningún ejemplar.', panel(ref, '/auth/users'), [
-      'Comprueba antes en <a href="#/usuarios">Usuarios y roles</a> que no tiene ningún ejemplar, ni activo ni de baja.',
+    ${tarea('sb-baja', 'Dar de baja una cuenta', 'Normalmente no hace falta: en Usuarios y roles, abre su ficha y pulsa «Dar de baja (RGPD)». Esto es solo si la app te dice que falta borrar su cuenta de acceso.', panel(ref, '/auth/users'), [
       'Pulsa <strong>«Abrir en Supabase»</strong> y busca su correo en <strong>«Search by email»</strong>.',
       'En su fila, pulsa los tres puntos <strong>«⋯»</strong> de la derecha (o haz clic derecho) y elige <strong>«Delete user»</strong>. Confírmalo.',
-      'Se borran su cuenta y su perfil. Si te escribió pidiendo la baja, contéstale confirmándola (tienes un mes de plazo).',
-      'Si tiene ejemplares, Supabase no deja borrarla: el Libro los protege. Esa baja (borrar sus datos personales y conservar los ejemplares) llegará en una próxima versión de la app.'
+      'Al borrar la cuenta, el servidor borra también sus datos personales. Si tenía ejemplares, estos se conservan en el Libro a su nombre, sin correo, teléfono ni REGA.',
+      'Si te escribió pidiendo la baja, contéstale confirmándola (tienes un mes de plazo).'
     ])}
 
     ${tarea('sb-pausa', 'La app no carga datos: el proyecto está en pausa', 'El plan gratuito pausa el proyecto tras 7 días sin uso. No se pierde nada.', panel(ref), [

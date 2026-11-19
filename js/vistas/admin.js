@@ -22,6 +22,11 @@ const SECCIONES = [
     ['#/inspecciones', '📞', 'Solicitudes de inspección', 'Llamar, programar la visita y calificar'],
     ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']
   ]],
+  ['Datos y seguridad', [
+    ['#/admin/historial', '⏳', 'Historial de cambios', 'Quién dio de alta, cambió, borró o calificó cada ejemplar, y cuándo'],
+    ['#/copia', '💾', 'Copia completa del Libro', 'Baja todo del servidor y lo guarda en un archivo, para el archivo del Club'],
+    ['#/usuarios', '🗑', 'Baja de un socio (RGPD)', 'Abre su ficha en Usuarios y pulsa «Dar de baja»: se borran sus datos y se conserva el Libro']
+  ]],
   ['Servidor y cuentas', [
     ['#/admin/supabase', '🔒', 'Tareas en el panel de Supabase', 'Contraseñas, bajas, correo de la app, proyecto en pausa: enlace directo y pasos exactos']
   ]]

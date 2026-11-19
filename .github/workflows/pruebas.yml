@@ -29,6 +29,8 @@ jobs:
         run: npm run test:e2e
       - name: Correos de Supabase (recuperar contraseña, confirmar cuenta) con servidor simulado
         run: npm run test:recuperacion
+      - name: Administración con servidor simulado (baja RGPD, historial, copia completa)
+        run: npm run test:admin
       - name: Service Worker (cobertura mala y actualizaciones)
         run: npm run test:pwa
       - name: Accesibilidad (temas claro, oscuro y sol)

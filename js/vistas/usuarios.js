@@ -12,6 +12,7 @@ export default function (main) {
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
   let filtro = q.get('filtro') === 'nuevos' ? 'nuevos' : (q.get('rol') || '');
   let texto = '';
+  let resultado = null; // última baja hecha: se queda a la vista (lleva el correo para contestarle)
   const dibujar = () => {
     const yo = datos.estado.perfil.id;
     const ejemplares = (id) => datos.estado.todos.filter(a => a.usuario_id === id);
@@ -29,13 +30,18 @@ export default function (main) {
           <input id="us-buscar" type="search" autocomplete="off" placeholder="Nombre, correo, REGA o municipio" value="${texto}"></div>
         <div class="fila" role="group" aria-label="Filtrar por">${FILTROS.map(([v, n]) => h`<button type="button" class="btn btn-pequeno" data-filtro="${v}" aria-pressed="${String(filtro === v)}">${n}</button>`)}</div>
       </div>
+      ${resultado ? h`<div class="aviso-caja ${resultado.cuenta === 'pendiente' ? 'aviso' : 'ok'}" id="us-resultado" role="status" tabindex="-1">
+        <strong>${resultado.nombre}: baja hecha.</strong> ${resultado.perfil === 'borrado' ? 'No tenía nada en el Libro: se ha borrado su perfil por completo.' : 'Se han borrado sus datos personales; sus ejemplares siguen en el Libro a su nombre.'}
+        ${resultado.cuenta === 'pendiente' ? h`<br>Falta borrar su cuenta de acceso: <a href="#/admin/supabase">sigue la tarea «Dar de baja una cuenta» en Supabase</a> con el correo <strong>${resultado.email}</strong>.` : ' Su cuenta de acceso también está borrada.'}
+        ${resultado.email ? h`<br>Si te pidió la baja, contéstale a <a href="mailto:${resultado.email}?subject=${encodeURIComponent('Baja en AlacantinApp')}">${resultado.email}</a> confirmándola.` : ''}
+      </div>` : ''}
       <p class="peq muted">${lista.length} usuario(s)</p>
       <ul class="lista tarjeta" id="us-lista">${lista.map(u => {
         const ej = ejemplares(u.id);
         const activos = ej.filter(a => a.estado !== 'baja').length;
         return h`<li><details class="usuario">
           <summary class="item"><span class="item-principal">
-            <span class="item-titulo">${u.nombre || '—'} ${datos.esAltaNueva(u) ? h`<span class="chip chip-info">Nueva</span>` : ''}</span>
+            <span class="item-titulo">${u.nombre || '—'} ${u.baja ? h`<span class="chip">De baja</span>` : datos.esAltaNueva(u) ? h`<span class="chip chip-info">Nueva</span>` : ''}</span>
             <span class="item-sub">${ROLES[u.rol] || u.rol} · ${activos} ejemplar(es) · ${u.municipio || 'sin municipio'}</span></span></summary>
           <dl class="datos-usuario">
             <dt>Correo</dt><dd>${u.email ? h`<a href="mailto:${u.email}">${u.email}</a>` : '—'}</dd>
@@ -45,12 +51,15 @@ export default function (main) {
             <dt>Municipio</dt><dd>${[u.municipio, u.provincia].filter(Boolean).join(' (') + (u.provincia && u.municipio ? ')' : '') || '—'}</dd>
             <dt>Ejemplares</dt><dd>${activos} activo(s)${ej.length > activos ? `, ${ej.length - activos} de baja` : ''}</dd>
             <dt>Alta</dt><dd>${fecha(u.created_at)}</dd>
+            ${u.baja ? h`<dt>Baja</dt><dd>${fecha(u.baja)} (datos personales borrados)</dd>` : ''}
           </dl>
+          ${u.baja ? '' : h`
           <div class="campo"><label for="rol-${u.id}">Rol</label>
             <select id="rol-${u.id}" data-usuario="${u.id}" ${u.id === yo ? h`disabled title="No puedes cambiar tu propio rol"` : ''}>
               ${Object.entries(ROLES).filter(([k]) => k !== 'visitante').map(([k, n]) => h`<option value="${k}" ${u.rol === k ? h`selected` : ''}>${n}</option>`)}
             </select></div>
-          <p class="peq"><a href="#/admin/supabase">Contraseña olvidada o baja de la cuenta →</a></p>
+          <p class="peq"><a href="#/admin/supabase">Contraseña olvidada →</a></p>
+          ${u.id === yo ? '' : h`<button type="button" class="btn btn-pequeno btn-peligro" data-baja="${u.id}">Dar de baja (RGPD)…</button>`}`}
         </details></li>`;
       })}</ul>
       ${datos.estado.perfiles.length <= 1 ? h`<p class="muted">Los usuarios aparecen aquí cuando se registran en la app.</p>` : ''}`);
@@ -62,6 +71,24 @@ export default function (main) {
       const u = datos.estado.perfiles.find(x => x.id === sel.dataset.usuario);
       if (!(await confirmar('Cambiar rol', `¿Asignar el rol «${ROLES[sel.value]}» a ${u.nombre || u.email}?`))) { sel.value = u.rol; return; }
       try { await datos.cambiarRol(u.id, sel.value); aviso('Rol actualizado.', 'ok'); } catch (e) { aviso(e.message, 'error'); sel.value = u.rol; }
+    }));
+    main.querySelectorAll('[data-baja]').forEach(b => b.addEventListener('click', async () => {
+      const u = datos.estado.perfiles.find(x => x.id === b.dataset.baja);
+      const n = datos.estado.todos.filter(a => a.usuario_id === u.id || a.criador_id === u.id).length;
+      const c = datos.estado.calificaciones.filter(x => x.inspector_id === u.id).length;
+      const quien = u.nombre || u.email;
+      const enLibro = [n ? `${n} ejemplar(es)` : '', c ? `${c} calificación(es) firmadas` : ''].filter(Boolean).join(' y ');
+      const texto = enLibro
+        ? `${quien} tiene ${enLibro} en el Libro. Se borrarán su correo, teléfono, REGA, n.º de socio, ubicación, sus solicitudes de inspección y su cuenta de acceso. Lo inscrito en el Libro se conserva a nombre de «${u.nombre || 'usuario dado de baja'}», como exige la normativa del Libro Genealógico. No se puede deshacer.`
+        : `${quien} no tiene nada en el Libro. Se borrarán su perfil, sus solicitudes de inspección y su cuenta de acceso. No se puede deshacer.`;
+      if (!(await confirmar('Dar de baja (RGPD)', texto, 'Dar de baja', true))) return;
+      b.disabled = true;
+      try {
+        const r = await datos.darDeBajaUsuario(u.id);
+        resultado = { ...r, nombre: quien };
+        dibujar();
+        $('#us-resultado', main)?.focus?.();
+      } catch (e) { aviso(e.message, 'error'); b.disabled = false; }
     }));
   };
   dibujar();

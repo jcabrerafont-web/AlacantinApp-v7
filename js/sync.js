@@ -139,7 +139,7 @@ export async function descargar(usuarioId) {
   // Primero los borrados y después las tablas: si algo se borró y se recuperó («Deshacer»),
   // la versión recuperada (más reciente) es la que queda.
   if (usuarioId) {
-    const store = { huevos: 'huevos', campanas: 'campanas', lotes: 'lotes', incubaciones: 'incubaciones' };
+    const store = { huevos: 'huevos', campanas: 'campanas', lotes: 'lotes', incubaciones: 'incubaciones', perfiles: 'perfiles', solicitudes: 'solicitudes' };
     await bajarPaginas(usuarioId, 'borrados', async (lote) => {
       for (const b of lote) if (store[b.tabla] && !pend.has(b.registro)) { await db.borrar(store[b.tabla], b.registro); borradas++; }
     });

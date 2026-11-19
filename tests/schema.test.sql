@@ -265,3 +265,36 @@ SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-000
 SELECT count(*) AS borrados_ajenos FROM borrados;
 SELECT count(*) > 0 AS con_sync_ts FROM censo_publico WHERE sync_ts IS NOT NULL;
 RESET ROLE;
+
+\echo '== 18. Baja RGPD de un usuario'
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ('00000000-0000-0000-0000-00000000000e', 'sin-datos@x.es', '{"nombre":"Sin Datos"}');
+\echo '   18a un usuario normal no puede dar de baja a otro (esperado: error 42501)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT dar_baja_usuario('00000000-0000-0000-0000-00000000000e');
+\echo '   18b ni llamar a la limpieza interna (esperado: permiso denegado)'
+SELECT limpiar_perfil_baja('00000000-0000-0000-0000-00000000000e');
+\echo '   18c ni cambiar su correo ni marcarse de baja con un UPDATE (esperado: criador@x.es, sin baja)'
+UPDATE perfiles SET email = 'otro-correo@x.es', baja = current_date WHERE id = auth.uid();
+SELECT email, baja IS NULL AS sin_baja FROM perfiles WHERE id = auth.uid();
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+\echo '   18d el administrador no puede darse de baja a sí mismo (esperado: error 42501)'
+SELECT dar_baja_usuario(auth.uid());
+\echo '   18e sin registros en el Libro: se borran el perfil y la cuenta (esperado: borrado, borrada)'
+SELECT dar_baja_usuario('00000000-0000-0000-0000-00000000000e');
+RESET ROLE;
+SELECT (SELECT count(*) FROM perfiles WHERE id = '00000000-0000-0000-0000-00000000000e') AS perfiles,
+       (SELECT count(*) FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000000e') AS cuentas,
+       (SELECT count(*) FROM borrados WHERE tabla = 'perfiles' AND registro = '00000000-0000-0000-0000-00000000000e') AS anotado_para_los_moviles;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+\echo '   18f con ejemplares: se conserva el nombre y se borran los datos personales y sus solicitudes (esperado: anonimizado, borrada)'
+SELECT dar_baja_usuario('00000000-0000-0000-0000-00000000000c');
+RESET ROLE;
+SELECT nombre, email, telefono, rega, municipio, baja = current_date AS baja_hoy,
+       (SELECT count(*) FROM animales WHERE usuario_id = '00000000-0000-0000-0000-00000000000c') AS ejemplares_conservados,
+       (SELECT count(*) FROM solicitudes WHERE usuario_id = '00000000-0000-0000-0000-00000000000c') AS solicitudes,
+       (SELECT count(*) FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000000c') AS cuentas
+  FROM perfiles WHERE id = '00000000-0000-0000-0000-00000000000c';
+\echo '   18g borrar la cuenta directamente en el panel de Supabase hace lo mismo (esperado: Inspector, sin correo)'
+DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000000b';
+SELECT nombre, email IS NULL AS sin_correo, baja = current_date AS baja_hoy FROM perfiles WHERE id = '00000000-0000-0000-0000-00000000000b';
