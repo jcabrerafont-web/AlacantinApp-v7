@@ -12,7 +12,7 @@
 //    archivos de dos versiones.
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.15.0';
+const VERSION = '7.15.1';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 // Fotos del servidor (Supabase Storage): se guardan al verlas para poder verlas sin cobertura.
@@ -35,10 +35,20 @@ const APP = [
 ];
 const CDN = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
 
+// Algunos alojamientos (Cloudflare Pages) redirigen /index.html a /. Una respuesta marcada como
+// «redirigida» no puede servir una navegación (el navegador da error), así que se guarda limpia.
+const limpia = async (res) => (res.redirected
+  ? new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers })
+  : res);
+
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const c = await caches.open(CACHE);
-    await c.addAll(APP.map(u => new Request(u, { cache: 'reload' })));
+    await Promise.all(APP.map(async (u) => {
+      const res = await fetch(new Request(u, { cache: 'reload' }));
+      if (!res.ok) throw new Error(`No se pudo guardar ${u} (${res.status})`);
+      await c.put(u, await limpia(res));
+    }));
     const cdn = await caches.open(CACHE_CDN);
     await Promise.allSettled(CDN.map(async u => { if (!(await cdn.match(u))) await cdn.add(u); }));
     // Sin skipWaiting: la versión nueva espera a que la app la active (mensaje «activar»)
@@ -76,7 +86,7 @@ async function redPrimero(req, clave) {
   const c = await caches.open(CACHE);
   try {
     const res = await conTimeout(fetch(req, { cache: 'no-cache' }), TIMEOUT_MS);
-    if (res.ok) await c.put(clave || req, res.clone());
+    if (res.ok) await c.put(clave || req, await limpia(res.clone()));
     return res;
   } catch {
     return (await c.match(clave || req, { ignoreSearch: true })) ||

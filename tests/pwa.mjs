@@ -20,6 +20,8 @@ let retrasoMs = 0;
 const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.pdf': 'application/pdf' };
 const servidor = http.createServer(async (req, res) => {
   const ruta = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  // Como Cloudflare Pages: /index.html redirige a / (el SW no puede servir una respuesta redirigida a una navegación)
+  if (ruta === '/index.html') { res.writeHead(308, { Location: '/' }); res.end(); return; }
   const archivo = path.join(tmp, ruta.endsWith('/') ? ruta + 'index.html' : ruta);
   if (retrasoMs && !ruta.endsWith('/sw.js')) await new Promise(r => setTimeout(r, retrasoMs));
   if (!archivo.startsWith(tmp) || !fs.existsSync(archivo) || fs.statSync(archivo).isDirectory()) { res.writeHead(404); res.end(); return; }
