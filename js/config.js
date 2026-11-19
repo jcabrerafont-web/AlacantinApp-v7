@@ -17,13 +17,13 @@ export const CONFIG = Object.freeze({
     nif: 'G21807508',
     domicilio: 'Calle Doctor Fleming, 16, 1.º, puerta 7, 03720 Benissa (Alicante)',
     email: 'clubalacantina@gmail.com',
-    revisionPrivacidad: '17/11/2026'
+    revisionPrivacidad: '19/11/2026'
   }),
   // Dónde llegan los informes de problemas (Herramientas → Informar de un problema).
   // WhatsApp vacío: el criador elige a quién enviarlo.
   soporteEmail: 'clubalacantina@gmail.com',
   soporteWhatsApp: '',   // con prefijo, solo cifras: p. ej. 34600000000
-  version: '7.15.1'
+  version: '7.15.2'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

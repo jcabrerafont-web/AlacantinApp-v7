@@ -218,7 +218,7 @@ Toda la normativa vive en **`js/estandar.js`**: es la única fuente de verdad de
 
 > **Protección de datos:**
 > - Al crear el proyecto, elegir la región **Central EU (Frankfurt)**, no el grupo general «Europe», que incluye Londres y Zúrich. La política de privacidad dice que los datos están en la UE.
-> - Aceptar el contrato de encargado de Supabase (supabase.com/legal/dpa) y el de Vercel (vercel.com/legal/dpa).
+> - Los contratos de encargado (DPA) de Supabase y de Cloudflare forman parte de sus condiciones, también en los planes gratuitos: no hay que firmarlos, pero conviene guardar copia. (El de Vercel no cubre su plan gratuito: por eso la app se aloja en Cloudflare Pages.)
 > - Los datos del responsable (Club de la Gallina Alacantina, NIF G21807508, Benissa) están en `CONFIG.club` (`js/config.js`).
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
@@ -234,11 +234,15 @@ En `js/config.js`, rellena `supabaseUrl` y `supabaseAnonKey` (*Project Settings 
 - **Nunca** pongas la *service_role key*.
 - Si los dejas vacíos, la app funciona en **modo dispositivo**: los datos se guardan solo en ese móvil o tablet.
 
-### 3. Vercel
+### 3. Cloudflare Pages (alojamiento)
 
-1. Importa el repositorio en Vercel, sin *framework* ni comando de *build*.
-2. `vercel.json` ya incluye las cabeceras: el Service Worker sin caché y la política de seguridad (CSP).
-3. Para publicar una versión nueva, sube `VERSION` en `sw.js` y `version` en `js/config.js`. Los móviles se actualizan solos en la siguiente apertura.
+1. En Cloudflare: *Workers & Pages › Create › Pages › Import an existing Git repository*, y elige el repositorio.
+2. Sin *framework*, sin comando de *build* y con carpeta de salida `/`. Cada subida a `main` se publica sola.
+3. `_headers` ya incluye las cabeceras: el Service Worker sin caché y la política de seguridad (CSP). (`vercel.json` es el equivalente para Vercel.)
+4. En Supabase › *Authentication › URL Configuration*, pon la dirección de la app como *Site URL* y añade `https://<dirección>/**` a las *Redirect URLs*: los enlaces de los correos (confirmar la cuenta, recuperar la contraseña) vuelven ahí.
+5. Para publicar una versión nueva, sube `VERSION` en `sw.js` y `version` en `js/config.js`. Los móviles se actualizan solos en la siguiente apertura.
+
+Publicada en **https://alacantinapp.pages.dev** (cuenta de Cloudflare del Club, alacantinapp@gmail.com).
 
 ## Estructura
 

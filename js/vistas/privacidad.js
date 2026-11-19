@@ -61,7 +61,7 @@ export default function (main) {
       <h2>5. Proveedores que tratan datos por encargo del Club</h2>
       <ul>
         <li><strong>Supabase</strong> (base de datos, cuentas y fotos). Los datos se guardan en un servidor de la Unión Europea (Frankfurt). Supabase actúa como encargado del tratamiento con un contrato conforme al art. 28 del RGPD. Si algún servicio técnico suyo trata datos fuera de la UE, lo hace con cláusulas contractuales tipo aprobadas por la Comisión Europea.</li>
-        <li><strong>Vercel</strong> (alojamiento de la aplicación web). Puede registrar datos técnicos de conexión, como la dirección IP. Está certificada en el Marco de Privacidad de Datos UE-EE. UU.</li>
+        <li><strong>Cloudflare</strong> (alojamiento de la aplicación web: sirve las pantallas y el código de la app, no los datos del Libro). Puede registrar datos técnicos de conexión, como la dirección IP. Actúa como encargado del tratamiento con un contrato conforme al art. 28 del RGPD y está certificada en el Marco de Privacidad de Datos UE-EE. UU.</li>
         <li><strong>Correo y WhatsApp:</strong> si escribes al Club o envías un informe de problemas, se usan esos servicios (Google para el correo del Club; Meta para WhatsApp) con sus propias condiciones.</li>
       </ul>
       <p>La aplicación <strong>no usa cookies de publicidad ni de analítica</strong>, ni herramientas de seguimiento. Lo que guarda en tu dispositivo es solo para que funcione, también sin cobertura.</p>
