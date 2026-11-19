@@ -275,9 +275,29 @@ await ir('#/censo'); await ir(`#/animal/${idH1}`);
 ok((await page.innerText('main')).includes('Registro de Méritos'), 'Ficha muestra la inscripción en el RM');
 if (process.env.CAPTURAS) { await page.$eval('main', m => [...m.querySelectorAll('h2')].find(x => x.textContent.includes('Méritos'))?.scrollIntoView({ block: 'center' })); await page.screenshot({ path: `${process.env.CAPTURAS}/ficha-rm.png` }); }
 
-// 6b-bis. Panel de administración
+// 6b-bis. Panel de administración (con un socio dado de alta hoy: tarea pendiente)
+await page.evaluate(async () => {
+  const db = await import('./js/db.js'); const d = await import('./js/datos.js');
+  await db.guardar('perfiles', { id: '00000000-0000-4000-8000-00000000a1a1', nombre: 'Socio Nuevo', email: 'nuevo@ejemplo.es', rol: 'aspirante', rega: '', created_at: new Date().toISOString() });
+  await d.cargar();
+});
 await ir('#/herramientas');
 ok(Boolean(await page.$('main a[href="#/admin"]')), 'Herramientas: el administrador tiene «Panel de administración» arriba');
+{ const ins = await page.evaluate(async () => {
+    const d = await import('./js/datos.js');
+    const n = d.tareasAdmin().filter(x => x.nivel !== 'info').length;
+    const a = document.querySelector('#barra a[data-ruta="herramientas"]');
+    return [n, a.querySelector('.insignia')?.textContent || '0', a.getAttribute('aria-label') || ''];
+  });
+  ok(ins[0] > 0 && ins[1] === String(ins[0]) && ins[2].includes('tarea(s) de administración'),
+    `Barra (móvil): Herramientas muestra el número de tareas de administración pendientes (${ins[0]} → «${ins[1]}»)`); }
+ok(await page.$eval('#barra a[data-ruta="admin"]', a => getComputedStyle(a).display === 'none') && (await page.$$eval('#barra a', l => l.filter(a => getComputedStyle(a).display !== 'none').length)) === 4,
+  'Barra (móvil): sigue con 4 botones; «Administración» solo en el menú lateral del ordenador');
+await page.setViewportSize({ width: 1280, height: 800 });
+await ir('#/usuarios');
+ok(await page.$eval('#barra a[data-ruta="admin"]', a => getComputedStyle(a).display !== 'none' && a.getAttribute('aria-current') === 'page'),
+  'Menú lateral (ordenador): «Administración» visible y marcada en sus pantallas');
+await page.setViewportSize({ width: 390, height: 844 });
 await ir('#/admin');
 { const t = await page.innerText('main');
   ok(t.includes('Qué hay que hacer') && t.includes('No hay ningún inspector nombrado') && (await page.$$('main a[href="#/admin/supabase"], main a[href="#/admin/libro"], main a[href="#/usuarios"]')).length >= 3,

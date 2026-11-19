@@ -115,23 +115,49 @@ async function navegar() {
   window.scrollTo(0, 0);
 }
 
+// En el ordenador (menú lateral, ≥ 900 px) el administrador tiene además «Administración»;
+// en el móvil la barra sigue con 4 botones y el panel se abre desde Herramientas.
+const ANCHO = window.matchMedia('(min-width: 900px)');
+
 function pintarBarra() {
   const items = datos.estado.perfil ? BARRA.usuario : BARRA.visitante;
+  const admin = datos.rol() === 'administrador';
   const nav = $('#barra');
   nav.dataset.columnas = String(items.length);
   nav.innerHTML = items.map(([ruta, ico, texto]) =>
-    `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('');
+    `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('')
+    + (admin ? `<a href="#/admin" data-ruta="admin" class="solo-ancho"><span class="ico" aria-hidden="true">${svgIcono('escudo')}</span><span>Administración</span></a>` : '');
+  pintarInsignia();
   marcarBarra(resolver(location.hash)?.base);
+}
+
+// Número de tareas de administración pendientes, sobre Herramientas (móvil) y Administración (ordenador)
+function pintarInsignia() {
+  const n = datos.rol() === 'administrador' ? datos.tareasAdmin().filter(x => x.nivel !== 'info').length : 0;
+  document.querySelectorAll('#barra a[data-ruta="herramientas"], #barra a[data-ruta="admin"]').forEach(a => {
+    a.querySelector('.insignia')?.remove();
+    a.removeAttribute('aria-label');
+    if (!n) return;
+    const nombre = a.textContent.trim();
+    const b = document.createElement('span');
+    b.className = 'insignia';
+    b.setAttribute('aria-hidden', 'true');
+    b.textContent = n > 9 ? '9+' : String(n);
+    a.querySelector('.ico').appendChild(b);
+    a.setAttribute('aria-label', `${nombre} · ${n} tarea(s) de administración pendiente(s)`);
+  });
 }
 
 function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
-    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'herramientas', admin: 'herramientas' };
-  const activo = equivalencias[base] || base;
+    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', admin: 'admin' };
+  let activo = equivalencias[base] || base;
+  if (activo === 'admin' && !(ANCHO.matches && document.querySelector('#barra a[data-ruta="admin"]'))) activo = 'herramientas';
   document.querySelectorAll('#barra a').forEach(a => {
     if (a.dataset.ruta === activo) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
 }
+ANCHO.addEventListener?.('change', () => marcarBarra(resolver(location.hash)?.base));
 
 function pintarCabecera() {
   const red = $('#estado-red');
@@ -210,6 +236,7 @@ async function arrancar() {
 
   sync.alCambiar(n => { datos.estado.pendientes = n; pintarCabecera(); });
   datos.suscribir(pintarCabecera);
+  datos.suscribir(pintarInsignia);
   const alRed = () => {
     datos.estado.online = navigator.onLine;
     pintarCabecera();
