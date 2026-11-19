@@ -9,7 +9,7 @@ export default function (main) {
   const E = ESTANDAR;
   pintar(main, h`
     <header class="portada">
-      <img src="./icons/logo.png" alt="Escudo del Club de la Gallina Alacantina" width="112" height="112">
+      <img src="./icons/logo.png" alt="Escudo de la Asociación Club Gallina Alacantina" width="112" height="112">
       <div><h1>Gallina Alacantina</h1><span class="portada-raya" aria-hidden="true"></span>
         <p>Raza autóctona de la provincia de Alicante. Estándar oficial ${E.codigo}, revisión del ${E.revision}.</p></div>
     </header>

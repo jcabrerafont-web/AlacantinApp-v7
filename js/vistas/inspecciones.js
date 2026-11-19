@@ -25,7 +25,7 @@ export default function (main) {
         const c = perfil(s.usuario_id);
         const pr = datos.progresoSolicitud(s);
         const tel = datos.telefonoInternacional(s.telefono);
-        const msg = encodeURIComponent(`Hola${c.nombre ? ` ${c.nombre.split(' ')[0]}` : ''}, soy ${datos.estado.perfil.nombre || 'el inspector'} del Club de la Gallina Alacantina. Te escribo por tu solicitud de inspección de ${pr.total} ejemplar(es).`);
+        const msg = encodeURIComponent(`Hola${c.nombre ? ` ${c.nombre.split(' ')[0]}` : ''}, soy ${datos.estado.perfil.nombre || 'el inspector'} de la Asociación Club Gallina Alacantina. Te escribo por tu solicitud de inspección de ${pr.total} ejemplar(es).`);
         const abierta = datos.solicitudAbiertaEs(s);
         return h`<form class="tarjeta" data-sol="${s.id}" novalidate>
           <div class="fila entre"><h2>${c.nombre || c.email || 'Criador'}</h2><span class="chip ${CHIP[s.estado]}">${datos.ESTADOS_SOLICITUD[s.estado]}</span></div>

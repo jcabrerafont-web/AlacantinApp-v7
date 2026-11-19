@@ -4,6 +4,7 @@
 // ("Guardar como PDF"). Sin ventanas emergentes ni librerías externas.
 // ============================================================================
 import { ESTANDAR, REGLAS, BAREMO, anillaLegible, parsearAnilla, variedadPorId, nombreVariedad, sexoTexto, nombreClase, pesoConforme } from './estandar.js';
+import { CONFIG } from './config.js';
 import { ancestros, fxAnimal } from './genetica.js';
 import { h, pintar, fecha, kg, pct } from './ui.js';
 
@@ -18,7 +19,7 @@ const cabecera = (titulo, ref) => h`
   <div class="doc-cab">
     <img src="./icons/logo.png" alt="" width="64" height="64">
     <div><h1>${titulo}</h1>
-      <div>Club Gallina Alacantina · Libro Genealógico · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision})</div>
+      <div>${CONFIG.club.nombre} · Libro Genealógico · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision})</div>
       <div>Referencia: <strong>${ref}</strong> · Emitido el ${new Date().toLocaleDateString('es-ES')}</div></div>
   </div>`;
 
@@ -45,7 +46,7 @@ export function certificado(a, { idx, titular, criador, ultimaCalificacion, rend
   imprimir(h`
     ${cabecera('Certificado zootécnico · Animal reproductor de raza pura', ref)}
     <p class="peq">Especie: <em>Gallus gallus domesticus</em> (gallina) · Expedido conforme al art. 26 del Real Decreto 45/2019 y, por analogía, al anexo V del Reglamento (UE) 2016/1012.
-      Sociedad expedidora: <strong>Club Gallina Alacantina</strong> · ${location.origin}</p>
+      Sociedad expedidora: <strong>${CONFIG.club.nombre}</strong> · ${location.origin}</p>
     <h2>Ejemplar</h2>
     <table><tbody>
       <tr><th>Libro genealógico</th><td>Libro Genealógico de la Gallina Alacantina</td><th>Sección</th><td>${a.seccion} · ${ESTANDAR.secciones[a.seccion] || ''}</td></tr>

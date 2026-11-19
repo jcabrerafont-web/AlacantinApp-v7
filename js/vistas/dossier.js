@@ -5,6 +5,7 @@
 //  - el dossier técnico de FESACOCUR (gallo y gallina de perfil, fondo uniforme,
 //    misma variedad).
 import * as datos from '../datos.js';
+import { CONFIG } from '../config.js';
 import { ESTANDAR, REGLAS, edadMeses, sexoTexto } from '../estandar.js';
 import { h, pintar, $, fecha } from '../ui.js';
 
@@ -76,7 +77,7 @@ export default function (main) {
     pintar('#impresion', h`
       <div class="doc-cab"><img src="./icons/logo.png" alt="" width="64" height="64">
         <div><h1>Dossier fotográfico de la raza Alacantina</h1>
-        <div>Club Gallina Alacantina · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision}) · ${new Date().toLocaleDateString('es-ES')}</div></div></div>
+        <div>${CONFIG.club.nombre} · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision}) · ${new Date().toLocaleDateString('es-ES')}</div></div></div>
       ${ESTANDAR.variedades.map(v => h`<h2>${v.nombre}${v.oficial ? '' : ' (variedad en proceso de reconocimiento)'}</h2>
         <div class="dossier-fila">${sexos.flatMap(s => tramos.map(t => {
           const x = celda(v, s, t)[0];

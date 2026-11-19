@@ -219,7 +219,7 @@ Toda la normativa vive en **`js/estandar.js`**: es la única fuente de verdad de
 > **Protección de datos:**
 > - Al crear el proyecto, elegir la región **Central EU (Frankfurt)**, no el grupo general «Europe», que incluye Londres y Zúrich. La política de privacidad dice que los datos están en la UE.
 > - Los contratos de encargado (DPA) de Supabase y de Cloudflare forman parte de sus condiciones, también en los planes gratuitos: no hay que firmarlos, pero conviene guardar copia. (El de Vercel no cubre su plan gratuito: por eso la app se aloja en Cloudflare Pages.)
-> - Los datos del responsable (Club de la Gallina Alacantina, NIF G21807508, Benissa) están en `CONFIG.club` (`js/config.js`).
+> - Los datos del responsable (Asociación Club Gallina Alacantina, NIF G21807508, Benissa) están en `CONFIG.club` (`js/config.js`).
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. En *SQL Editor*, ejecuta completo `supabase/schema.sql`. Es idempotente.

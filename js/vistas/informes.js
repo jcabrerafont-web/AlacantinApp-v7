@@ -1,6 +1,7 @@
 // Informes demográficos y genéticos (datos del Protocolo CNZ 5/6/2025, apdo. 3.1 f, j, l):
 // censo por sexo y edad, criadores y distribución, tamaño efectivo y endogamia.
 import * as datos from '../datos.js';
+import { CONFIG } from '../config.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, tramoEdad, nombreVariedad } from '../estandar.js';
 import { neDemografico, neRealizado, generacionesEquivalentes, ordenTopologico, fxAnimal } from '../genetica.js';
@@ -119,7 +120,7 @@ export default function (main) {
   });
   $('#x-imprimir', main).addEventListener('click', () => {
     pintar('#impresion', h`<h1>${auditor ? 'Informe del Libro Genealógico' : 'Informe de censo'} · ${ESTANDAR.codigo}</h1>
-      <p>Club Gallina Alacantina · ${new Date().toLocaleDateString('es-ES')}${datos.estado.perfil?.rega && !auditor ? ` · REGA ${datos.estado.perfil.rega}` : ''}</p>`);
+      <p>${CONFIG.club.nombre} · ${new Date().toLocaleDateString('es-ES')}${datos.estado.perfil?.rega && !auditor ? ` · REGA ${datos.estado.perfil.rega}` : ''}</p>`);
     document.getElementById('impresion').append(...[...main.querySelectorAll('.kpis, .tarjeta')].filter(n => !n.querySelector('#x-pedigri')).map(n => n.cloneNode(true)));
     setTimeout(() => window.print(), 50);
   });

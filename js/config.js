@@ -13,7 +13,7 @@ export const CONFIG = Object.freeze({
   // Responsable del tratamiento de datos personales (política de privacidad, #/privacidad).
   // El NIF y el domicilio postal del Club conviene completarlos: identifican al responsable.
   club: Object.freeze({
-    nombre: 'Club de la Gallina Alacantina',
+    nombre: 'Asociación Club Gallina Alacantina',
     nif: 'G21807508',
     domicilio: 'Calle Doctor Fleming, 16, 1.º, puerta 7, 03720 Benissa (Alicante)',
     email: 'clubalacantina@gmail.com',
@@ -23,7 +23,7 @@ export const CONFIG = Object.freeze({
   // WhatsApp vacío: el criador elige a quién enviarlo.
   soporteEmail: 'clubalacantina@gmail.com',
   soporteWhatsApp: '',   // con prefijo, solo cifras: p. ej. 34600000000
-  version: '7.17.0'
+  version: '7.17.1'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);
