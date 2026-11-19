@@ -14,15 +14,27 @@ export default function (main) {
         <p>Raza autóctona de la provincia de Alicante. Estándar oficial ${E.codigo}, revisión del ${E.revision}.</p></div>
     </header>
 
+    <nav class="accesos" aria-label="Accesos rápidos">
+      <a class="btn" href="#/guia">${icono('guia')} Guía de campo</a>
+      <a class="btn" href="#/censo">${icono('lupa')} Censo público</a>
+      <a class="btn" href="./docs/Estandar-Alacantina2025.pdf" target="_blank" rel="noopener">${icono('documento')} Estándar (PDF)</a>
+    </nav>
+
     <div class="tarjeta">
       <h2>Impresión general</h2>
       <p>${E.impresionGeneral}</p>
     </div>
 
+    <div class="tarjeta">
+      <h2>Rasgos clave</h2>
+      <ul class="rasgos">${E.rasgosClave.map(r => h`<li><span class="rasgo-nombre">${r.rasgo}</span><b class="rasgo-valor">${r.valor}</b><span class="rasgo-detalle">${r.detalle}</span></li>`)}</ul>
+      <p class="peq muted" style="margin:.5rem 0 0">El detalle de cada región, más abajo en «Morfología por regiones».</p>
+    </div>
+
     <div class="kpis">
       <div class="kpi"><b>${kg(E.peso.M.min)}–${kg(E.peso.M.max)} kg</b><span>Peso del gallo</span></div>
       <div class="kpi"><b>${kg(E.peso.H.min)}–${kg(E.peso.H.max)} kg</b><span>Peso de la gallina</span></div>
-      <div class="kpi"><b>${E.anilla.M} / ${E.anilla.H} mm</b><span>Anilla gallo / gallina</span></div>
+      <div class="kpi"><b class="sin-corte">${E.anilla.M} / ${E.anilla.H} mm</b><span>Anilla gallo / gallina</span></div>
       <div class="kpi"><b>≥ ${E.huevo.min} g</b><span>Huevo · habitual ${E.huevo.min}–${E.huevo.habitualMax} g · cáscara ${E.huevo.cascara.toLowerCase()}</span></div>
     </div>
 

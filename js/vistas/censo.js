@@ -92,7 +92,7 @@ export default function (main) {
       <div class="kpi"><b>${activos.filter(a => ['RD', 'RM'].includes(a.seccion)).length}</b><span>Definitivo + Méritos</span></div>`);
     pintar($('#censo-lista', main), lista.length === 0
       ? h`<li class="muted" style="padding:1rem 0">${todos.length === 0
-        ? (p ? h`Aún no hay ejemplares. Empieza con <a href="#/alta">Alta Rápida</a>.` : 'Todavía no hay ejemplares publicados.')
+        ? (p ? h`Aún no hay ejemplares. Empieza con <a href="#/alta">Alta Rápida</a>.` : h`Todavía no hay ejemplares publicados. Aquí aparecerán las Alacantinas inscritas por los criadores del Club, con su anilla, variedad, sección del Libro y genealogía, sin datos personales. ¿Crías Alacantinas? <a href="#/programa">Mira cómo inscribirlas</a>.`)
         : 'Ningún ejemplar coincide con los filtros.'}</li>`
       : h`${lista.slice(0, mostrar).map(a => {
         const f = datos.fx(datos.animal(a.id) || a);

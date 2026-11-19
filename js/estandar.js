@@ -53,6 +53,15 @@ export const ESTANDAR = Object.freeze({
 
   // 12 regiones de la ficha de conformidad / guía de campo, agrupando
   // literalmente los apartados del Estándar (gallo · diferencias de la gallina).
+  // Lo primero que mira un criador o un juez (resumen literal del Estándar, págs. 1-2)
+  rasgosClave: Object.freeze([
+    { rasgo: 'Dorso', valor: '40º', detalle: 'recto, inclinado desde los hombros · gallina: casi horizontal' },
+    { rasgo: 'Cola', valor: '70º', detalle: 'muy alta · gallina: algo más baja y abierta' },
+    { rasgo: 'Cresta', valor: '5/6 dientes', detalle: 'sencilla y derecha · gallina: caída a un lado' },
+    { rasgo: 'Orejillas', valor: 'blancas', detalle: 'ovaladas, de tamaño medio' },
+    { rasgo: 'Pecho', valor: 'recto', detalle: 'no prominente' },
+    { rasgo: 'Tarsos', valor: 'sin plumas', detalle: 'largos y lisos; nunca amarillos' }
+  ]),
   regiones: Object.freeze([
     { id: 'tronco', nombre: 'Impresión general y tronco',
       gallo: 'Tipo esbelto, talla alta y porte erguido. Tronco esbelto, largo y en forma de triángulo.',

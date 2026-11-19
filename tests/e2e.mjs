@@ -23,6 +23,9 @@ await page.waitForSelector('#barra a');
 ok((await page.$$eval('#barra a svg.icono', x => x.length)) === 3, 'Barra con iconos propios (sin emoji)');
 ok(JSON.stringify(await barra()) === JSON.stringify(['Estándar Racial', 'Guía de Campo', 'Censo Público']), `Visitante: barra de 3 columnas ${JSON.stringify(await barra())}`);
 ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
+{ const t = await page.$eval('main', m => m.textContent);
+  ok((await page.$$('main .rasgos li')).length === 6 && t.includes('40º') && t.includes('70º') && (await page.$$('main .accesos a')).length === 3,
+    'Estándar: rasgos clave (dorso 40º, cola 70º…) y accesos a Guía, Censo y PDF'); }
 ok((await page.$$eval('#barra a', a => a.length)) === 3 && !(await page.$('#barra a[href="#/alta"]')), 'Alta Rápida no existe en el DOM del visitante');
 await ir('#/alta');
 ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');

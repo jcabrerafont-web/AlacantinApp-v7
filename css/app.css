@@ -410,3 +410,18 @@ th { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: .82re
 .portada p { margin: 0; color: rgb(255 255 255 / .85); font-size: .92rem; }
 .portada .portada-raya { display: block; width: 44px; height: 3px; background: var(--cresta); border-radius: 2px; margin: .5rem 0; }
 @media (min-width: 640px) { .portada { padding: 1.75rem 2rem; } .portada img { width: 112px; height: 112px; } .portada h1 { font-size: 2.4rem; } }
+
+/* Portada del Estándar: accesos, rasgos clave (v7.16) */
+.accesos { display: flex; flex-wrap: wrap; gap: .5rem; margin: -.25rem 0 1rem; }
+.accesos .btn { flex: 1 1 auto; justify-content: center; }
+.rasgos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .5rem; }
+.rasgos li { border: 1px solid var(--borde); border-radius: 10px; padding: .55rem .7rem; display: flex; flex-direction: column; gap: .1rem; }
+.rasgo-nombre { font-size: .8rem; color: var(--texto-2); }
+.rasgo-valor { font-family: var(--letra-titulo); font-size: 1.3rem; font-weight: 600; color: var(--azul-t); line-height: 1.15; }
+.rasgo-detalle { font-size: .82rem; color: var(--texto-2); line-height: 1.35; }
+.sin-corte { white-space: nowrap; }
+/* En oscuro, la portada marino se separa del fondo con un azul más vivo y un borde */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]):not([data-tema="sol"]) .portada { background: var(--azul-2); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+}
+:root[data-tema="oscuro"] .portada { background: var(--azul-2); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
