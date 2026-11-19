@@ -450,3 +450,5 @@ details.usuario[open] { padding-bottom: .75rem; }
 .insignia { position: absolute; top: -6px; right: -10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   background: var(--cresta); color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px var(--superficie); }
 @media (min-width: 900px) { .barra a[data-ruta="herramientas"] .insignia { display: none; } }
+/* En el ordenador, lo que ya está en el menú lateral no se repite en Herramientas */
+@media (min-width: 900px) { .solo-estrecho { display: none !important; } }

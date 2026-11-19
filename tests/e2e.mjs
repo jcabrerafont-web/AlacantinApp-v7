@@ -297,6 +297,8 @@ await page.setViewportSize({ width: 1280, height: 800 });
 await ir('#/usuarios');
 ok(await page.$eval('#barra a[data-ruta="admin"]', a => getComputedStyle(a).display !== 'none' && a.getAttribute('aria-current') === 'page'),
   'Menú lateral (ordenador): «Administración» visible y marcada en sus pantallas');
+await ir('#/herramientas');
+ok(await page.$eval('main a[href="#/admin"]', a => a.offsetParent === null), 'Ordenador: Herramientas no repite «Panel de administración» (ya está en el menú lateral)');
 await page.setViewportSize({ width: 390, height: 844 });
 await ir('#/admin');
 { const t = await page.innerText('main');
