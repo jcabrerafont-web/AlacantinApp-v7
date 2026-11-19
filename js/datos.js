@@ -875,6 +875,11 @@ export function agendaHoy(dia = hoyIso()) {
   // Calidad del censo
   const errores = auditarLibro().filter(x => x.nivel === 'error').length;
   if (errores) add('pronto', '🩺', `${errores} error(es) en ${esAuditor(p.rol) ? 'el Libro' : 'tu censo'}`, '#/auditoria', 'Corrígelos antes de la inspección o del cierre del año.');
+  // Administración: lo demás del panel (las inspecciones y la auditoría ya salen arriba)
+  if (p.rol === 'administrador') {
+    const resto = tareasAdmin({ hoy: dia }).filter(x => x.nivel !== 'info' && !['#/inspecciones', '#/auditoria'].includes(x.href));
+    if (resto.length) add(resto.some(x => x.nivel === 'hoy') ? 'hoy' : 'pronto', '🛡️', resto.length === 1 ? resto[0].texto : `${resto.length} tareas de administración`, '#/admin', resto.length === 1 ? resto[0].sub : resto.map(x => x.texto).join(' · '));
+  }
   return t.sort((x, y) => ORDEN_NIVEL[x.nivel] - ORDEN_NIVEL[y.nivel]);
 }
 
@@ -998,4 +1003,41 @@ export async function cambiarRol(perfilId, nuevoRol) {
   await db.guardar('perfiles', nuevo);
   await sync.encolar('perfiles', 'upsert', { id: p.id, rol: nuevoRol, updated_at: nuevo.updated_at });
   await cargar();
+}
+
+// ---------------------------------------------------------------------------
+// Panel de administración: lo que el administrador tiene pendiente, con el
+// enlace que lleva a resolverlo. Solo informa; nunca cambia nada.
+// ---------------------------------------------------------------------------
+export const DIAS_ALTA_NUEVA = 30;
+export const esAltaNueva = (u, hoy = hoyIso()) => Boolean(u?.created_at) &&
+  (new Date(`${hoy}T12:00:00`) - new Date(u.created_at)) / 864e5 <= DIAS_ALTA_NUEVA;
+
+export function tareasAdmin({ hoy = hoyIso() } = {}) {
+  if (rol() !== 'administrador') return [];
+  const t = [];
+  const yo = estado.perfil.id;
+  const otros = estado.perfiles.filter(u => u.id !== yo);
+  const nuevos = otros.filter(u => esAltaNueva(u, hoy));
+  if (nuevos.length) t.push({ nivel: 'hoy', icono: '👥', texto: `${nuevos.length} alta(s) nueva(s) en los últimos ${DIAS_ALTA_NUEVA} días`,
+    sub: 'Comprueba que son socios del Club y, si hace falta, asígnales su rol', href: '#/usuarios?filtro=nuevos' });
+  const pendientes = estado.solicitudes.filter(s => s.estado === 'pendiente');
+  if (pendientes.length) t.push({ nivel: 'hoy', icono: '📞', texto: `${pendientes.length} solicitud(es) de inspección sin atender`,
+    sub: 'Llama al criador y programa la visita', href: '#/inspecciones' });
+  const inspectores = estado.perfiles.filter(u => u.rol === 'inspector');
+  if (!inspectores.length) t.push({ nivel: pendientes.length ? 'hoy' : 'info', icono: '🛡️', texto: 'No hay ningún inspector nombrado',
+    sub: 'Asigna el rol de Inspector a quien vaya a calificar en los aviarios', href: '#/usuarios' });
+  const errores = auditarLibro({ hoy }).filter(x => x.nivel === 'error').length;
+  if (errores) t.push({ nivel: 'hoy', icono: '🩺', texto: `${errores} error(es) en la auditoría del Libro`,
+    sub: 'Incoherencias que hay que corregir antes de expedir certificados o cerrar el año', href: '#/auditoria' });
+  const rm = candidatosRM().length;
+  if (rm) t.push({ nivel: 'pronto', icono: '⭐', texto: `${rm} ejemplar(es) cumplen los requisitos del Registro de Méritos`,
+    sub: 'Revísalos e inscríbelos si procede', href: '#/admin/libro' });
+  const mes = Number(hoy.slice(5, 7));
+  if (mes === 12 || mes === 1) t.push({ nivel: 'pronto', icono: '📄', texto: 'Cierre del año: acta anual del censo',
+    sub: mes === 12 ? 'En enero, revisa la auditoría y genera el acta del año que termina' : 'Genera el acta del año pasado, imprímela y fírmala', href: '#/acta' });
+  const aspirantes = otros.filter(u => u.rol === 'aspirante').length;
+  if (aspirantes) t.push({ nivel: 'info', icono: '👥', texto: `${aspirantes} aspirante(s) sin REGA`,
+    sub: 'Pasarán a Criador en cuanto añadan el REGA de su explotación en «Mi aviario»', href: '#/usuarios?rol=aspirante' });
+  return t;
 }

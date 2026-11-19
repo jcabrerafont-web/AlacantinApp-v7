@@ -36,7 +36,7 @@ export default function (main) {
     ]]
   ];
   if (esAuditor(r)) grupos.splice(1, 0, ['Inspección', [['#/inspecciones', '📞', 'Solicitudes de inspección', (() => { const n = datos.solicitudesTodas().filter(datos.solicitudAbiertaEs).length; return n ? `${n} abierta(s): llamar, programar y calificar` : 'No hay solicitudes abiertas'; })()], ['#/censo', '✅', 'Calificar ejemplares', 'Abre un ejemplar del censo y pulsa «Calificar»'], ['#/dossier', '📷', 'Dossier fotográfico', 'Fotos por variedad, sexo y edad para el Catálogo y FESACOCUR']]]);
-  if (r === 'administrador') grupos.push(['Administración', [['#/usuarios', '🛡️', 'Usuarios y roles', 'Asignar inspectores y administradores']]]);
+  if (r === 'administrador') grupos.unshift(['Administración', [['#/admin', '🛡️', 'Panel de administración', (() => { const n = datos.tareasAdmin().filter(x => x.nivel !== 'info').length; return n ? `${n} tarea(s) pendiente(s): usuarios, Libro, inspecciones y servidor` : 'Todo al día · usuarios, Libro, inspecciones y servidor'; })()]]]);
 
   pintar(main, h`
     <h1>Herramientas</h1>

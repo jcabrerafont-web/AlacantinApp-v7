@@ -42,7 +42,10 @@ const RUTAS = [
   ['calificar/:id', 'calificacion', ['inspector', 'administrador']],
   ['dossier', 'dossier', ['inspector', 'administrador']],
   ['inspecciones', 'inspecciones', ['inspector', 'administrador']],
-  ['usuarios', 'usuarios', ['administrador']]
+  ['usuarios', 'usuarios', ['administrador']],
+  ['admin', 'admin', ['administrador']],
+  ['admin/libro', 'adminlibro', ['administrador']],
+  ['admin/supabase', 'adminsupabase', ['administrador']]
 ];
 
 // Barra inferior: visitante 3 columnas; usuarios registrados 4 columnas.
@@ -123,7 +126,7 @@ function pintarBarra() {
 
 function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
-    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'herramientas' };
+    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'herramientas', admin: 'herramientas' };
   const activo = equivalencias[base] || base;
   document.querySelectorAll('#barra a').forEach(a => {
     if (a.dataset.ruta === activo) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');

@@ -37,6 +37,8 @@ const T = {
   arbol: '<path d="M12 21v-6M12 15l-5-4M12 15l5-4M7 11V8M17 11V8"/><circle cx="7" cy="6" r="2"/><circle cx="17" cy="6" r="2"/>',
   lapiz: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   copia: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  usuarios: '<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6"/><circle cx="17" cy="9.5" r="2.7"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.9"/>',
+  estrella: '<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',
   sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   baja: '<path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/>',
   pareja: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'
@@ -48,7 +50,7 @@ const EMOJI = {
   '📅': 'calendario', '🗓️': 'calendario', '🔦': 'luz', '🐣': 'nacimiento', '🐥': 'pollito', '⚖️': 'balanza', '⏳': 'reloj', '📞': 'telefono',
   '🚗': 'coche', '🩺': 'revision', '🧬': 'familia', '🏡': 'casa', '💾': 'guardar', '☁️': 'nube', '🔒': 'candado', '🐞': 'aviso',
   '🧭': 'brujula', '💞': 'pareja', '📊': 'grafico', '📄': 'documento', '✅': 'check', '📷': 'camara', '🛡️': 'escudo', '📲': 'movil',
-  '🚀': 'bandera', '🧺': 'cesta', '🌳': 'arbol', '✏️': 'lapiz', '🖨️': 'documento', '⬇️': 'guardar', '☀️': 'sol', '🗑': 'baja', '🏷️': 'documento'
+  '🚀': 'bandera', '🧺': 'cesta', '🌳': 'arbol', '✏️': 'lapiz', '🖨️': 'documento', '⬇️': 'guardar', '☀️': 'sol', '🗑': 'baja', '🏷️': 'documento', '👥': 'usuarios', '⭐': 'estrella'
 };
 
 export const svgIcono = (nombre, clase = '') => T[nombre]

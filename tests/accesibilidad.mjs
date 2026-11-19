@@ -51,6 +51,11 @@ for (const tema of ['claro', 'oscuro', 'sol']) {
   await page.check('#r-acepto'); await page.click('#form-registro button[type=submit]'); await page.waitForTimeout(1200);
   await page.evaluate(async () => { const d = await import('./js/datos.js'); await d.guardarAnimal({ anilla: 'E2420000001', sexo: 'M', variedad: 'blanca', fecha_nacimiento: '2024-03-01', seccion: 'RN' }); await d.guardarAnimal({ anilla: 'E2418000002', sexo: 'H', variedad: 'blanca', fecha_nacimiento: '2024-03-01', seccion: 'RN' }); });
   for (const r of rutasUsu) { await ir(r); res['usu ' + r] = await revisar(); }
+  // Administración (rol local de administrador)
+  await page.evaluate(async () => { const db = await import('./js/db.js'); const p = await db.obtener('perfiles', await db.metaGet('sesion')); await db.guardar('perfiles', { ...p, rol: 'administrador' }); });
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#barra a');
+  for (const r of ['#/admin', '#/admin/libro', '#/usuarios', '#/admin/supabase']) { await ir(r); res['adm ' + r] = await revisar(); }
+  await ir('#/usuarios'); await page.click('#us-lista summary'); res['adm #/usuarios abierto'] = await revisar();
   // foco tras navegar
   await ir('#/censo'); await page.click('#barra a[href="#/puesta"]'); await page.waitForTimeout(500);
   const foco = await page.evaluate(() => `${document.activeElement?.tagName}#${document.activeElement?.id}`);

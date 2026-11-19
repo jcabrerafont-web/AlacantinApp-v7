@@ -274,7 +274,26 @@ ok(rmRes[3] === 'RM/premio', `RM por premio inscrito (${rmRes[3]})`);
 await ir('#/censo'); await ir(`#/animal/${idH1}`);
 ok((await page.innerText('main')).includes('Registro de Méritos'), 'Ficha muestra la inscripción en el RM');
 if (process.env.CAPTURAS) { await page.$eval('main', m => [...m.querySelectorAll('h2')].find(x => x.textContent.includes('Méritos'))?.scrollIntoView({ block: 'center' })); await page.screenshot({ path: `${process.env.CAPTURAS}/ficha-rm.png` }); }
+
+// 6b-bis. Panel de administración
+await ir('#/herramientas');
+ok(Boolean(await page.$('main a[href="#/admin"]')), 'Herramientas: el administrador tiene «Panel de administración» arriba');
+await ir('#/admin');
+{ const t = await page.innerText('main');
+  ok(t.includes('Qué hay que hacer') && t.includes('No hay ningún inspector nombrado') && (await page.$$('main a[href="#/admin/supabase"], main a[href="#/admin/libro"], main a[href="#/usuarios"]')).length >= 3,
+    'Panel de administración: tareas pendientes (falta nombrar inspector) y accesos a usuarios, Libro y Supabase'); }
+await ir('#/admin/libro');
+await page.fill('#al-buscar', '0001');
+await page.waitForTimeout(200);
+ok((await page.$$('#al-resultados a')).length > 0 && (await page.inputValue('#al-buscar')) === '0001', 'Inscripciones del Libro: buscador por anilla que lleva a la ficha');
+await ir('#/usuarios?filtro=nuevos');
+ok((await page.$eval('[data-filtro="nuevos"]', b => b.getAttribute('aria-pressed'))) === 'true' && (await page.$$('#us-lista details')).length >= 1, 'Usuarios: filtro de altas nuevas y ficha de cada usuario');
+await ir('#/admin/supabase');
+ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
+{ const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });
+  ok(sb[0] === 'mliunedrpbigybsovdyu' && sb[1] === '', `Tareas en Supabase: saca la referencia del proyecto de la dirección del servidor (${sb[0]})`); }
 await cambiarRolLocal('inspector');
+ok(!(await page.$('main a[href="#/admin"]')) && await (async () => { await ir('#/admin'); return !page.url().includes('#/admin'); })(), 'El panel de administración no existe para el inspector');
 
 // 6c. Dossier fotográfico (Dirección Técnica)
 await page.evaluate(async () => {
