@@ -238,7 +238,7 @@ En `js/config.js`, rellena `supabaseUrl` y `supabaseAnonKey` (*Project Settings 
 
 1. En Cloudflare: *Workers & Pages › Create › Pages › Import an existing Git repository*, y elige el repositorio.
 2. Sin *framework*, sin comando de *build* y con carpeta de salida `/`. Cada subida a `main` se publica sola.
-3. `_headers` ya incluye las cabeceras: el Service Worker sin caché y la política de seguridad (CSP). (`vercel.json` es el equivalente para Vercel.)
+3. `_headers` ya incluye las cabeceras: el Service Worker sin caché y la política de seguridad (CSP).
 4. En Supabase › *Authentication › URL Configuration*, pon la dirección de la app como *Site URL* y añade `https://<dirección>/**` a las *Redirect URLs*: los enlaces de los correos (confirmar la cuenta, recuperar la contraseña) vuelven ahí.
 5. Para publicar una versión nueva, sube `VERSION` en `sw.js` y `version` en `js/config.js`. Los móviles se actualizan solos en la siguiente apertura.
 
