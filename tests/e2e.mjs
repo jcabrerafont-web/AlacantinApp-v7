@@ -601,7 +601,7 @@ await cambiarRolLocal('criador');
 await ir('#/privacidad');
 const pol = await page.$eval('main', m => m.textContent.replace(/\s+/g, ' '));
 ok(pol.includes('G21807508') && pol.includes('Calle Doctor Fleming, 16, 1.º, puerta 7, 03720 Benissa (Alicante)'), 'Política: responsable con NIF y domicilio del Club');
-ok(['Quién es el responsable', 'Qué datos tratamos', 'base legal', 'Quién ve tus datos', 'Supabase', 'Vercel', 'Cuánto tiempo', 'Tus derechos', 'Agencia Española de Protección de Datos', '14 años'].every(x => pol.includes(x)), 'Política de privacidad completa (responsable, datos, bases legales, destinatarios, proveedores, plazos, derechos, AEPD, edad)');
+ok(['Quién es el responsable', 'Qué datos tratamos', 'base legal', 'Quién ve tus datos', 'Supabase', 'Cloudflare', 'Cuánto tiempo', 'Tus derechos', 'Agencia Española de Protección de Datos', '14 años'].every(x => pol.includes(x)), 'Política de privacidad completa (responsable, datos, bases legales, destinatarios, proveedores, plazos, derechos, AEPD, edad)');
 await page.evaluate(async () => { const d = await import('./js/datos.js'); const auth = await import('./js/auth.js'); const { perfil } = await auth.actualizarPerfil(d.estado.perfil, { latitud: 38.27, longitud: -0.7 }); d.estado.perfil = perfil; });
 await ir('#/censo'); await ir('#/perfil');
 await page.click('#pf-borrar-gps'); await page.waitForTimeout(500);
