@@ -30,7 +30,9 @@ const STUB = `
       getUser: async () => ({ data: { user: S.sesion?.user || null }, error: S.sesion ? null : { name: 'AuthSessionMissingError' } }),
       resetPasswordForEmail: async (email, opt) => { S.reset.push({ email, opt }); return { data: {}, error: null }; },
       updateUser: async (x) => { S.updates.push(x); return { data: { user: S.sesion?.user }, error: null }; },
-      signUp: async (x) => { S.signups.push(x); return { data: { user: null, session: null }, error: null }; },
+      signUp: async (x) => { S.signups.push(x); return x.email === 'existe@ejemplo.es'
+        ? { data: { user: { id: 'u', email: x.email, identities: [] }, session: null }, error: null }
+        : { data: { user: { id: 'u2', email: x.email, identities: [{ id: 'i' }] }, session: null }, error: null }; },
       signInWithPassword: async () => ({ data: null, error: { message: 'Invalid login credentials' } }),
       signOut: async () => ({ error: null }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
@@ -80,6 +82,11 @@ try {
     await page.click('#form-registro button[type=submit]');
     await page.waitForFunction(() => window.__sb.signups.length === 1);
     ok(await page.evaluate(() => window.__sb.signups[0].options.emailRedirectTo) === base + '/', 'Registro: el correo de confirmación vuelve a la app');
+    ok((await textoAviso(page)).includes('Te hemos enviado un correo'), 'Registro nuevo: avisa de que se ha enviado el correo de confirmación');
+    await page.click('[data-tab="registro"]'); await page.fill('#r-email', 'existe@ejemplo.es'); await page.click('#form-registro button[type=submit]');
+    await page.waitForFunction(() => window.__sb.signups.length === 2);
+    await page.waitForTimeout(200);
+    ok((await textoAviso(page)).includes('Ya hay una cuenta con ese correo'), 'Registro con un correo que ya tiene cuenta: lo dice, en vez de «correo enviado»');
     ok(errores.length === 0, `Sin errores de página${errores.length ? ': ' + errores.join(' | ') : ''}`);
     await ctx.close();
   }

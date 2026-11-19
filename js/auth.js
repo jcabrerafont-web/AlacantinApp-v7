@@ -155,7 +155,13 @@ export async function registrar({ nombre, email, password, telefono }) {
   if (supabaseConfigurado()) {
     if (!cliente || !navigator.onLine) throw new Error('El registro de cuentas necesita conexión a internet.');
     const { data, error } = await cliente.auth.signUp({ email, password, options: { data: { nombre, telefono }, emailRedirectTo: direccionApp() } });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(/already registered|already been registered/i.test(error.message)
+      ? 'Ya hay una cuenta con ese correo. Entra con tu contraseña o usa «¿Has olvidado la contraseña?».' : error.message);
+    // Supabase no revela si el correo ya existe: responde «enviado» sin enviar nada y sin
+    // identidades. Así se distingue, para no dejar a la persona esperando un correo que no llega.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('Ya hay una cuenta con ese correo. Entra con tu contraseña o usa «¿Has olvidado la contraseña?».');
+    }
     if (!data.session) {
       return { pendienteConfirmacion: true };
     }
