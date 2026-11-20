@@ -91,8 +91,9 @@ export default function (main, params) {
             <input type="file" accept="image/*" capture="environment" data-foto="${k}" data-captura="${k}" hidden>
             <label class="btn btn-pequeno foto-galeria">o elegir de la galería
               <input type="file" accept="image/*" data-foto="${k}" aria-label="${t}: elegir de la galería"></label>
+            <button type="button" class="btn btn-pequeno foto-quitar" data-quitar="${k}" aria-label="${t}: quitar la foto" hidden>Quitar foto</button>
           </div>`)}</div>
-          <p class="ayuda">Pulsa el recuadro para hacer la foto con la cámara. Si ya la tienes hecha, usa «o elegir de la galería».</p>
+          <p class="ayuda">Pulsa el recuadro para hacer la foto con la cámara. Si ya la tienes hecha, usa «o elegir de la galería». Si no te gusta cómo ha salido o te has equivocado, pulsa «Quitar foto», o pulsa la foto para repetirla.</p>
         </fieldset>
         <div class="campo"><label for="a-notas">Notas</label><textarea id="a-notas">${a.notas || ''}</textarea></div>
       </details>
@@ -133,12 +134,17 @@ export default function (main, params) {
   const pintarFoto = (k) => {
     const cont = $(`#foto-${k}`, f);
     const img = cont.querySelector('img');
-    if (fotos[k]) {
+    const hay = Boolean(fotos[k]);
+    if (hay) {
       if (img) img.src = fotos[k];
       else { const i = document.createElement('img'); i.alt = ''; i.src = fotos[k]; cont.prepend(i); }
-      cont.querySelector('.foto-vacio').hidden = true;
-      cont.classList.add('con-foto');
-    }
+    } else img?.remove();
+    cont.querySelector('.foto-vacio').hidden = hay;
+    cont.classList.toggle('con-foto', hay);
+    const t = FOTOS.find(([x]) => x === k)[1];
+    cont.setAttribute('aria-label', `${t}: ${hay ? 'repetir la foto con la cámara' : 'hacer foto con la cámara'}`);
+    $(`[data-quitar="${k}"]`, f).hidden = !hay;
+    $(`#foto-${k}`, f).parentElement.querySelector('.foto-galeria').hidden = hay; // con foto: «Quitar foto» en su lugar
   };
   FOTOS.forEach(([k]) => pintarFoto(k));
 
@@ -205,6 +211,16 @@ export default function (main, params) {
     const archivo = inp.files?.[0];
     if (archivo) await ponerFoto(inp.dataset.foto, archivo);
     inp.value = '';
+  }));
+  // Quitar una foto que no ha salido bien o que se eligió por error (se borra del ejemplar al guardar)
+  f.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.quitar;
+    delete fotos[k];
+    delete fotosFecha[k];
+    pintarFoto(k);
+    f.dataset.sucio = '1';
+    $(`#foto-${k}`, f).focus();
+    aviso(previo ? 'Foto quitada. Se borrará del ejemplar al guardar.' : 'Foto quitada.', 'ok');
   }));
   // Cámara: en el móvil, la del teléfono (<input capture>); en el ordenador, la webcam con vista previa
   f.querySelectorAll('[data-camara]').forEach(b => b.addEventListener('click', async () => {

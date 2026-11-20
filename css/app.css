@@ -202,7 +202,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .foto img { width: 100%; height: 100%; object-fit: cover; }
 /* Cada foto: primero el recuadro, que abre la cámara; debajo, su nombre y «o elegir de la galería» */
 .foto { font: inherit; width: 100%; padding: 0; }
-.foto-galeria { font-size: .78rem; line-height: 1.2; white-space: normal; min-height: 2.75rem; }
+.foto-galeria, .foto-quitar { font-size: .78rem; line-height: 1.2; white-space: normal; min-height: 2.75rem; }
+.foto-quitar { color: var(--rojo-t); border-color: currentColor; }
 .dialogo-camara { max-width: min(760px, 96vw); }
 .camara-vivo { width: 100%; max-height: 65vh; border-radius: 10px; background: #000; display: block; }
 .foto-hueco { display: grid; grid-template-rows: auto 1fr auto; gap: .3rem; text-align: center; min-width: 0; }

@@ -368,7 +368,15 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
   await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
   await page.waitForSelector('#foto-cabeza img', { timeout: 5000 });
   ok(await page.$eval('#foto-cabeza', e => e.classList.contains('con-foto') && e.querySelector('.foto-vacio').hidden), 'Alta: la foto elegida de la galería aparece en su recuadro');
-  const orden = await page.$$eval('#form-alta .foto-hueco:first-child > :is(button, label)', a => a.map(x => x.textContent.trim()));
+  ok(await page.isVisible('[data-quitar=cabeza]') && !(await page.isVisible('[data-quitar=tarsos]')), 'Alta: «Quitar foto» aparece solo donde hay foto');
+  ok(!(await page.isVisible('#form-alta .foto-galeria:has(input[data-foto=cabeza])')), 'Alta: con foto, «Quitar foto» ocupa el sitio de la galería');
+  await page.click('[data-quitar=cabeza]');
+  ok(await page.$eval('#foto-cabeza', e => !e.querySelector('img') && !e.classList.contains('con-foto') && !e.querySelector('.foto-vacio').hidden) && !(await page.isVisible('[data-quitar=cabeza]')),
+    'Alta: «Quitar foto» la quita y el recuadro vuelve a «Hacer foto»');
+  ok(await page.isVisible('#form-alta .foto-galeria:has(input[data-foto=cabeza])'), 'Alta: al quitarla vuelve «o elegir de la galería»');
+  await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
+  await page.waitForSelector('#foto-cabeza img', { timeout: 5000 });
+  const orden = await page.$$eval('#form-alta .foto-hueco:first-child > :is(button, label):not([hidden])', a => a.map(x => x.textContent.trim()));
   ok(orden[0] === 'Hacer foto' && orden[1] === 'o elegir de la galería', `Alta: primero «Hacer foto» (cámara) y después la galería (${orden.join(', ')})`);
   // Ordenador: «Cámara» abre la webcam con vista previa y «Hacer foto» la pone en su recuadro
   await page.click('#foto-lateral');
