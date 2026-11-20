@@ -1,5 +1,6 @@
 // Ficha del ejemplar (datos, genealogía, puesta, calificaciones y acciones según rol)
 import * as datos from '../datos.js';
+import { FOTOS } from './alta.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, sumarMeses, anillaLegible, parsearAnilla, nombreVariedad, sexoTexto, pesoConforme, edadMeses, variedadPorId } from '../estandar.js';
 import { nivelFx, generacionesEquivalentes, purezaVariedad } from '../genetica.js';
@@ -63,8 +64,9 @@ export default function (main, { id }) {
             ${a.estado === 'baja' ? h`<tr><th>Baja</th><td>${fecha(a.baja_fecha)} · ${a.baja_causa || ''}</td></tr>` : ''}
             ${a.notas ? h`<tr><th>Notas</th><td>${a.notas}</td></tr>` : ''}` : ''}
         </tbody></table>
-        ${a.fotos && Object.values(a.fotos).some(Boolean) ? h`<div class="fotos" style="margin-top:.75rem">${['lateral', 'cabeza', 'tarsos'].map(k =>
-          a.fotos[k] && /^(data:image\/|https:\/\/)/.test(a.fotos[k]) ? h`<div class="foto"><img src="${a.fotos[k]}" alt="Foto ${k}" loading="lazy"></div>` : h`<div class="foto"><span>Sin foto</span></div>`)}</div>` : ''}
+        ${a.fotos && Object.values(a.fotos).some(Boolean) ? h`<div class="fotos" style="margin-top:.75rem">${FOTOS.filter(([k]) => k !== 'libre' || a.fotos.libre).map(([k, t]) =>
+          a.fotos[k] && /^(data:image\/|https:\/\/)/.test(a.fotos[k]) ? h`<figure class="foto-ficha"><div class="foto"><img src="${a.fotos[k]}" alt="${t}" loading="lazy"></div><figcaption class="foto-nombre">${t}</figcaption></figure>`
+            : h`<figure class="foto-ficha"><div class="foto"><span>Sin foto</span></div><figcaption class="foto-nombre">${t}</figcaption></figure>`)}</div>` : ''}
       </div>
 
       <div class="fila" style="margin-bottom:1rem">

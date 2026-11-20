@@ -42,7 +42,8 @@ async function subirFotos(registro) {
     const ruta = `${registro.usuario_id}/${registro.id}/${tipo}.${mime.includes('webp') ? 'webp' : 'jpg'}`;
     const { error } = await cliente.storage.from(CONFIG.bucketFotos).upload(ruta, new Blob([bytes], { type: mime }), { upsert: true, contentType: mime });
     if (error) throw error;
-    fotos[tipo] = cliente.storage.from(CONFIG.bucketFotos).getPublicUrl(ruta).data.publicUrl;
+    // ?v=: la foto repetida tiene la misma ruta; así nadie ve la anterior guardada en caché
+    fotos[tipo] = `${cliente.storage.from(CONFIG.bucketFotos).getPublicUrl(ruta).data.publicUrl}?v=${Date.now()}`;
   }
   return fotos;
 }

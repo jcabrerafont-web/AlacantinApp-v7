@@ -6,7 +6,8 @@ import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
 import { h, pintar, $, aviso, confirmar, pct, hoyISO, fechaLocal, comprimirFoto, fotoConCamara } from '../ui.js';
 import { icono } from '../iconos.js';
 
-const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
+// Las tres del expediente del Club y una libre (perspectiva, otra parte o un detalle)
+export const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos'], ['libre', 'Foto libre: perspectiva o detalle']];
 
 export default function (main, params) {
   const p = datos.estado.perfil;

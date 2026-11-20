@@ -362,7 +362,8 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
 
 { // Fotos: cada una con cámara (capture) y galería (sin capture); la de galería también se guarda
   const huecos = await page.$$eval('main .foto-hueco', hs => hs.map(h => [...h.querySelectorAll('input[type=file]')].map(i => i.hasAttribute('capture'))));
-  ok(huecos.length === 3 && huecos.every(x => x.length === 2 && x[0] === true && x[1] === false), 'Alta: cada foto se puede hacer con la cámara o elegir de la galería');
+  ok(huecos.length === 4 && huecos.every(x => x.length === 2 && x[0] === true && x[1] === false), 'Alta: cada foto se puede hacer con la cámara o elegir de la galería');
+  ok(await page.$eval('#form-alta .foto-hueco:last-child', e => e.textContent.includes('Foto libre')), 'Alta: cuarta foto, libre (perspectiva o detalle)');
   await page.click('main details summary >> text=Más datos');
   const png1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
