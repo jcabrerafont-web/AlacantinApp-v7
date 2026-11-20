@@ -371,6 +371,12 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
   ok(await page.isVisible('[data-quitar=cabeza]') && !(await page.isVisible('[data-quitar=tarsos]')), 'Alta: «Quitar foto» aparece solo donde hay foto');
   ok(!(await page.isVisible('#form-alta .foto-galeria:has(input[data-foto=cabeza])')), 'Alta: con foto, «Quitar foto» ocupa el sitio de la galería');
   await page.click('[data-quitar=cabeza]');
+  ok((await page.innerText('dialog[open]')).includes('«Cabeza y orejilla»'), 'Alta: «Quitar foto» pide confirmación');
+  await page.click('dialog[open] button[value=no]');
+  ok(await page.$eval('#foto-cabeza', e => Boolean(e.querySelector('img'))), 'Alta: si se cancela, la foto se queda');
+  await page.click('[data-quitar=cabeza]');
+  await page.click('dialog[open] button[value=si]');
+  await page.waitForFunction(() => !document.querySelector('#foto-cabeza img'), null, { timeout: 3000 }).catch(() => {});
   ok(await page.$eval('#foto-cabeza', e => !e.querySelector('img') && !e.classList.contains('con-foto') && !e.querySelector('.foto-vacio').hidden) && !(await page.isVisible('[data-quitar=cabeza]')),
     'Alta: «Quitar foto» la quita y el recuadro vuelve a «Hacer foto»');
   ok(await page.isVisible('#form-alta .foto-galeria:has(input[data-foto=cabeza])'), 'Alta: al quitarla vuelve «o elegir de la galería»');

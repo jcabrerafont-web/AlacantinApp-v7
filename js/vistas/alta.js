@@ -3,7 +3,7 @@ import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
-import { h, pintar, $, aviso, pct, hoyISO, fechaLocal, comprimirFoto, fotoConCamara } from '../ui.js';
+import { h, pintar, $, aviso, confirmar, pct, hoyISO, fechaLocal, comprimirFoto, fotoConCamara } from '../ui.js';
 import { icono } from '../iconos.js';
 
 const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
@@ -213,8 +213,10 @@ export default function (main, params) {
     inp.value = '';
   }));
   // Quitar una foto que no ha salido bien o que se eligió por error (se borra del ejemplar al guardar)
-  f.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => {
+  f.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', async () => {
     const k = b.dataset.quitar;
+    const t = FOTOS.find(([x]) => x === k)[1];
+    if (!(await confirmar('Quitar foto', `¿Quitar la foto «${t}»?${previo ? ' Se borrará del ejemplar cuando pulses «Guardar».' : ''}`, 'Quitar foto', true))) { b.focus(); return; }
     delete fotos[k];
     delete fotosFecha[k];
     pintarFoto(k);
