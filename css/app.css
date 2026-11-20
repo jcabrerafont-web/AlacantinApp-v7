@@ -200,8 +200,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .foto { aspect-ratio: 4/3; border: 2px dashed var(--borde); border-radius: 10px; display: grid; place-items: center; overflow: hidden;
   position: relative; text-align: center; font-size: .78rem; color: var(--texto-2); cursor: pointer; background: var(--fondo); }
 .foto img { width: 100%; height: 100%; object-fit: cover; }
-.foto input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-/* Cada foto: recuadro (cámara en el móvil; archivo en el ordenador), nombre y botón «Galería» */
+/* Cada foto: primero el recuadro, que abre la cámara; debajo, su nombre y «o elegir de la galería» */
+.foto { font: inherit; width: 100%; padding: 0; }
+.foto-galeria { font-size: .78rem; line-height: 1.2; white-space: normal; min-height: 2.75rem; }
+.dialogo-camara { max-width: min(760px, 96vw); }
+.camara-vivo { width: 100%; max-height: 65vh; border-radius: 10px; background: #000; display: block; }
 .foto-hueco { display: grid; grid-template-rows: auto 1fr auto; gap: .3rem; text-align: center; min-width: 0; }
 .foto-vacio { display: grid; gap: .15rem; place-items: center; color: var(--azul-t); font-weight: 600; }
 .foto-vacio .icono { width: 1.7rem; height: 1.7rem; }
@@ -209,7 +212,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .foto-nombre { font-size: .78rem; color: var(--texto-2); line-height: 1.2; }
 .foto-galeria { position: relative; overflow: hidden; width: 100%; padding-inline: .25rem; }
 .foto-galeria input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.foto:focus-within, .foto-galeria:focus-within { outline: 3px solid var(--azul-t); outline-offset: 2px; }
+.foto:focus-visible, .foto-galeria:focus-within { outline: 3px solid var(--azul-t); outline-offset: 2px; }
 /* Táctil (móvil, tableta) frente a ratón (ordenador) */
 @media (pointer: fine) { .solo-tactil { display: none !important; } }
 @media (pointer: coarse), (pointer: none) { .solo-raton { display: none !important; } }

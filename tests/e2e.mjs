@@ -4,8 +4,8 @@ import fs from 'node:fs';
 //      (opcional) CHROME=/ruta/a/chrome para usar un navegador ya instalado
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.argv[2] || 'http://localhost:8820';
-const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox', '--no-proxy-server'] });
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox', '--no-proxy-server', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, permissions: ['camera'] });
 await ctx.route(/^https?:\/\/(?!localhost)/, r => r.abort());
 const page = await ctx.newPage();
 const errores = [];
@@ -368,6 +368,16 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
   await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
   await page.waitForSelector('#foto-cabeza img', { timeout: 5000 });
   ok(await page.$eval('#foto-cabeza', e => e.classList.contains('con-foto') && e.querySelector('.foto-vacio').hidden), 'Alta: la foto elegida de la galería aparece en su recuadro');
+  const orden = await page.$$eval('#form-alta .foto-hueco:first-child > :is(button, label)', a => a.map(x => x.textContent.trim()));
+  ok(orden[0] === 'Hacer foto' && orden[1] === 'o elegir de la galería', `Alta: primero «Hacer foto» (cámara) y después la galería (${orden.join(', ')})`);
+  // Ordenador: «Cámara» abre la webcam con vista previa y «Hacer foto» la pone en su recuadro
+  await page.click('#foto-lateral');
+  await page.waitForSelector('dialog.dialogo-camara[open] video', { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('dialog.dialogo-camara video')?.videoWidth > 0, null, { timeout: 5000 });
+  await page.click('#camara-disparar');
+  await page.waitForSelector('#foto-lateral img', { timeout: 5000 });
+  ok(!(await page.$('dialog.dialogo-camara')) && await page.$eval('#foto-lateral', e => e.classList.contains('con-foto')),
+    'Alta (ordenador): «Hacer foto» abre la webcam y la foto hecha aparece en su recuadro');
 }
 // 6d. Copia de seguridad
 await ir('#/censo');

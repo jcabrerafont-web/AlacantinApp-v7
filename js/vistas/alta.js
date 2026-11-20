@@ -3,7 +3,7 @@ import * as datos from '../datos.js';
 import { esAuditor } from '../auth.js';
 import { ESTANDAR, REGLAS, pesoConforme, sexoTexto, parsearAnilla, componerAnilla, comprobarAnilla } from '../estandar.js';
 import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
-import { h, pintar, $, aviso, pct, hoyISO, fechaLocal, comprimirFoto } from '../ui.js';
+import { h, pintar, $, aviso, pct, hoyISO, fechaLocal, comprimirFoto, fotoConCamara } from '../ui.js';
 import { icono } from '../iconos.js';
 
 const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
@@ -85,14 +85,14 @@ export default function (main, params) {
               <li>Las fotos de perfil de gallos y gallinas de cada variedad y edad forman el expediente del Club para el Catálogo Oficial y para FESACOCUR.</li>
             </ul></details>
           <div class="fotos">${FOTOS.map(([k, t]) => h`<div class="foto-hueco">
-            <label class="foto" id="foto-${k}">
-              <span class="foto-vacio">${icono('camara')}<span class="solo-tactil">Hacer foto</span><span class="solo-raton">Elegir foto</span></span>
-              <input type="file" accept="image/*" capture="environment" data-foto="${k}" aria-label="${t}: hacer foto con la cámara"></label>
+            <button type="button" class="foto" id="foto-${k}" data-camara="${k}" aria-label="${t}: hacer foto con la cámara">
+              <span class="foto-vacio">${icono('camara')}<span>Hacer foto</span></span></button>
             <span class="foto-nombre">${t}</span>
-            <label class="btn btn-pequeno foto-galeria solo-tactil">Galería
+            <input type="file" accept="image/*" capture="environment" data-foto="${k}" data-captura="${k}" hidden>
+            <label class="btn btn-pequeno foto-galeria">o elegir de la galería
               <input type="file" accept="image/*" data-foto="${k}" aria-label="${t}: elegir de la galería"></label>
           </div>`)}</div>
-          <p class="ayuda solo-tactil">Pulsa el recuadro para usar la cámara, o «Galería» para elegir una foto ya hecha.</p>
+          <p class="ayuda">Pulsa el recuadro para hacer la foto con la cámara. Si ya la tienes hecha, usa «o elegir de la galería».</p>
         </fieldset>
         <div class="campo"><label for="a-notas">Notas</label><textarea id="a-notas">${a.notas || ''}</textarea></div>
       </details>
@@ -191,18 +191,29 @@ export default function (main, params) {
   f.addEventListener('change', refrescar);
   refrescar();
 
-  f.querySelectorAll('[data-foto]').forEach(inp => inp.addEventListener('change', async () => {
-    const archivo = inp.files?.[0];
-    if (!archivo) return;
+  const ponerFoto = async (k, archivo) => {
     try {
-      fotos[inp.dataset.foto] = await comprimirFoto(archivo);
+      fotos[k] = await comprimirFoto(archivo);
       // Fecha de la foto (la del archivo, si es coherente): sirve para saber la edad del animal en ella
       const f0 = fechaLocal(new Date(archivo.lastModified || Date.now()));
       const nac = $('#a-fecha', f).value;
-      fotosFecha[inp.dataset.foto] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
-      pintarFoto(inp.dataset.foto);
+      fotosFecha[k] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
+      pintarFoto(k);
     } catch { aviso('No se pudo procesar la foto.', 'error'); }
+  };
+  f.querySelectorAll('[data-foto]').forEach(inp => inp.addEventListener('change', async () => {
+    const archivo = inp.files?.[0];
+    if (archivo) await ponerFoto(inp.dataset.foto, archivo);
     inp.value = '';
+  }));
+  // Cámara: en el móvil, la del teléfono (<input capture>); en el ordenador, la webcam con vista previa
+  f.querySelectorAll('[data-camara]').forEach(b => b.addEventListener('click', async () => {
+    const k = b.dataset.camara;
+    if (matchMedia('(pointer: coarse)').matches || !navigator.mediaDevices?.getUserMedia) { $(`[data-captura="${k}"]`, f).click(); return; }
+    try {
+      const archivo = await fotoConCamara(FOTOS.find(([x]) => x === k)[1]);
+      if (archivo) await ponerFoto(k, archivo);
+    } catch (e) { aviso(`${e.message} Puedes elegir una foto ya hecha con «Galería».`, 'error'); }
   }));
 
   f.addEventListener('submit', async (ev) => {

@@ -120,5 +120,39 @@ export async function comprimirFoto(archivo, lado = 1280, calidad = 0.8) {
   return c.toDataURL(tipo, calidad);
 }
 
+// Cámara del ordenador (webcam): vista en directo y botón «Hacer foto».
+// Devuelve un File, o null si se cancela. En el móvil no se usa: allí el
+// <input capture> abre la cámara del propio teléfono, que hace mejores fotos.
+export function fotoConCamara(titulo = 'Hacer foto') {
+  return new Promise((resolve, reject) => {
+    if (!navigator.mediaDevices?.getUserMedia) { reject(new Error('Este navegador no deja usar la cámara.')); return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(stream => {
+      const d = document.createElement('dialog');
+      d.className = 'dialogo dialogo-camara';
+      d.innerHTML = crudo(h`<form method="dialog">
+        <h2>${titulo}</h2>
+        <video class="camara-vivo" autoplay playsinline muted></video>
+        <menu><button value="no" class="btn">Cancelar</button><button value="si" class="btn btn-primario" id="camara-disparar">Hacer foto</button></menu>
+      </form>`);
+      document.body.appendChild(d);
+      const video = d.querySelector('video');
+      video.srcObject = stream;
+      const parar = () => stream.getTracks().forEach(t => t.stop());
+      d.addEventListener('close', () => {
+        if (d.returnValue !== 'si' || !video.videoWidth) { parar(); d.remove(); resolve(null); return; }
+        const c = document.createElement('canvas');
+        c.width = video.videoWidth; c.height = video.videoHeight;
+        c.getContext('2d').drawImage(video, 0, 0);
+        parar(); d.remove();
+        c.toBlob(b => resolve(b ? new File([b], 'camara.jpg', { type: 'image/jpeg', lastModified: Date.now() }) : null), 'image/jpeg', 0.92);
+      });
+      d.showModal();
+      d.querySelector('#camara-disparar').focus();
+    }).catch(e => reject(new Error(e?.name === 'NotAllowedError' ? 'No has dado permiso para usar la cámara.'
+      : e?.name === 'NotFoundError' || e?.name === 'OverconstrainedError' ? 'No se encuentra ninguna cámara en este dispositivo.'
+      : 'No se ha podido abrir la cámara.')));
+  });
+}
+
 export const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11)
   .replace(/[018]/g, c => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));

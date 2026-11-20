@@ -12,7 +12,7 @@
 //    archivos de dos versiones.
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.19.1';
+const VERSION = '7.19.2';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 // Fotos del servidor (Supabase Storage): se guardan al verlas para poder verlas sin cobertura.
