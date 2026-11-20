@@ -458,3 +458,33 @@ details.usuario[open] { padding-bottom: .75rem; }
 @media (min-width: 900px) { .barra a[data-ruta="herramientas"] .insignia { display: none; } }
 /* En el ordenador, lo que ya está en el menú lateral no se repite en Herramientas */
 @media (min-width: 900px) { .solo-estrecho { display: none !important; } }
+
+/* ---------------------------------------------------------------------------
+   Desplegables (<details>): en vez del triángulo del navegador, una flecha a la
+   derecha que gira al abrir. Los sueltos (no tarjetas ni filas) parecen un botón.
+   --------------------------------------------------------------------------- */
+details > summary { list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+details > summary::-webkit-details-marker { display: none; }
+details:not(.tarea-guiada) > summary { display: flex; align-items: center; gap: .5rem; min-height: 2.75rem; }
+details:not(.tarea-guiada) > summary::after {
+  content: ''; flex: none; margin-left: auto; margin-right: .35rem; width: .55rem; height: .55rem;
+  border-right: 2px solid var(--azul-t); border-bottom: 2px solid var(--azul-t);
+  transform: translateY(-25%) rotate(45deg); transition: transform .15s;
+}
+details:not(.tarea-guiada)[open] > summary::after { transform: translateY(25%) rotate(-135deg); }
+details:not(.tarjeta):not(.usuario) > summary {
+  display: inline-flex; flex-wrap: wrap; max-width: 100%; min-height: 2.5rem; padding: .3rem .9rem;
+  border: 1px solid var(--borde); border-radius: 999px; background: var(--superficie); color: var(--azul-t); font-weight: 600;
+}
+details:not(.tarjeta):not(.usuario) > summary::after { margin-left: .15rem; margin-right: 0; }
+details:not(.tarjeta):not(.usuario)[open] > summary { margin-bottom: .6rem; }
+details:not(.tarjeta):not(.usuario) > summary .muted { font-weight: 400; }
+@media (hover: hover) {
+  details:not(.tarjeta):not(.usuario) > summary:hover { border-color: var(--azul-t); }
+  .tarjeta > summary:hover, details.usuario > summary:hover { color: var(--azul-t); }
+}
+details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offset: 2px; }
+.auditoria-grupo > summary { justify-content: flex-start; }
+.auditoria-grupo > summary .chip { margin-left: auto; }
+.auditoria-grupo > summary::after { margin-left: .5rem; }
+@media (prefers-reduced-motion: reduce) { details > summary::after { transition: none; } }
