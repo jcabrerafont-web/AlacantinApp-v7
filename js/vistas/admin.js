@@ -9,7 +9,8 @@ import { itemTarea } from './hoy.js';
 // [grupo, [[enlace, emoji, título, explicación]]]
 const SECCIONES = [
   ['Personas', [
-    ['#/usuarios', '👥', 'Usuarios y roles', 'Altas nuevas, contacto de cada socio y quién es inspector o administrador']
+    ['#/usuarios', '👥', 'Usuarios y roles', 'Altas nuevas, contacto de cada socio y quién es inspector o administrador'],
+    ['#/mapa', '🗺️', 'Mapa de aviarios', 'Dónde está cada aviario y qué cría; cómo llegar y exportación para QGIS']
   ]],
   ['Libro Genealógico', [
     ['#/admin/libro', '⭐', 'Inscripciones del Libro', 'Registro de Méritos, fundadores (RF y RA) y cambios de titular'],

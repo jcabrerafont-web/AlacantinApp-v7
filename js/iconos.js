@@ -21,6 +21,7 @@ const T = {
   revision: '<path d="M10 6h10M10 12h10M10 18h10"/><path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5 2.5-2.5"/>',
   familia: '<circle cx="8" cy="7" r="3"/><circle cx="16.5" cy="8.5" r="2.5"/><path d="M3 20a5 5 0 0 1 10 0M13 20a4 4 0 0 1 8 0"/>',
   casa: '<path d="M4 11 12 4l8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+  mapa: '<path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
   video: '<rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
   guardar: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   nube: '<path d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9z"/>',
@@ -51,7 +52,7 @@ const EMOJI = {
   '📅': 'calendario', '🗓️': 'calendario', '🔦': 'luz', '🐣': 'nacimiento', '🐥': 'pollito', '⚖️': 'balanza', '⏳': 'reloj', '📞': 'telefono',
   '🚗': 'coche', '🩺': 'revision', '🧬': 'familia', '🏡': 'casa', '💾': 'guardar', '☁️': 'nube', '🔒': 'candado', '🐞': 'aviso',
   '🧭': 'brujula', '💞': 'pareja', '📊': 'grafico', '📄': 'documento', '✅': 'check', '📷': 'camara', '🛡️': 'escudo', '📲': 'movil',
-  '🚀': 'bandera', '🧺': 'cesta', '🌳': 'arbol', '✏️': 'lapiz', '🖨️': 'documento', '⬇️': 'guardar', '☀️': 'sol', '🗑': 'baja', '🏷️': 'documento', '👥': 'usuarios', '⭐': 'estrella'
+  '🚀': 'bandera', '🧺': 'cesta', '🌳': 'arbol', '✏️': 'lapiz', '🖨️': 'documento', '⬇️': 'guardar', '☀️': 'sol', '🗑': 'baja', '🏷️': 'documento', '👥': 'usuarios', '🗺️': 'mapa', '⭐': 'estrella'
 };
 
 export const svgIcono = (nombre, clase = '') => T[nombre]

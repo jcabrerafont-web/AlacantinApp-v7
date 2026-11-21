@@ -1098,6 +1098,44 @@ export async function refrescarTodoDesdeServidor() {
 }
 
 // ---------------------------------------------------------------------------
+// Aviarios para el mapa (administración e inspección): cada criador con su ubicación
+// y su censo activo. Los que no tienen ubicación se devuelven aparte.
+// ---------------------------------------------------------------------------
+export function aviarios() {
+  if (!esAuditor(rol())) return { conUbicacion: [], sinUbicacion: [] };
+  const porTitular = new Map();
+  for (const a of estado.todos) {
+    if (a.estado === 'baja') continue;
+    const x = porTitular.get(a.usuario_id) || { machos: 0, hembras: 0, rd: 0, variedades: new Set() };
+    x[a.sexo === 'M' ? 'machos' : 'hembras'] += 1;
+    if (['RD', 'RM'].includes(a.seccion)) x.rd += 1;
+    if (a.variedad) x.variedades.add(a.variedad);
+    porTitular.set(a.usuario_id, x);
+  }
+  const lista = estado.perfiles.filter(p => !p.baja).map(p => {
+    const c = porTitular.get(p.id) || { machos: 0, hembras: 0, rd: 0, variedades: new Set() };
+    return { perfil: p, machos: c.machos, hembras: c.hembras, total: c.machos + c.hembras, rd: c.rd, variedades: [...c.variedades],
+      lat: p.latitud != null ? Number(p.latitud) : null, lng: p.longitud != null ? Number(p.longitud) : null };
+  });
+  const ok = (x) => Number.isFinite(x.lat) && Number.isFinite(x.lng);
+  return { conUbicacion: lista.filter(ok), sinUbicacion: lista.filter(x => !ok(x)) };
+}
+
+// GeoJSON de los aviarios (para QGIS, uMap o Google Earth). Lleva datos personales:
+// solo para administración e inspección.
+export function geojsonAviarios(lista) {
+  return {
+    type: 'FeatureCollection',
+    features: lista.map(x => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [x.lng, x.lat] },
+      properties: { criador: x.perfil.nombre || '', rega: x.perfil.rega || '', municipio: x.perfil.municipio || '', provincia: x.perfil.provincia || '',
+        machos: x.machos, hembras: x.hembras, total: x.total, en_rd_o_rm: x.rd, variedades: x.variedades.join(', ') }
+    }))
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Panel de administración: lo que el administrador tiene pendiente, con el
 // enlace que lleva a resolverlo. Solo informa; nunca cambia nada.
 // ---------------------------------------------------------------------------

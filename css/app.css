@@ -518,3 +518,10 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .aviso-linea { color: var(--ambar-t); margin: -.25rem 0 .75rem; }
 .aviso-linea .icono { width: 18px; height: 18px; vertical-align: -3px; margin-right: .3rem; }
 .pollitos-pend { border-color: var(--azul-t); }
+
+/* Mapa de aviarios */
+.mapa { height: min(60vh, 520px); border-radius: 10px; margin-top: .5rem; background: var(--fondo); z-index: 0; }
+.leyenda-mapa { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: .5rem 0 0; }
+.leyenda-mapa i, .punto-mapa { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: .35rem; vertical-align: -1px; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .2); }
+.leaflet-container { font: inherit; }
+.leaflet-popup-content { font-size: .9rem; line-height: 1.4; }

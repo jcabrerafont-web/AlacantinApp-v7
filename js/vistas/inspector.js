@@ -10,7 +10,8 @@ import { recopilar } from './dossier.js';
 
 const SECCIONES = [
   ['Visitas', [
-    ['#/inspecciones', '📞', 'Solicitudes de inspección', 'Llamar al criador, programar la visita, cómo llegar y cerrarla']
+    ['#/inspecciones', '📞', 'Solicitudes de inspección', 'Llamar al criador, programar la visita, cómo llegar y cerrarla'],
+    ['#/mapa', '🗺️', 'Mapa de aviarios', 'Dónde está cada aviario y qué cría, para planificar las rutas']
   ]],
   ['Para calificar bien', [
     ['#/guia', '📋', 'Guía de campo', 'Las 12 regiones del baremo, con lo que se valora y los defectos de cada una'],

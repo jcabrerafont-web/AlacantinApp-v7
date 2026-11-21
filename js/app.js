@@ -48,7 +48,8 @@ const RUTAS = [
   ['inspector', 'inspector', ['inspector', 'administrador']],
   ['admin/libro', 'adminlibro', ['administrador']],
   ['admin/supabase', 'adminsupabase', ['administrador']],
-  ['admin/historial', 'adminhistorial', ['administrador']]
+  ['admin/historial', 'adminhistorial', ['administrador']],
+  ['mapa', 'mapa', ['inspector', 'administrador']]
 ];
 
 // Barra inferior: visitante 3 columnas; usuarios registrados 4 columnas.
@@ -157,7 +158,7 @@ function pintarInsignia() {
 
 function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
-    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
+    informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', mapa: 'inspector', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
   let activo = equivalencias[base] || base;
   if (activo === 'conoce') activo = document.querySelector('#barra a[data-ruta="estandar"]') ? 'estandar' : 'herramientas';
   if (activo === 'inspector' && !document.querySelector('#barra a[data-ruta="inspector"]') && document.querySelector('#barra a[data-ruta="admin"]')) activo = 'admin';
