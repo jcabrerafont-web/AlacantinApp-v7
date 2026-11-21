@@ -82,12 +82,54 @@ const LIBRO = {
 // también para el autoconsumo desde 2024 (Real Decreto 637/2021).
 const EMPEZAR = [
   ['Escribe al Club', `(${CONFIG.club.email}). Te orientará y te pondrá en contacto con criadores que tengan animales.`],
-  ['Inscribe tu gallinero en el REGA.', 'Desde 2024 es obligatorio para cualquier gallinero, aunque sea para consumo propio y tengas pocas gallinas. Se pide en la oficina comarcal agraria o en la consejería de agricultura de tu comunidad, y te dan un código que empieza por ES.'],
+  ['Inscribe tu gallinero en el REGA.', 'Desde 2024 es obligatorio para cualquier gallinero, aunque sea para consumo propio y tengas pocas gallinas. Se pide en la oficina comarcal agraria o en la consejería de agricultura de tu comunidad, y te dan un código que empieza por ES. Lee también las <a href="#/conoce?s=sanidad">obligaciones sanitarias</a>.'],
   ['Consigue animales con genealogía conocida', 'de criadores del Club, con su anilla y sus padres. Mejor si el gallo y las gallinas son de líneas distintas, sin parentesco.'],
   ['Crea tu cuenta en la app', 'y pon tu REGA en «Mi aviario»: pasarás de Aspirante a Criador. Después da de alta tus animales.'],
   ['Pide las anillas a tiempo', 'a través del Club. FESACOCUR abre plazos en octubre, diciembre y febrero.'],
   ['Cría con método:', 'forma familias de un gallo con sus gallinas y apunta de qué gallina es cada huevo. Anilla cada pollito y dalo de alta con su padre y su madre.'],
   ['Cuando un animal cumpla un año, pide su calificación', 'desde la app. Si es apto, pasa al Registro Definitivo.']
+];
+
+// Obligaciones sanitarias del criador. Normas comprobadas el 21/11/2026: RD 637/2021
+// (arts. 1.5, 2.1 h-i, 6.11, 14, 16, 17 y 19), RD 779/2023 (declaración obligatoria),
+// Orden APA/1288/2025 y APA/338/2026 (gripe aviar), Resolución de 24/2/2026 de la
+// DG de Producción Agrícola y Ganadera de la Generalitat (vacunación de Newcastle).
+// Lo que cambia cada temporada va fechado y con enlace a la fuente oficial.
+const SANIDAD_COMPROBADO = '21 de noviembre de 2026';
+const SANIDAD = [
+  ['Tu gallinero, en el REGA', [
+    'Todo gallinero debe estar inscrito en el Registro General de Explotaciones Ganaderas (REGA), también el de consumo propio (Real Decreto 637/2021, art. 16).',
+    'Es de <strong>autoconsumo</strong> si tiene como máximo 0,15 UGM (unas 30 gallinas) y no vendes nada: ni aves, ni pollitos, ni huevos. Basta con comunicarlo.',
+    'Si vendes aves, pollitos o huevos para incubar, o tienes más aves, pasa a ser <strong>explotación reducida</strong>: necesita autorización previa, llevar el libro de registro de la explotación y declarar el censo cada año antes del 1 de marzo (arts. 17, 18 y 19).',
+    'Cualquier cambio (más aves, otra dirección, dejar de criar) se comunica a la oficina comarcal agraria.'
+  ]],
+  ['Un veterinario de referencia', [
+    'Todos los gallineros, también los de autoconsumo, deben tener identificado un veterinario al que recurrir si hay un problema sanitario (art. 6.11).'
+  ]],
+  ['Si sospechas una enfermedad, avisa enseguida', [
+    'Muchas bajas de golpe, aves decaídas que no comen, problemas para respirar, la cabeza torcida o temblores, diarrea verdosa o que dejan de poner de repente: llama a tu veterinario y a los servicios veterinarios oficiales (oficina comarcal agraria).',
+    'La gripe aviar y la enfermedad de Newcastle son de declaración obligatoria (Real Decreto 779/2023). Mientras tanto, no muevas aves ni huevos y no recibas visitas en el gallinero.'
+  ]],
+  ['Gripe aviar: confinar cuando se ordena', [
+    'En las temporadas de riesgo (otoño e invierno, con las aves migratorias), el Ministerio puede ordenar el confinamiento: aves bajo techo o en recintos cubiertos con malla, comederos y bebederos protegidos de las aves silvestres y sin criar patos ni gansos junto con gallinas.',
+    'En la temporada 2025-2026 el confinamiento fue para toda España desde el 13 de noviembre de 2025 (Orden APA/1288/2025) y se levantó el 16 de abril de 2026 (Orden APA/338/2026). Consulta cada otoño si hay medidas en vigor.'
+  ]],
+  ['Newcastle: vacunación', [
+    'En 2026 ha habido focos de enfermedad de Newcastle en granjas de la Comunitat Valenciana y de otras comunidades.',
+    'En la Comunitat Valenciana es obligatoria la vacunación anual en las explotaciones de producción y reproducción que no sean de autoconsumo (Resolución de 24 de febrero de 2026, actualizada en octubre de 2026). Varias comunidades más la han hecho obligatoria. Si tu gallinero no es de autoconsumo, pregunta a tu veterinario la pauta; si lo es, consúltale si te conviene vacunar.'
+  ]],
+  ['Mover aves, ferias y exposiciones', [
+    'Llevar aves o huevos para incubar a otra explotación, a una feria o a una exposición tiene sus requisitos (RD 637/2021, art. 14 y anexos VI y VII): pregunta en tu oficina comarcal qué documento necesitas. Pregunta también a la organización de la exposición qué vacunas exige.',
+    'Las aves nuevas o que vuelven de una exposición, mejor separadas unas semanas antes de juntarlas con las demás.'
+  ]],
+  ['Buenas costumbres de bioseguridad', [
+    'Calzado solo para el gallinero, comida y agua donde no lleguen pájaros ni roedores, limpieza y desinfección entre polladas y control de ratas y ratones.',
+    'Las aves muertas no se tiran al campo ni a la basura: consulta en tu ayuntamiento u oficina comarcal cómo deshacerte de ellas.'
+  ]]
+];
+const SANIDAD_FUENTES = [
+  ['Real Decreto 637/2021, granjas avícolas (BOE)', 'https://www.boe.es/eli/es/rd/2021/07/27/637/con'],
+  ['Influenza aviar: situación y medidas (Ministerio de Agricultura)', 'https://www.mapa.gob.es/es/ganaderia/temas/sanidad-animal-higiene-ganadera/sanidad-animal/enfermedades/influenza-aviar/influenza_aviar']
 ];
 
 // Plumaje y pollitos de cada variedad: descripción del Club (web clubalacantina.com,
@@ -131,10 +173,15 @@ export default function (main) {
   pintar(main, h`
     <p class="peq"><a href="#/estandar">‹ Estándar</a></p>
     <h1>La Alacantina y su Club</h1>
-    <p class="muted">Cómo empezar, de dónde viene la raza, quién la cuida, cómo se lleva su Libro Genealógico y cómo es cada variedad.</p>
+    <p class="muted">Cómo empezar, qué exige la sanidad animal, de dónde viene la raza, quién la cuida, cómo se lleva su Libro Genealógico y cómo es cada variedad.</p>
 
     ${apartado('empezar', 'Cómo empezar a criar Alacantinas', 'Del primer contacto con el Club a la primera calificación', h`
-      <ol class="pasos">${EMPEZAR.map(([a, b]) => h`<li><strong>${a}</strong> ${b}</li>`)}</ol>`, abierto === 'empezar')}
+      <ol class="pasos">${EMPEZAR.map(([a, b]) => h`<li><strong>${a}</strong> ${html(b)}</li>`)}</ol>`, abierto === 'empezar')}
+
+    ${apartado('sanidad', 'Obligaciones sanitarias', 'REGA, veterinario, gripe aviar, Newcastle y movimientos', h`
+      <p class="peq muted">Resumen orientativo para criadores; manda siempre el texto oficial. Situación comprobada el ${SANIDAD_COMPROBADO}: las medidas de gripe aviar y Newcastle cambian según la temporada y la comunidad autónoma.</p>
+      ${SANIDAD.map(([t, ps]) => h`<h3>${t}</h3>${ps.length > 1 ? h`<ul>${ps.map(p => h`<li>${html(p)}</li>`)}</ul>` : h`<p>${html(ps[0])}</p>`}`)}
+      <p class="peq"><strong>Fuentes oficiales:</strong> ${SANIDAD_FUENTES.map(([t, u], i) => h`${i ? ' · ' : ''}<a href="${u}" target="_blank" rel="noopener">${t}</a>`)}. Para lo que se aplica en tu zona, tu oficina comarcal agraria.</p>`, abierto === 'sanidad')}
 
     ${apartado('historia', 'Historia de la raza', 'De 1905 al reconocimiento de 2020 y el Libro Genealógico',
       h`${HISTORIA.map(([etapa, parrafos]) => h`<h3>${etapa}</h3>${parrafos.map(p => h`<p>${html(p)}</p>`)}`)}`, abierto === 'historia')}

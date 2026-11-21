@@ -42,6 +42,10 @@ ok(await page.$eval('#variedades', d => d.querySelectorAll('li.item').length ===
   'La Alacantina y su Club: «Las variedades» con el plumaje y los pollitos de las 5, señalado como descripción del Club');
 ok(await page.$eval('#glosario', d => d.querySelectorAll('dt').length === 16 && d.textContent.includes('al menos 65 puntos (gallinas) o 70 (gallos)')),
   'La Alacantina y su Club: glosario de 16 términos, con las cifras de la app');
+ok(await page.$eval('#sanidad', d => d.querySelectorAll('h3').length === 7 && d.textContent.includes('Real Decreto 637/2021') && d.textContent.includes('Orden APA/338/2026') && d.textContent.includes('24 de febrero de 2026')
+    && d.textContent.includes('Situación comprobada el') && Boolean(d.querySelector('a[href^="https://www.boe.es/eli/es/rd/2021/07/27/637"]')) && Boolean(d.querySelector('a[href*="influenza-aviar"]')))
+  && await page.$eval('#empezar', d => Boolean(d.querySelector('a[href="#/conoce?s=sanidad"]'))),
+  'La Alacantina y su Club: «Obligaciones sanitarias» (REGA, veterinario, aviso, gripe aviar, Newcastle, movimientos y bioseguridad) con fecha y fuentes oficiales');
 await ir('#/conoce?s=libro');
 ok(await page.$eval('#libro', d => d.open), 'La Alacantina y su Club: enlace directo a un apartado (?s=libro) lo abre');
 await ir('#/estandar');
@@ -459,7 +463,7 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
 { // Fotos: cada una con cámara (capture) y galería (sin capture); la de galería también se guarda
   const huecos = await page.$$eval('main .foto-hueco', hs => hs.map(h => [...h.querySelectorAll('input[type=file]')].map(i => i.hasAttribute('capture'))));
   ok(huecos.length === 4 && huecos.every(x => x.length === 2 && x[0] === true && x[1] === false), 'Alta: cada foto se puede hacer con la cámara o elegir de la galería');
-  ok(await page.$eval('#form-alta .foto-hueco:last-child', e => e.textContent.includes('Foto libre')), 'Alta: cuarta foto, libre (perspectiva o detalle)');
+  ok(await page.$eval('#form-alta .foto-hueco:last-child', e => e.textContent.includes('Foto libre: perspectiva o detalle')), 'Alta: cuarta foto, libre (perspectiva o detalle)');
   await page.click('main details summary >> text=Más datos');
   const png1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   await page.setInputFiles('#form-alta .foto-galeria input[data-foto=cabeza]', { name: 'cabeza.png', mimeType: 'image/png', buffer: png1 });
@@ -489,6 +493,21 @@ ok((await page.innerText('main')).includes('Cómo hacer una foto que sirva al Cl
   await page.waitForSelector('#foto-lateral img', { timeout: 5000 });
   ok(!(await page.$('dialog.dialogo-camara')) && await page.$eval('#foto-lateral', e => e.classList.contains('con-foto')),
     'Alta (ordenador): «Hacer foto» abre la webcam y la foto hecha aparece en su recuadro');
+  // Varias fotos libres: al poner una aparece otro recuadro; al quitar una se renumeran
+  const libres = () => page.$$eval('#a-fotos .foto-hueco', hs => hs.slice(3).map(h => [h.querySelector('.foto').id.slice(5), h.querySelector('.foto').classList.contains('con-foto')]));
+  for (const k of ['libre', 'libre2', 'libre3']) {
+    await page.setInputFiles(`#form-alta .foto-galeria input[data-foto=${k}]`, { name: `${k}.png`, mimeType: 'image/png', buffer: png1 });
+    await page.waitForSelector(`#foto-${k} img`, { timeout: 5000 });
+  }
+  const l1 = await libres();
+  ok(JSON.stringify(l1) === JSON.stringify([['libre', true], ['libre2', true], ['libre3', true], ['libre4', false]]) && (await page.innerText('#foto-libre2 + .foto-nombre')) === 'Foto libre 2',
+    `Alta: varias fotos libres; con cada una aparece otro recuadro (${l1.map(x => x[0] + (x[1] ? '✓' : '')).join(', ')})`);
+  await page.click('[data-quitar=libre2]'); await page.click('dialog[open] button[value=si]');
+  await page.waitForFunction(() => !document.querySelector('#foto-libre4'), null, { timeout: 3000 }).catch(() => {});
+  const l2 = await libres();
+  ok(JSON.stringify(l2) === JSON.stringify([['libre', true], ['libre2', true], ['libre3', false]]), `Alta: al quitar una libre las demás se renumeran (${l2.map(x => x[0] + (x[1] ? '✓' : '')).join(', ')})`);
+  const max = await page.evaluate(async () => { const m = await import('./js/vistas/alta.js'); return { max: m.MAX_LIBRES, ficha: m.fotosDe({ lateral: 'x', libre: 'y', libre2: 'z', libre9: 'w', otra: 'v' }).map(x => x[0]) }; });
+  ok(max.max === 6 && JSON.stringify(max.ficha) === JSON.stringify(['lateral', 'cabeza', 'tarsos', 'libre', 'libre2']), `Ficha: muestra las tres fijas y las libres válidas (${max.ficha.join(', ')})`);
 }
 // 6d. Copia de seguridad
 await ir('#/censo');

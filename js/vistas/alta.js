@@ -6,8 +6,16 @@ import { fxDescendencia, nivelFx, familiaDescendencia } from '../genetica.js';
 import { h, pintar, $, aviso, confirmar, pct, hoyISO, fechaLocal, comprimirFoto, fotoConCamara } from '../ui.js';
 import { icono } from '../iconos.js';
 
-// Las tres del expediente del Club y una libre (perspectiva, otra parte o un detalle)
-export const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos'], ['libre', 'Foto libre: perspectiva o detalle']];
+// Las tres del expediente del Club y hasta seis libres (perspectiva, otra parte o un
+// detalle). Las libres se guardan como «libre», «libre2»… en el mismo objeto fotos.
+export const FOTOS = [['lateral', 'Vista lateral'], ['cabeza', 'Cabeza y orejilla'], ['tarsos', 'Tarsos']];
+export const MAX_LIBRES = 6;
+const numLibre = (k) => (k === 'libre' ? 1 : Number(k.slice(5)));
+export const esLibre = (k) => /^libre([2-9])?$/.test(k) && numLibre(k) <= MAX_LIBRES;
+export const clavesLibres = (fotos) => Object.keys(fotos || {}).filter(k => esLibre(k) && fotos[k]).sort((x, y) => numLibre(x) - numLibre(y));
+export const nombreFoto = (k) => FOTOS.find(([x]) => x === k)?.[1] || (k === 'libre' ? 'Foto libre: perspectiva o detalle' : `Foto libre ${numLibre(k)}`);
+// Fotos de un ejemplar para mostrarlas: las tres fijas y las libres que tenga
+export const fotosDe = (fotos) => [...FOTOS.map(([k]) => k), ...clavesLibres(fotos)].map(k => [k, nombreFoto(k)]);
 
 export default function (main, params) {
   const p = datos.estado.perfil;
@@ -98,16 +106,8 @@ export default function (main, params) {
               <li>Buena luz natural, sin contraluz; cámara a la altura del animal.</li>
               <li>Las fotos de perfil de gallos y gallinas de cada variedad y edad forman el expediente del Club para el Catálogo Oficial y para FESACOCUR.</li>
             </ul></details>
-          <div class="fotos">${FOTOS.map(([k, t]) => h`<div class="foto-hueco">
-            <button type="button" class="foto" id="foto-${k}" data-camara="${k}" aria-label="${t}: hacer foto con la cámara">
-              <span class="foto-vacio">${icono('camara')}<span>Hacer foto</span></span></button>
-            <span class="foto-nombre">${t}</span>
-            <input type="file" accept="image/*" capture="environment" data-foto="${k}" data-captura="${k}" hidden>
-            <label class="btn btn-pequeno foto-galeria">o elegir de la galería
-              <input type="file" accept="image/*" data-foto="${k}" aria-label="${t}: elegir de la galería"></label>
-            <button type="button" class="btn btn-pequeno foto-quitar" data-quitar="${k}" aria-label="${t}: quitar la foto" hidden>Quitar foto</button>
-          </div>`)}</div>
-          <p class="ayuda">Pulsa el recuadro para hacer la foto con la cámara. Si ya la tienes hecha, usa «o elegir de la galería». Si no te gusta cómo ha salido o te has equivocado, pulsa «Quitar foto», o pulsa la foto para repetirla.</p>
+          <div class="fotos" id="a-fotos"></div>
+          <p class="ayuda">Pulsa el recuadro para hacer la foto con la cámara. Si ya la tienes hecha, usa «o elegir de la galería». Si no te gusta cómo ha salido o te has equivocado, pulsa «Quitar foto», o pulsa la foto para repetirla. Al poner una foto libre aparece otro recuadro, hasta ${MAX_LIBRES} fotos libres.</p>
         </fieldset>
         <div class="campo"><label for="a-notas">Notas</label><textarea id="a-notas">${a.notas || ''}</textarea></div>
       </details>
@@ -145,6 +145,25 @@ export default function (main, params) {
     $('#a-sexo', f).dispatchEvent(new Event('change', { bubbles: true }));
   }));
 
+  // Recuadros: las tres fijas, las libres que haya y uno libre vacío (hasta el máximo)
+  const hueco = (k) => { const t = nombreFoto(k); return h`<div class="foto-hueco">
+    <button type="button" class="foto" id="foto-${k}" data-camara="${k}" aria-label="${t}: hacer foto con la cámara">
+      <span class="foto-vacio">${icono('camara')}<span>Hacer foto</span></span></button>
+    <span class="foto-nombre">${t}</span>
+    <input type="file" accept="image/*" capture="environment" data-foto="${k}" data-captura="${k}" hidden>
+    <label class="btn btn-pequeno foto-galeria">o elegir de la galería
+      <input type="file" accept="image/*" data-foto="${k}" aria-label="${t}: elegir de la galería"></label>
+    <button type="button" class="btn btn-pequeno foto-quitar" data-quitar="${k}" aria-label="${t}: quitar la foto" hidden>Quitar foto</button>
+  </div>`; };
+  const huecos = () => {
+    const libres = clavesLibres(fotos);
+    const libre = libres.length < MAX_LIBRES ? (libres.length ? `libre${libres.length + 1}` : 'libre') : null;
+    return [...FOTOS.map(([k]) => k), ...libres, ...(libre ? [libre] : [])];
+  };
+  const pintarHuecos = () => {
+    pintar($('#a-fotos', f), h`${huecos().map(hueco)}`);
+    huecos().forEach(k => pintarFoto(k));
+  };
   const pintarFoto = (k) => {
     const cont = $(`#foto-${k}`, f);
     const img = cont.querySelector('img');
@@ -155,12 +174,12 @@ export default function (main, params) {
     } else img?.remove();
     cont.querySelector('.foto-vacio').hidden = hay;
     cont.classList.toggle('con-foto', hay);
-    const t = FOTOS.find(([x]) => x === k)[1];
+    const t = nombreFoto(k);
     cont.setAttribute('aria-label', `${t}: ${hay ? 'repetir la foto con la cámara' : 'hacer foto con la cámara'}`);
     $(`[data-quitar="${k}"]`, f).hidden = !hay;
     $(`#foto-${k}`, f).parentElement.querySelector('.foto-galeria').hidden = hay; // con foto: «Quitar foto» en su lugar
   };
-  FOTOS.forEach(([k]) => pintarFoto(k));
+  pintarHuecos();
 
   const codigoAnilla = () => componerAnilla({
     anio: ($('#a-fecha', f).value || '').slice(0, 4), diametro: $('#a-diam', f).value, numero: $('#a-num', f).value });
@@ -213,40 +232,55 @@ export default function (main, params) {
 
   const ponerFoto = async (k, archivo) => {
     try {
+      const nueva = !fotos[k];
       fotos[k] = await comprimirFoto(archivo);
       // Fecha de la foto (la del archivo, si es coherente): sirve para saber la edad del animal en ella
       const f0 = fechaLocal(new Date(archivo.lastModified || Date.now()));
       const nac = $('#a-fecha', f).value;
       fotosFecha[k] = f0 > hoyISO() || (nac && f0 < nac) ? hoyISO() : f0;
-      pintarFoto(k);
+      // Una libre nueva abre el recuadro de la siguiente
+      if (esLibre(k) && nueva) pintarHuecos(); else pintarFoto(k);
     } catch { aviso('No se pudo procesar la foto.', 'error'); }
   };
-  f.querySelectorAll('[data-foto]').forEach(inp => inp.addEventListener('change', async () => {
+  // Los recuadros se vuelven a pintar al añadir o quitar libres: eventos delegados
+  const zona = $('#a-fotos', f);
+  zona.addEventListener('change', async (ev) => {
+    const inp = ev.target.closest('[data-foto]');
+    if (!inp) return;
     const archivo = inp.files?.[0];
     if (archivo) await ponerFoto(inp.dataset.foto, archivo);
     inp.value = '';
-  }));
-  // Quitar una foto que no ha salido bien o que se eligió por error (se borra del ejemplar al guardar)
-  f.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', async () => {
-    const k = b.dataset.quitar;
-    const t = FOTOS.find(([x]) => x === k)[1];
-    if (!(await confirmar('Quitar foto', `¿Quitar la foto «${t}»?${previo ? ' Se borrará del ejemplar cuando pulses «Guardar».' : ''}`, 'Quitar foto', true))) { b.focus(); return; }
-    delete fotos[k];
-    delete fotosFecha[k];
-    pintarFoto(k);
-    f.dataset.sucio = '1';
-    $(`#foto-${k}`, f).focus();
-    aviso(previo ? 'Foto quitada. Se borrará del ejemplar al guardar.' : 'Foto quitada.', 'ok');
-  }));
-  // Cámara: en el móvil, la del teléfono (<input capture>); en el ordenador, la webcam con vista previa
-  f.querySelectorAll('[data-camara]').forEach(b => b.addEventListener('click', async () => {
-    const k = b.dataset.camara;
+  });
+  zona.addEventListener('click', async (ev) => {
+    // Quitar una foto que no ha salido bien o que se eligió por error (se borra del ejemplar al guardar)
+    const bq = ev.target.closest('[data-quitar]');
+    if (bq) {
+      const k = bq.dataset.quitar;
+      if (!(await confirmar('Quitar foto', `¿Quitar la foto «${nombreFoto(k)}»?${previo ? ' Se borrará del ejemplar cuando pulses «Guardar».' : ''}`, 'Quitar foto', true))) { bq.focus(); return; }
+      delete fotos[k];
+      delete fotosFecha[k];
+      f.dataset.sucio = '1';
+      // Las libres que quedan se renumeran sin huecos (libre, libre2, …)
+      if (esLibre(k)) {
+        const resto = clavesLibres(fotos).map(x => [fotos[x], fotosFecha[x]]);
+        clavesLibres(fotos).forEach(x => { delete fotos[x]; delete fotosFecha[x]; });
+        resto.forEach(([src, fe], i) => { const n = i ? `libre${i + 1}` : 'libre'; fotos[n] = src; if (fe) fotosFecha[n] = fe; });
+      }
+      if (esLibre(k)) { pintarHuecos(); $('#a-fotos .foto:not(.con-foto)', f)?.focus(); }
+      else { pintarFoto(k); $(`#foto-${k}`, f).focus(); }
+      aviso(previo ? 'Foto quitada. Se borrará del ejemplar al guardar.' : 'Foto quitada.', 'ok');
+      return;
+    }
+    // Cámara: en el móvil, la del teléfono (<input capture>); en el ordenador, la webcam con vista previa
+    const bc = ev.target.closest('[data-camara]');
+    if (!bc) return;
+    const k = bc.dataset.camara;
     if (matchMedia('(pointer: coarse)').matches || !navigator.mediaDevices?.getUserMedia) { $(`[data-captura="${k}"]`, f).click(); return; }
     try {
-      const archivo = await fotoConCamara(FOTOS.find(([x]) => x === k)[1]);
+      const archivo = await fotoConCamara(nombreFoto(k));
       if (archivo) await ponerFoto(k, archivo);
     } catch (e) { aviso(`${e.message} Puedes elegir una foto ya hecha con «Galería».`, 'error'); }
-  }));
+  });
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
