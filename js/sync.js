@@ -14,17 +14,67 @@ const oyentes = new Set();
 
 export const usarCliente = (c) => { cliente = c; };
 export const alCambiar = (fn) => { oyentes.add(fn); return () => oyentes.delete(fn); };
+// Aviso de ediciones a la vez que no se han podido juntar solas
+const oyentesConflicto = new Set();
+export const alConflicto = (fn) => { oyentesConflicto.add(fn); return () => oyentesConflicto.delete(fn); };
 const avisar = async () => { const n = await pendientes(); oyentes.forEach(fn => fn(n)); };
 
 export const pendientes = async () => (await db.todos('cola')).length;
 export const listarCola = () => db.todos('cola');
 
-/** Encola una operación. op: 'upsert' | 'delete' */
-export async function encolar(tabla, op, registro) {
+// ---------------------------------------------------------------------------
+// Ediciones a la vez. En estas tablas, dos personas (o dos móviles) pueden cambiar
+// el mismo registro sin cobertura. Cada envío lleva la «base»: la versión del
+// servidor sobre la que se editó. Al enviar, si el servidor ha cambiado desde
+// entonces, solo se suben los campos que se cambiaron aquí; si los dos cambiaron
+// el mismo campo, no se pisa: queda un conflicto para que una persona elija.
+// ---------------------------------------------------------------------------
+export const TABLAS_FUSION = new Set(['animales', 'solicitudes']);
+const SIN_COMPARAR = new Set(['updated_at', 'sync_ts', 'created_at']);
+const igual = (x, y) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+export const camposCambiados = (de, a) => Object.keys({ ...de, ...a }).filter(k => !SIN_COMPARAR.has(k) && !igual(de?.[k], a?.[k]));
+
+/** Reparte los cambios de una edición frente a lo que hay en el servidor. */
+export function fusionar(base, local, servidor) {
+  const mios = camposCambiados(base, local);
+  const suyos = new Set(camposCambiados(base, servidor));
+  const conflictos = mios.filter(k => suyos.has(k) && !igual(local[k], servidor[k]));
+  const parche = Object.fromEntries(mios.filter(k => !conflictos.includes(k) && !igual(local[k], servidor[k])).map(k => [k, local[k]]));
+  return { parche, conflictos };
+}
+
+const CLAVE_CONFLICTOS = 'conflictos';
+export const listarConflictos = () => db.metaGet(CLAVE_CONFLICTOS, []);
+async function anotarConflictos(tabla, local, servidor, campos) {
+  const lista = (await listarConflictos()).filter(c => !(c.tabla === tabla && c.id === local.id && campos.includes(c.campo)));
+  const ahora = new Date().toISOString();
+  for (const campo of campos) lista.push({ tabla, id: local.id, campo, mio: local[campo] ?? null, servidor: servidor[campo] ?? null, fecha: ahora, servidorFecha: servidor.updated_at || servidor.sync_ts || null });
+  await db.metaSet(CLAVE_CONFLICTOS, lista);
+}
+export async function quitarConflicto(tabla, id, campo) {
+  await db.metaSet(CLAVE_CONFLICTOS, (await listarConflictos()).filter(c => !(c.tabla === tabla && c.id === id && c.campo === campo)));
+  await avisar();
+}
+
+/** Encola una operación. op: 'upsert' | 'delete'. base: el registro antes del cambio. */
+export async function encolar(tabla, op, registro, { base = null } = {}) {
   if (!supabaseConfigurado()) return; // modo dispositivo: no hay servidor al que enviar
+  const reg = op === 'delete' ? { id: registro.id } : structuredClone(registro);
+  if (TABLAS_FUSION.has(tabla) && op === 'upsert') {
+    // Varias ediciones seguidas del mismo registro: una sola operación con la base de la primera
+    // (en su sitio de la cola, para no adelantar lo que depende de ella)
+    const previa = (await db.todos('cola')).find(i => i.tabla === tabla && i.op === 'upsert' && i.id === registro.id);
+    if (previa) {
+      await db.guardar('cola', { ...previa, registro: reg, intentos: 0, error: null });
+      await avisar();
+      if (navigator.onLine) drenar();
+      return;
+    }
+    // Solo sirve de base una versión que vino del servidor (con su sync_ts)
+    base = base?.sync_ts ? structuredClone(base) : null;
+  } else base = null;
   await db.guardar('cola', {
-    tabla, op, id: registro.id,
-    registro: op === 'delete' ? { id: registro.id } : structuredClone(registro),
+    tabla, op, id: registro.id, registro: reg, base,
     creado: Date.now(), intentos: 0, error: null
   });
   await avisar();
@@ -61,7 +111,46 @@ async function ejecutar(item) {
     if (local) await db.guardar('animales', { ...local, fotos });
   }
   if (item.tabla === 'huevos') { const { apto, ...resto } = reg; reg = resto; } // "apto" es columna generada en el servidor
+  if (TABLAS_FUSION.has(item.tabla)) return enviarFusionando(item, reg);
   return cliente.from(item.tabla).upsert(reg, { onConflict: 'id' });
+}
+
+// Envío con comprobación de cambios ajenos (ver TABLAS_FUSION)
+async function enviarFusionando(item, reg) {
+  const sinMarca = ({ sync_ts, ...resto }) => resto;
+  let servidor = null;
+  if (item.base) {
+    const r = await cliente.from(item.tabla).select('*').eq('id', item.id).maybeSingle();
+    if (r.error) return r;
+    servidor = r.data;
+  }
+  let res, conflictos = [];
+  if (!item.base || !servidor || servidor.sync_ts === item.base.sync_ts) {
+    // Nadie lo ha tocado desde que se editó aquí (o es nuevo): va entero
+    res = await cliente.from(item.tabla).upsert(sinMarca(reg), { onConflict: 'id' }).select().maybeSingle();
+  } else {
+    const f = fusionar(item.base, reg, servidor);
+    conflictos = f.conflictos;
+    res = Object.keys(f.parche).length
+      ? await cliente.from(item.tabla).update({ ...f.parche, updated_at: reg.updated_at }).eq('id', item.id).select().maybeSingle()
+      : { data: servidor, error: null };
+    if (!res.error && conflictos.length) await anotarConflictos(item.tabla, reg, servidor, conflictos);
+  }
+  if (res.error) return res;
+  // Lo que queda en el servidor (con los cambios de los dos) pasa al móvil, si no hay
+  // otra edición de este registro esperando en la cola
+  const fila = res.data;
+  if (fila) {
+    const pendiente = (await db.todos('cola')).find(i => i.n !== item.n && i.tabla === item.tabla && i.id === item.id);
+    const actual = (await db.todos('cola')).find(i => i.n === item.n);
+    if (!pendiente && (!actual || igual(actual.registro, item.registro))) await db.guardar(item.tabla, fila);
+    else if (actual && !igual(actual.registro, item.registro)) {
+      // Se editó otra vez mientras se enviaba: la siguiente vuelta parte de lo que hay ahora en el servidor
+      await db.guardar('cola', { ...actual, base: fila });
+      return { error: null, reintentar: true };
+    }
+  }
+  return { error: null, conflictos };
 }
 
 /** Drena la cola en orden FIFO. Devuelve { ok, fallidos }. */
@@ -73,12 +162,14 @@ export function drenar() {
     if (!data?.session) return { ok: 0, fallidos: 0, omitido: true };
     let ok = 0;
     let fallidos = 0;
+    let nuevosConflictos = 0;
     const cola = (await db.todos('cola')).sort((a, b) => a.n - b.n);
     for (const item of cola) {
       try {
         const res = await ejecutar(item);
         if (res?.error) throw res.error;
-        await db.borrar('cola', item.n);
+        if (res?.conflictos?.length) nuevosConflictos += res.conflictos.length;
+        if (!res?.reintentar) await db.borrar('cola', item.n);
         ok++;
       } catch (e) {
         fallidos++;
@@ -88,7 +179,8 @@ export function drenar() {
       }
     }
     await avisar();
-    return { ok, fallidos };
+    if (nuevosConflictos) oyentesConflicto.forEach(fn => fn(nuevosConflictos));
+    return { ok, fallidos, conflictos: nuevosConflictos };
   })().finally(() => { enCurso = null; });
   return enCurso;
 }

@@ -192,7 +192,7 @@ export async function guardarAnimal(datos) {
   const errores = validarAnimal(a, { esNuevo: !previo });
   if (errores.length) throw new Error(errores.join('\n'));
   await db.guardar('animales', a);
-  await sync.encolar('animales', 'upsert', a);
+  await sync.encolar('animales', 'upsert', a, { base: previo });
   await cargar();
   return a;
 }
@@ -209,7 +209,7 @@ export async function cambiarTitular(animalId, perfilId) {
     rega: nuevo.rega || null, municipio: nuevo.municipio || null, provincia: nuevo.provincia || null,
     latitud: nuevo.latitud ?? null, longitud: nuevo.longitud ?? null, updated_at: new Date().toISOString() };
   await db.guardar('animales', r);
-  await sync.encolar('animales', 'upsert', r);
+  await sync.encolar('animales', 'upsert', r, { base: a });
   await cargar();
   return r;
 }
@@ -247,7 +247,7 @@ export async function inscribirSeccionBase(animalId, seccion, motivo) {
   const ahora = new Date().toISOString();
   const r = { ...a, seccion, notas: [a.notas, `${ahora.slice(0, 10)} · ${seccion}: ${String(motivo).trim()}`].filter(Boolean).join('\n'), updated_at: ahora };
   await db.guardar('animales', r);
-  await sync.encolar('animales', 'upsert', r);
+  await sync.encolar('animales', 'upsert', r, { base: a });
   await cargar();
   return r;
 }
@@ -257,7 +257,7 @@ export async function darDeBaja(id, causa, fechaBaja) {
   if (!puedeEditar(a)) throw new Error('Solo el titular puede dar de baja este ejemplar.');
   const nuevo = { ...a, estado: 'baja', baja_causa: causa, baja_fecha: fechaBaja, updated_at: new Date().toISOString() };
   await db.guardar('animales', nuevo);
-  await sync.encolar('animales', 'upsert', nuevo);
+  await sync.encolar('animales', 'upsert', nuevo, { base: a });
   await cargar();
 }
 
@@ -648,7 +648,7 @@ export async function inscribirRM(animalId, { via = 'requisitos', motivo = '' } 
   const nuevo = { ...a, seccion: 'RM', rm_origen: a.seccion, rm_fecha: ahora.slice(0, 10), rm_via: via,
     rm_motivo: via === 'premio' ? String(motivo).trim() : `${m.mejorPuntos} puntos · ${m.hijosRD} descendientes en RD`, updated_at: ahora };
   await db.guardar('animales', nuevo);
-  await sync.encolar('animales', 'upsert', nuevo);
+  await sync.encolar('animales', 'upsert', nuevo, { base: a });
   await cargar();
   return nuevo;
 }
@@ -1110,7 +1110,7 @@ export async function atenderSolicitud(id, { estado: nuevo, fecha_visita, respue
     respuesta: respuesta !== undefined ? String(respuesta || '').trim().slice(0, 500) || null : s.respuesta,
     ...(auditor ? { inspector_id: p.id, inspector_nombre: p.nombre || p.email } : {}) };
   await db.guardar('solicitudes', r);
-  await sync.encolar('solicitudes', 'upsert', r);
+  await sync.encolar('solicitudes', 'upsert', r, { base: s });
   await cargar();
   return r;
 }
@@ -1233,6 +1233,39 @@ const NOMBRES_CAMPO = {
   notas: 'notas', rm_fecha: 'Registro de Méritos', rm_via: 'Registro de Méritos', rm_motivo: 'Registro de Méritos', rm_origen: 'Registro de Méritos'
 };
 const IGNORAR = new Set(['updated_at', 'sync_ts', 'created_at', 'fotos', 'fotos_fecha']);
+
+// ---------------------------------------------------------------------------
+// Conflictos: el mismo dato cambiado aquí y en el servidor a la vez (ver sync.fusionar)
+// ---------------------------------------------------------------------------
+export const nombreCampo = (k) => NOMBRES_CAMPO[k] || ({ estado: 'estado', fecha_visita: 'fecha de la visita', respuesta: 'respuesta', telefono: 'teléfono', horario: 'horario' }[k]) || k.replace(/_/g, ' ');
+export function valorLegible(campo, v) {
+  if (v === null || v === undefined || v === '') return '(vacío)';
+  if (campo === 'fotos') return `${Object.values(v || {}).filter(Boolean).length} foto(s)`;
+  if (/_id$/.test(campo)) return animal(v)?.anilla || estado.perfiles.find(p => p.id === v)?.nombre || 'otro registro';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+export async function conflictos() {
+  return (await sync.listarConflictos()).map(c => {
+    const reg = c.tabla === 'animales' ? animal(c.id) : estado.solicitudes.find(x => x.id === c.id);
+    return { ...c, nombre: nombreCampo(c.campo), que: c.tabla === 'animales' ? (reg ? `Ejemplar ${reg.anilla}` : 'Ejemplar') : 'Solicitud de inspección',
+      enlace: c.tabla === 'animales' && reg ? `#/animal/${c.id}` : null, mioTexto: valorLegible(c.campo, c.mio), servidorTexto: valorLegible(c.campo, c.servidor), existe: Boolean(reg) };
+  });
+}
+// eleccion: 'servidor' (se queda lo que ya hay) | 'mio' (se vuelve a enviar el valor de este móvil)
+export async function resolverConflicto(c, eleccion) {
+  if (eleccion === 'mio') {
+    const store = c.tabla;
+    const actual = await db.obtener(store, c.id);
+    if (!actual) throw new Error('El registro ya no está en este móvil.');
+    if (store === 'animales' && !puedeEditar(actual)) throw new Error('No puedes modificar este ejemplar.');
+    const r = { ...actual, [c.campo]: c.mio, updated_at: new Date().toISOString() };
+    await db.guardar(store, r);
+    await sync.encolar(store, 'upsert', r, { base: actual });
+  }
+  await sync.quitarConflicto(c.tabla, c.id, c.campo);
+  await cargar();
+}
 
 export function cambiosHistorial(e) {
   if (e.operacion !== 'UPDATE' || !e.antes || !e.despues) return [];

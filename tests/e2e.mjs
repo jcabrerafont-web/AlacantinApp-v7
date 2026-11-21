@@ -834,7 +834,8 @@ const res = await page.evaluate(async () => {
   const fake = {
     auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
     storage: { from: () => ({ upload: async () => ({ error: null }), getPublicUrl: () => ({ data: { publicUrl: 'https://x.supabase.co/f.webp' } }) }) },
-    from: () => ({ upsert: async () => (++llamadas === 1 ? { error: { message: 'fallo simulado' } } : { error: null }), delete: () => ({ eq: async () => ({ error: null }) }) })
+    from: () => ({ upsert: () => { const r = ++llamadas === 1 ? { error: { message: 'fallo simulado' } } : { data: null, error: null }; const p = Promise.resolve(r); p.select = () => ({ maybeSingle: async () => r }); return p; },
+      delete: () => ({ eq: async () => ({ error: null }) }) })
   };
   sync.usarCliente(fake);
   // En modo dispositivo no se encola nada: se insertan operaciones como lo haría encolar() con servidor
@@ -853,6 +854,51 @@ const res = await page.evaluate(async () => {
 });
 ok(res.antes > 0 && res.tras1 === 1 && res.errorGuardado === 'fallo simulado' && res.tras2 === 0,
   `Cola: ${res.antes} pendientes → 1 retenida con error tras el fallo → 0 al reintentar`);
+
+// 7a. Dos personas cambian la misma ficha sin cobertura: se juntan los cambios y el mismo dato no se pisa
+const fusion = await page.evaluate(async () => {
+  const sync = await import('./js/sync.js'); const db = await import('./js/db.js'); const d = await import('./js/datos.js');
+  // Función pura
+  const f = sync.fusionar({ a: 1, b: 1, c: 1, sync_ts: 't1' }, { a: 2, b: 1, c: 5, sync_ts: 't1' }, { a: 1, b: 3, c: 7, sync_ts: 't2' });
+  const g = (await db.todos('animales')).find(x => x.sexo === 'M' && x.estado !== 'baja');
+  const base = { ...g, familia: 'A', peso_g: 2500, seccion: 'RD', sync_ts: '2026-11-21T10:00:00Z' };
+  const servidor = { ...base, seccion: 'RM', peso_g: 2600, updated_at: '2026-11-21T11:00:00Z', sync_ts: '2026-11-21T11:00:01Z' };   // la administración
+  const local = { ...base, familia: 'B', peso_g: 2700, updated_at: '2026-11-21T12:00:00Z' };                                          // el criador, sin cobertura
+  await db.guardar('animales', local);
+  const llamadas = [];
+  const fake = {
+    auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
+    from: (t) => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: servidor, error: null }) }) }),
+      update: (parche) => ({ eq: () => ({ select: () => ({ maybeSingle: async () => { llamadas.push(['update', parche]); Object.assign(servidor, parche, { sync_ts: '2026-11-21T12:30:00Z' }); return { data: { ...servidor }, error: null }; } }) }) }),
+      upsert: (r) => { llamadas.push(['upsert', r]); const p = Promise.resolve({ error: null }); p.select = () => ({ maybeSingle: async () => ({ data: r, error: null }) }); return p; }
+    })
+  };
+  sync.usarCliente(fake);
+  for (const i of await db.todos('cola')) await db.borrar('cola', i.n);
+  await db.guardar('cola', { tabla: 'animales', op: 'upsert', id: g.id, registro: local, base, creado: Date.now(), intentos: 0, error: null });
+  const r = await sync.drenar();
+  const enMovil = await db.obtener('animales', g.id);
+  await d.cargar();
+  const conf = await d.conflictos();
+  sync.usarCliente(null);
+  return { f, r, llamadas, enMovil: { seccion: enMovil.seccion, familia: enMovil.familia, peso: enMovil.peso_g }, conf: conf.map(c => [c.campo, c.mioTexto, c.servidorTexto]), id: g.id, anilla: g.anilla };
+});
+ok(JSON.stringify(fusion.f) === JSON.stringify({ parche: { a: 2 }, conflictos: ['c'] }), `Fusión: lo cambiado solo aquí se envía y lo cambiado en los dos sitios es conflicto (${JSON.stringify(fusion.f)})`);
+ok(fusion.llamadas.length === 1 && fusion.llamadas[0][0] === 'update' && JSON.stringify(Object.keys(fusion.llamadas[0][1]).sort()) === JSON.stringify(['familia', 'updated_at']),
+  `Edición a la vez: solo se sube la familia (cambiada aquí), no la ficha entera (${JSON.stringify(fusion.llamadas.map(x => [x[0], Object.keys(x[1])]))})`);
+ok(fusion.enMovil.seccion === 'RM' && fusion.enMovil.familia === 'B' && fusion.enMovil.peso === 2600, `Edición a la vez: no se pierde el Registro de Méritos de la administración y llega al móvil (${JSON.stringify(fusion.enMovil)})`);
+ok(fusion.r.conflictos === 1 && JSON.stringify(fusion.conf) === JSON.stringify([['peso_g', '2700', '2600']]), `Edición a la vez: el peso, cambiado por los dos, queda como conflicto (${JSON.stringify(fusion.conf)})`);
+await ir('#/sincronizacion');
+{ const t = await page.innerText('#s-conflictos');
+  ok(t.includes(fusion.anilla) && t.includes('peso') && t.includes('2700') && t.includes('2600'), 'Sincronización: muestra el conflicto con los dos valores');
+  ok((await aviso()).includes('Otra persona cambió lo mismo que tú') && (await page.innerText('#aviso')).includes('Revisar'), 'Aviso al sincronizar: otra persona cambió lo mismo, con botón «Revisar»');
+  await page.waitForFunction(() => !document.querySelector('#aviso.visible'), null, { timeout: 9000 });
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/conflicto.png`, fullPage: true });
+  await page.click('[data-eleccion="mio"]');
+  await page.waitForTimeout(300);
+  const tras = await page.evaluate(async (id) => { const d = await import('./js/datos.js'); return { peso: d.animal(id).peso_g, n: (await d.conflictos()).length }; }, fusion.id);
+  ok(tras.peso === 2700 && tras.n === 0 && !(await page.$('#s-conflictos')), `Sincronización: «Usar el mío» deja el valor de este móvil y quita el conflicto (${JSON.stringify(tras)})`); }
 
 // 7b. Descarga paginada e incremental (servidor simulado con 2.500 aves ajenas y un borrado)
 const bajada = await page.evaluate(async () => {

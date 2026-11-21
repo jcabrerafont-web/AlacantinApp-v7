@@ -248,6 +248,7 @@ async function arrancar() {
   }
 
   sync.alCambiar(n => { datos.estado.pendientes = n; pintarCabecera(); });
+  sync.alConflicto(n => aviso(`Otra persona cambió lo mismo que tú en ${n} dato(s). Elige con qué valor te quedas.`, 'error', { accion: { texto: 'Revisar', fn: () => { location.hash = '#/sincronizacion'; } } }));
   datos.suscribir(pintarCabecera);
   datos.suscribir(pintarInsignia);
   const alRed = () => {

@@ -10,6 +10,7 @@ const NOMBRES = { animales: 'Ejemplar', huevos: 'Huevo', calificaciones: 'Califi
 export default async function (main) {
   const dibujar = async () => {
     const cola = await sync.listarCola();
+    const conf = await datos.conflictos();
     const uid = datos.estado.perfil?.id;
     const ultima = await sync.ultimaDescarga(uid);
     const puede = navigator.onLine && obtenerCliente();
@@ -22,6 +23,15 @@ export default async function (main) {
         <button class="btn btn-primario" id="s-ahora" ${!puede ? h`disabled` : ''}>Sincronizar ahora</button>
       </div>
       ${supabaseConfigurado() ? h`<p class="peq muted">Última descarga del Libro: ${ultima ? new Date(ultima).toLocaleString('es-ES') : 'ninguna'}. Solo se descarga lo que ha cambiado, por páginas, para gastar pocos datos.</p>` : ''}
+      ${conf.length ? h`<div class="tarjeta" id="s-conflictos"><h2>Cambiado por dos personas a la vez (${conf.length})</h2>
+        <p class="peq">Este dato se cambió aquí y, mientras tanto, otra persona lo cambió en el Libro central. Los demás cambios se han juntado solos; aquí tienes que elegir.</p>
+        <ul class="lista">${conf.map((c, i) => h`<li class="item conflicto"><div class="item-principal">
+          <div class="item-titulo">${c.enlace ? h`<a href="${c.enlace}">${c.que}</a>` : c.que} · ${c.nombre}</div>
+          <div class="item-sub">En este móvil: <strong>${c.mioTexto}</strong> · En el Libro: <strong>${c.servidorTexto}</strong>${c.servidorFecha ? ` (cambiado el ${new Date(c.servidorFecha).toLocaleString('es-ES')})` : ''}</div>
+          <div class="fila" style="margin-top:.35rem">
+            <button class="btn btn-pequeno" data-conf="${i}" data-eleccion="servidor">Dejar «${c.servidorTexto}»</button>
+            ${c.existe ? h`<button class="btn btn-pequeno" data-conf="${i}" data-eleccion="mio">Usar «${c.mioTexto}»</button>` : ''}
+          </div></div></li>`)}</ul></div>` : ''}
       ${cola.length ? h`<div class="tarjeta"><ul class="lista">${cola.map(i => h`<li class="item"><div class="item-principal">
         <div class="item-titulo">${NOMBRES[i.tabla] || i.tabla} · ${i.op === 'delete' ? 'borrado' : (i.registro.anilla || i.registro.fecha || '')}</div>
         <div class="item-sub">${new Date(i.creado).toLocaleString('es-ES')}${i.intentos ? ` · ${i.intentos} intento(s)` : ''}</div>
@@ -29,12 +39,20 @@ export default async function (main) {
         : h`<p class="muted">Todo está sincronizado.</p>`}
       ${supabaseConfigurado() ? h`<div class="tarjeta"><p class="peq">Si sospechas que falta algo en este móvil, puedes volver a descargar todo el Libro (gasta más datos).</p>
         <button class="btn" id="s-todo" ${!puede ? h`disabled` : ''}>Volver a descargar todo</button></div>` : ''}`);
+    main.querySelectorAll('[data-conf]').forEach(b => b.addEventListener('click', async () => {
+      const c = conf[Number(b.dataset.conf)];
+      try {
+        await datos.resolverConflicto(c, b.dataset.eleccion);
+        aviso(b.dataset.eleccion === 'mio' ? `Se envía «${c.mioTexto}» al Libro.` : `Se queda «${c.servidorTexto}».`, 'ok');
+      } catch (e) { aviso(e.message, 'error'); }
+      dibujar();
+    }));
     $('#s-ahora', main)?.addEventListener('click', async () => {
       const r = await sync.drenar();
       let bajadas = '';
       try { const d = await sync.descargar(uid); if (d) bajadas = ` · Recibidas: ${d.filas}${d.borradas ? ` · Borradas: ${d.borradas}` : ''}`; }
       catch (e) { aviso(`No se pudo descargar: ${e.message}`, 'error'); }
-      aviso(r.omitido ? 'Inicia sesión con conexión para sincronizar.' : `Enviadas: ${r.ok} · Con error: ${r.fallidos}${bajadas}`, r.fallidos ? 'error' : 'ok');
+      if (!r.conflictos) aviso(r.omitido ? 'Inicia sesión con conexión para sincronizar.' : `Enviadas: ${r.ok} · Con error: ${r.fallidos}${bajadas}`, r.fallidos ? 'error' : 'ok');
       await datos.cargar();
       dibujar();
     });
