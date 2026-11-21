@@ -286,6 +286,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .doc-pantalla h2 { font-size: 1rem; margin-top: 1rem; }
 .doc-pantalla table { width: 100%; margin-bottom: .5rem; } .doc-pantalla td, .doc-pantalla th { border-bottom: 1px solid #e2e8f0; padding: .25rem .35rem; text-align: left; }
 .doc-pantalla .doc-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; } .doc-pantalla .doc-firmas div { border-top: 1px solid #000; padding-top: .25rem; font-size: .8rem; }
+.a-decidir { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fef3c7; color: #78350f; padding: 0 .2em; border-radius: 3px; font-weight: 600; }
+.doc-aviso { border-left: 3px solid #1e40af; padding: .35rem .6rem; background: #eff6ff; font-size: .85rem; }
 .doc-pantalla .doc-pie, .doc-nota { font-size: .75rem; color: #475569; }
 .doc-col2 { display: grid; grid-template-columns: 1fr; gap: .5rem; }
 @media (min-width: 700px) { .doc-col2 { grid-template-columns: 1fr 1fr; } }

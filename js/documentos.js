@@ -176,3 +176,111 @@ export function plantillaActaAnual(r) {
     <p class="doc-pie">Datos del Libro Genealógico gestionado con AlacantinApp ${libro ? '(todas las explotaciones)' : '(aviario del titular)'}. Base normativa: RD 45/2019, arts. 14 y 26; Protocolo CNZ de 5/6/2025, apdo. 3.1 f, j y l (censos, criadores, Ne y endogamia). El código de referencia cambia si cambia cualquier dato del acta.</p>`;
 }
 export const actaAnual = (r) => imprimir(plantillaActaAnual(r));
+
+// ---------------------------------------------------------------------------
+// Propuesta de programa de cría (borrador). Protocolo CNZ 2025, apdo. 3.1 n.
+// Sigue el contenido del anexo I, parte 2, punto 1 del Reglamento (UE) 2016/1012,
+// aplicado a las aves por el art. 26 del RD 45/2019. Las cifras y reglas salen de
+// estandar.js y del Libro; lo que solo puede decidir el Club va marcado.
+// ---------------------------------------------------------------------------
+export function plantillaProgramaCria(d) {
+  const R = REGLAS, E = ESTANDAR, CP = REGLAS.controlPuesta, RP = REGLAS.reproduccion;
+  const n = (x, dec = 0) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : x.toFixed(dec).replace('.', ','));
+  const decidir = (texto) => h`<span class="a-decidir">A decidir por el Club: ${texto}</span>`;
+  const r = d.resumen, g = r.genetica;
+  const oficiales = E.variedades.filter(v => v.oficial), enProceso = E.variedades.filter(v => !v.oficial);
+  const ref = `PC-${E.codigo}-${huella(JSON.stringify([r.corte, r.censo.total, g.nm, g.nf, d.calif.n, d.puesta.length]))}`;
+  return h`
+    ${cabecera('Propuesta de programa de cría de la raza Alacantina', ref)}
+    <p class="doc-aviso"><strong>Borrador de trabajo</strong> generado por AlacantinApp con las reglas que la app aplica y los datos del Libro a ${fecha(r.corte)}. Lo revisan y completan la Junta y la Dirección Técnica; lo aprueba la autoridad competente (RD 45/2019, arts. 8 y 9). Estructura del anexo I, parte 2, punto 1 del Reglamento (UE) 2016/1012, aplicado a las aves por el art. 26 del RD 45/2019.</p>
+
+    <h2>1. Finalidad del programa</h2>
+    <p><strong>Conservación de la raza</strong>, con mejora de los caracteres del Estándar y de la aptitud de puesta sin perder variabilidad genética. Se propone programa de <em>conservación</em> porque el censo es pequeño (ver apartado 11) y la prioridad es mantener el tamaño efectivo y frenar la consanguinidad.</p>
+    <p>${decidir('confirmar la finalidad (conservación, o conservación y mejora).')}</p>
+
+    <h2>2. Nombre de la raza</h2>
+    <p><strong>Alacantina</strong> (gallina alacantina), raza aviar autóctona de origen ${E.origen}. Estándar oficial <strong>${E.codigo}</strong>, revisión de ${E.revision}.</p>
+    <p>Variedades del Estándar: ${oficiales.map(v => v.nombre).join(', ')}. En proceso de reconocimiento, con registro y seguimiento genealógico pero sin acceso al Registro Definitivo ni al de Méritos: ${enProceso.map(v => v.nombre).join(' y ')}.</p>
+
+    <h2>3. Características de la raza y rasgos esenciales</h2>
+    <p>${E.impresionGeneral}</p>
+    <ul>
+      <li><strong>Peso:</strong> gallo ${kg(E.peso.M.min)}–${kg(E.peso.M.max)}; gallina ${kg(E.peso.H.min)}–${kg(E.peso.H.max)}.</li>
+      <li><strong>Huevo:</strong> cáscara ${E.huevo.cascara.toLowerCase()}, mínimo ${E.huevo.min} g, habitual ${E.huevo.min}–${E.huevo.habitualMax} g.</li>
+      <li><strong>Defectos graves (descalifican):</strong> ${E.defectosGraves.map(x => x.texto.toLowerCase()).join('; ')}.</li>
+    </ul>
+    <p>La descripción completa por regiones y variedades es la del Estándar ${E.codigo}, que se adjunta como anexo.</p>
+
+    <h2>4. Territorio</h2>
+    <p>Explotaciones de los socios en España. Hoy hay ejemplares en ${d.provincias.length} provincia(s)${d.provincias.length ? h`: ${d.provincias.map(([p, x]) => `${p} (${x})`).join(', ')}` : ''}; ${r.territorio.municipios.length} municipio(s) y ${r.territorio.explotaciones} explotación(es) con REGA.</p>
+    <p>${decidir('ámbito del programa y autoridad que lo aprueba: la comunidad autónoma con más reproductoras o, si el censo está repartido en tres o más y ninguna supera el 60 %, el Ministerio (RD 45/2019, art. 9).')}</p>
+
+    <h2>5. Identificación de los animales</h2>
+    <p>Cada reproductor lleva <strong>anilla cerrada</strong> de la Entente Europea suministrada por FESACOCUR, colocada al pollito: ${E.anilla.M} mm el gallo y ${E.anilla.H} mm la gallina. El código (E + año + diámetro + número) es único en el Libro; la app lo compone, lo valida y rechaza duplicados. Solo se inscriben animales anillados, criados en una explotación con su <strong>REGA</strong>, que es la identificación que exige la sanidad animal en las aves.</p>
+
+    <h2>6. Registro de las genealogías</h2>
+    <ul>
+      <li>Cada alta anota padre y madre, que deben ser un gallo y una gallina inscritos y nacidos antes; la app impide ciclos y filiaciones imposibles.</li>
+      <li>La paternidad se asegura con <strong>lotes de reproducción</strong> (un gallo con ${RP.gallinasPorGallo[0]}–${RP.gallinasPorGallo[1]} gallinas, con fecha de inicio) y una espera de ${RP.diasEsperaCambioGallo} días tras cambiar de gallo; la maternidad, con huevos identificados por gallina e incubados por separado desde el día ${RP.nacedora}.</li>
+      <li>El Libro se guarda en una base de datos con historial de cambios (quién, cuándo y qué), copias completas y auditoría de coherencia.</li>
+    </ul>
+
+    <h2>7. Objetivos de selección y de cría</h2>
+    <h3>Conservación</h3>
+    <ul>
+      <li><strong>Cría en familias</strong> (${E.familias.join(', ')}) con reposición de Gobe: de cada gallo se queda un hijo y de cada gallina una hija. El gallo nuevo sigue en la familia de su padre; las pollitas pasan a la siguiente, en círculo.</li>
+      <li><strong>Consanguinidad</strong> de Wright a ${R.generacionesWright} generaciones en cada apareamiento: precaución desde ${n(R.fxPrecaucion * 100, 2)} % y alerta desde ${n(R.fxAlerta * 100, 1)} %.</li>
+      <li>Seguimiento anual del <strong>tamaño efectivo</strong> (Ne demográfico y realizado) y de la consanguinidad media.</li>
+      <li>Variedades como subpoblaciones cerradas: pureza de variedad a ${R.generacionesVariedad} generaciones.</li>
+    </ul>
+    <h3>Selección</h3>
+    <ul>
+      <li><strong>Morfología:</strong> calificación sobre 100 puntos en las 12 regiones del Estándar (${BAREMO.apartados.map(a => `${a.nombre.toLowerCase()} ${a.max}`).join(', ')}). Apto sin defectos graves y con ${R.puntosMinimosApto.H} puntos las gallinas y ${R.puntosMinimosApto.M} los gallos. Clases: ${BAREMO.clases.map(c => `${c.nombre} desde ${c.min}`).join(', ')}.</li>
+      <li><strong>Puesta:</strong> dentro de cada familia, la madre del gallo de reposición es la gallina con más <em>masa de huevo</em> (porcentaje de puesta × peso medio), para no premiar solo la cantidad ni solo el tamaño.</li>
+      <li><strong>Huevo para incubar:</strong> desde ${E.huevo.min} g y cáscara ${E.huevo.cascara.toLowerCase()}.</li>
+    </ul>
+    <p>${decidir(`ratificar el baremo (hoy «${BAREMO.estado}») y los mínimos de puntuación.`)}</p>
+
+    <h2>8. Control de rendimientos y evaluación genética</h2>
+    <p><strong>Control de puesta</strong> en ${CP.ciclos} campañas por temporada de ${CP.dias} días, entre febrero y junio, con cada huevo pesado y asignado a su gallina (jaula individual, ponedero trampa o RFID). Por gallina se calculan los huevos, el porcentaje de puesta, el peso medio (fiable desde ${CP.minHuevosPeso} huevos), la masa de huevo y los huevos aptos. También se anotan la fertilidad (miraje del día ${RP.miraje}) y el nacimiento (día ${RP.eclosion}) de cada madre.</p>
+    <p>No se prevé evaluación genética (BLUP ni genómica): la selección se hace sobre el fenotipo propio y la familia.</p>
+
+    <h2>9. Estructura del Libro Genealógico</h2>
+    <ul>
+      <li><strong>RF · ${E.secciones.RF}:</strong> animales con los que arranca el Libro. Los asigna la Dirección Técnica, con motivo anotado.</li>
+      <li><strong>RA · ${E.secciones.RA}:</strong> animales de buena morfología sin genealogía completa. Los asigna la Dirección Técnica.</li>
+      <li><strong>RN · ${E.secciones.RN}:</strong> pollitos anillados con padre y madre conocidos.</li>
+      <li><strong>RD · ${E.secciones.RD}</strong> (sección principal): animal Apto, de variedad del Estándar, con ${R.edadMinimaRD_meses} meses cumplidos, padre y madre inscritos y explotación con REGA.</li>
+      <li><strong>RM · ${E.secciones.RM}:</strong> reproductores del RF o el RD con al menos ${R.rm.H.puntos} puntos y ${R.rm.H.hijosRD} hijos en el RD (gallinas) o ${R.rm.M.puntos} puntos y ${R.rm.M.hijosRD} hijos (gallos), o con premio en exposición y la misma puntuación. Lo acuerda la administración del Libro.</li>
+    </ul>
+
+    <h2>10. Actividades encargadas a terceros</h2>
+    <ul>
+      <li>Anillas: FESACOCUR.</li>
+      <li>Gestión informática del Libro: AlacantinApp, del Club; los datos se guardan en servidores de la Unión Europea (Frankfurt).</li>
+      <li>${decidir('entidad científica que avale el programa y, si se hacen, laboratorio de ADN y banco de germoplasma.')}</li>
+    </ul>
+
+    <h2>11. Datos y resultados</h2>
+    <p>Libro a ${fecha(r.corte)}${r.enCurso ? ' (año en curso)' : ''}.</p>
+    <table><tbody>
+      <tr><th>Censo vivo</th><td class="num">${r.censo.total} (${r.censo.M} gallos, ${r.censo.H} gallinas)</td></tr>
+      <tr><th>Por sección</th><td class="num">${r.censo.secciones.filter(s => s.total).map(s => `${s.id} ${s.total}`).join(' · ') || '—'}</td></tr>
+      <tr><th>Criadores · explotaciones con REGA</th><td class="num">${r.territorio.titulares} · ${r.territorio.explotaciones}</td></tr>
+      <tr><th>Reproductores adultos ♂ / ♀</th><td class="num">${g.nm} / ${g.nf}</td></tr>
+      <tr><th>Ne demográfico · Ne realizado</th><td class="num">${n(g.neDem, 1)} · ${g.neReal ? n(g.neReal.ne, 1) : '—'}</td></tr>
+      <tr><th>Consanguinidad media</th><td class="num">${g.fxMedio == null ? '—' : pct(g.fxMedio, 2)}</td></tr>
+      <tr><th>Con padre y madre registrados</th><td class="num">${g.conPadres == null ? '—' : pct(g.conPadres, 0)}</td></tr>
+      <tr><th>Calificaciones (todas) · aptas · media</th><td class="num">${d.calif.n} · ${d.calif.aptos} · ${n(d.calif.media, 1)} puntos</td></tr>
+      ${d.situacion ? h`<tr><th>Situación (criterios CNZ para aves)</th><td class="num">${d.situacion.amenazada ? `amenazada, grado ${d.situacion.grado}` : 'no amenazada'}</td></tr>` : ''}
+    </tbody></table>
+    ${d.evolucion.length ? h`<h3>Evolución del censo</h3><table><thead><tr><th>Año</th><th class="num">Censo</th><th class="num">Nacidos</th><th class="num">Bajas</th><th class="num">Ne</th><th class="num">Fx medio</th></tr></thead><tbody>
+      ${d.evolucion.map(f => h`<tr><td>${f.anio}${f.enCurso ? '*' : ''}</td><td class="num">${f.total}</td><td class="num">${f.nacidos}</td><td class="num">${f.bajas}</td><td class="num">${n(f.neDem, 1)}</td><td class="num">${f.fxMedio == null ? '—' : pct(f.fxMedio, 2)}</td></tr>`)}</tbody></table>` : ''}
+    ${d.puesta.length ? h`<h3>Puesta</h3><table><thead><tr><th>Año</th><th class="num">Gallinas controladas</th><th class="num">Puesta</th><th class="num">Huevos pesados</th><th class="num">Peso medio</th><th class="num">Aptos</th></tr></thead><tbody>
+      ${d.puesta.map(f => h`<tr><td>${f.anio}${f.enCurso ? '*' : ''}</td><td class="num">${f.gallinas}</td><td class="num">${f.puesta == null ? '—' : pct(f.puesta, 0)}</td><td class="num">${f.peso.n}</td><td class="num">${f.peso.media == null ? '—' : `${n(f.peso.media, 1)} g`}</td><td class="num">${f.aptos == null ? '—' : pct(f.aptos, 0)}</td></tr>`)}</tbody></table>` : ''}
+    ${d.evolucion.some(f => f.enCurso) || d.puesta.some(f => f.enCurso) ? h`<p class="peq">* Año en curso.</p>` : ''}
+
+    <h2>Anexos</h2>
+    <ul><li>Estándar oficial ${E.codigo} (rev. ${E.revision}).</li><li>Reglamento interno del Libro y baremo de calificación.</li><li>Matriz de pedigrí (CSV) e informes de censo, de la app.</li></ul>`;
+}
+export const programaCria = (d) => imprimir(plantillaProgramaCria(d));

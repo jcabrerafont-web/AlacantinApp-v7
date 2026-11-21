@@ -373,6 +373,15 @@ await ir('#/informes');
     `Informes: situación poblacional con los criterios CNZ para aves (${sp.anios.join('–')}: amenazada, grado ${sp.grado})`);
   await ir('#/admin/expediente');
   ok((await page.innerText('#exp-g')).includes('Cubierto') && (await page.innerText('#exp-g')).includes('grado alto'), 'Expediente: el apartado g) pasa a cubierto con el resultado'); }
+await ir('#/admin/programa');
+{ const t = await page.innerText('#programa-cria');
+  const hs = await page.$$eval('#programa-cria h2', l => l.map(x => x.textContent.trim()));
+  ok(hs.includes('1. Finalidad del programa') && hs.includes('11. Datos y resultados') && t.includes('65 puntos las gallinas y 70 los gallos') && t.includes('3 campañas por temporada de 15 días')
+    && (await page.$$('#programa-cria .a-decidir')).length >= 4 && /amenazada, grado alto/.test(t),
+    `Programa de cría (borrador): estructura del Reg. (UE) 2016/1012, reglas de la app, datos del Libro y lo que decide el Club (${hs.length} apartados)`);
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/programa-cria.png`, fullPage: true });
+  await ir('#/admin/expediente');
+  ok((await page.$('#exp-n a[href="#/admin/programa"]')) !== null, 'Expediente: el apartado n) enlaza al borrador'); }
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });

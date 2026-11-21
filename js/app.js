@@ -50,7 +50,8 @@ const RUTAS = [
   ['admin/supabase', 'adminsupabase', ['administrador']],
   ['admin/historial', 'adminhistorial', ['administrador']],
   ['mapa', 'mapa', ['inspector', 'administrador']],
-  ['admin/expediente', 'adminexpediente', ['administrador']]
+  ['admin/expediente', 'adminexpediente', ['administrador']],
+  ['admin/programa', 'adminprograma', ['administrador']]
 ];
 
 // Barra inferior: visitante 3 columnas; usuarios registrados 4 columnas.

@@ -35,7 +35,7 @@ function apartados() {
     ['k', 'Utilización sostenible de la raza', 'club', 'Plan del Club: usos (huevo, exposición, conservación), difusión y relevo de criadores.', []],
     ['l', 'Asociación de criadores y número de criadores', 'cubierto', `Asociación Club Gallina Alacantina; ${datos.estado.perfiles.length} usuario(s), ${criadores} con ejemplares.`, [['#/usuarios', 'Usuarios'], ['#/conoce?s=club', 'El Club']]],
     ['m', 'Material genético almacenado (banco de germoplasma)', 'pendiente', 'Inventario de muestras (semen, etc.) cuando las haya. Hoy no hay muestras.', []],
-    ['n', 'Propuesta de programa de cría, con datos y resultados', 'pendiente', 'Borrador generado por la app con sus reglas (estructura del Libro, calificación, objetivos de conservación) y los resultados reales. Lo redacta y aprueba el Club.', [['#/programa', 'Guía del criador']]]
+    ['n', 'Propuesta de programa de cría, con datos y resultados', 'parte', 'Borrador generado por la app según el Reglamento (UE) 2016/1012 (anexo I, parte 2): finalidad, identificación, genealogías, objetivos, control de puesta y estructura del Libro, con los datos y resultados reales. El Club decide lo marcado y lo aprueba la autoridad competente.', [['#/admin/programa', 'Programa de cría (borrador)'], ['#/programa', 'Guía del criador']]]
   ];
 }
 
