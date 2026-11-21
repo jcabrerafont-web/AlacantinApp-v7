@@ -23,7 +23,10 @@ export default function (main) {
   pintar(main, h`
     <h1>Puesta & RFID</h1>
     <div id="pu-campana"></div>
-    <form id="form-puesta" class="tarjeta" novalidate>
+    ${gallinas().length ? '' : h`<div class="tarjeta" id="pu-vacio"><p style="margin-top:0"><strong>Aún no tienes gallinas en tu censo.</strong></p>
+      <p class="peq">Da de alta tus gallinas y aquí podrás anotar cada huevo con su peso, a mano o leyendo su chip.</p>
+      <a class="btn btn-primario" href="#/alta">${icono('alta')} Dar de alta una gallina</a></div>`}
+    <form id="form-puesta" class="tarjeta" novalidate ${gallinas().length ? '' : h`hidden`}>
       ${conChip() ? h`<div class="campo"><label for="pu-chip">Chip RFID</label>
         <input id="pu-chip" inputmode="numeric" autocomplete="off" placeholder="Leer chip o escribir 15 dígitos">
         <p class="ayuda">Con el lector en modo teclado, acerca la gallina y lee.</p></div>` : ''}

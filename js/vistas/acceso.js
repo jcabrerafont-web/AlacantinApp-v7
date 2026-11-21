@@ -52,6 +52,7 @@ export default function (main) {
         <button class="btn btn-primario btn-bloque" type="submit">Crear cuenta</button>
       </form>
 
+      <p class="aviso-caja info peq" style="margin-top:1rem">¿Eres nuevo? Mira <a href="#/conoce?s=empezar">cómo empezar a criar Alacantinas</a>: el Club, el REGA, las anillas y tus primeros animales.</p>
       <p class="muted peq" style="margin-top:1rem"><a href="#/privacidad">Política de privacidad</a> · ¿Solo quieres consultar? El <a href="#/estandar">Estándar</a>, la <a href="#/guia">Guía de campo</a> y el <a href="#/censo">Censo público</a> están abiertos sin cuenta.</p>
     </div>`);
 

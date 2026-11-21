@@ -301,8 +301,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 @media (max-width: 899px) {
   body.escribiendo .barra { display: none; }
   body.escribiendo .acciones-fijas { bottom: 0; }
-  /* Los mensajes salen arriba: abajo tapaban el campo y el pulgar */
-  .toast { top: calc(env(safe-area-inset-top) + 64px); bottom: auto; transform: translate(-50%, -20px); }
+  /* Escribiendo, o en formularios con botón fijo abajo (alta, puesta…), los mensajes salen arriba:
+     abajo tapaban el campo, el botón y el pulgar. En el resto, abajo, sobre la barra, sin tapar el título. */
+  body.escribiendo .toast, body:has(main .acciones-fijas) .toast { top: calc(env(safe-area-inset-top) + 64px); bottom: auto; transform: translate(-50%, -20px); }
 }
 @media (min-width: 900px) { .acciones-fijas { bottom: 0; } }
 /* Dedos (y guantes): objetivos de 44 px como mínimo */
@@ -356,7 +357,7 @@ body.escribiendo .banner-actualizar { display: none; }
 .tarjeta-hoy .lista { margin-top: .5rem; }
 .lista-pasos { padding-left: 1.3rem; margin: .5rem 0; }
 .lista-pasos li { padding: .35rem 0; }
-.lista-pasos li a { display: inline-block; min-height: 32px; }
+.lista-pasos li a { display: inline-block; min-height: 32px; vertical-align: top; }
 .lista-pasos li.hecho a { color: var(--texto-2); text-decoration: line-through; }
 .pre-informe { white-space: pre-wrap; word-break: break-word; font-size: .78rem; background: var(--fondo); padding: .5rem; border-radius: 8px; max-height: 40vh; overflow: auto; }
 /* Protección de datos */
@@ -473,7 +474,7 @@ details:not(.tarea-guiada) > summary::after {
 }
 details:not(.tarea-guiada)[open] > summary::after { transform: translateY(25%) rotate(-135deg); }
 details:not(.tarjeta):not(.usuario) > summary {
-  display: inline-flex; flex-wrap: wrap; max-width: 100%; min-height: 2.5rem; padding: .3rem .9rem;
+  display: inline-flex; flex-wrap: nowrap; max-width: 100%; min-height: 2.5rem; padding: .3rem .9rem;
   border: 1px solid var(--borde); border-radius: 999px; background: var(--superficie); color: var(--azul-t); font-weight: 600;
 }
 details:not(.tarjeta):not(.usuario) > summary::after { margin-left: .15rem; margin-right: 0; }
@@ -499,3 +500,4 @@ details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offs
 .glosario { margin: 0; }
 .glosario dt { font-weight: 700; margin-top: .6rem; }
 .glosario dd { margin: .1rem 0 0; max-width: 70ch; }
+details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; flex-shrink: 0; }

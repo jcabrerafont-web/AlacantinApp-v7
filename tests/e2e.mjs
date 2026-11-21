@@ -74,6 +74,7 @@ await page.check('#r-acepto');
 await page.click('#form-registro button[type=submit]');
 await page.waitForTimeout(1200);
 ok(page.url().endsWith('#/perfil'), 'Tras registrarse va a Mi aviario');
+ok(await page.isVisible('#pf-rega-como a[href="#/conoce?s=empezar"]'), 'Mi aviario: sin REGA, enlace «¿No tienes REGA? Cómo se pide»');
 ok(await page.$eval('#estado-cola', e => e.classList.contains('oculto')), 'Modo dispositivo: sin contador de cola');
 ok(JSON.stringify(await barra()) === JSON.stringify(['Mi Censo', 'Alta Rápida', 'Puesta & RFID', 'Herramientas']), 'Usuario: barra de 4 columnas');
 await page.fill('#pf-rega', 'ES030140001234');

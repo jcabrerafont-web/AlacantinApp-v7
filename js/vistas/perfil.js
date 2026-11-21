@@ -15,7 +15,8 @@ export default function (main) {
         <div class="campo"><label for="pf-tel">Teléfono</label><input id="pf-tel" type="tel" value="${p.telefono || ''}" autocomplete="tel"></div>
         <div class="campo"><label for="pf-rega">Código REGA</label>
           <input id="pf-rega" value="${p.rega || ''}" placeholder="ES + 12 dígitos" autocapitalize="characters" autocomplete="off">
-          <p class="ayuda" id="pf-rega-ayuda"></p></div>
+          <p class="ayuda" id="pf-rega-ayuda"></p>
+          <p class="ayuda" id="pf-rega-como"><a href="#/conoce?s=empezar">¿No tienes REGA? Cómo se pide →</a></p></div>
         <div class="campo"><label for="pf-socio">Nº de socio del Club</label><input id="pf-socio" value="${p.numero_socio || ''}"></div>
         <div class="campo"><label for="pf-mun">Municipio</label><input id="pf-mun" value="${p.municipio || ''}" autocomplete="address-level2"></div>
         <div class="campo"><label for="pf-prov">Provincia</label><input id="pf-prov" value="${p.provincia || ''}" autocomplete="address-level1"></div>
@@ -53,6 +54,7 @@ Detalle:
     const v = $('#pf-rega', f).value.trim().toUpperCase();
     $('#pf-rega-ayuda', f).textContent = !v ? 'Sin REGA la cuenta es de Aspirante.'
       : auth.regaValido(v) ? '✓ Formato oficial válido' : 'Formato: ES seguido de 12 dígitos';
+    $('#pf-rega-como', f).hidden = auth.regaValido(v);
   };
   $('#pf-rega', f).addEventListener('input', ayudaRega);
   ayudaRega();
