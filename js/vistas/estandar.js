@@ -1,4 +1,5 @@
 import { ESTANDAR } from '../estandar.js';
+import { CONFIG } from '../config.js';
 import { h, html, pintar } from '../ui.js';
 import { icono } from '../iconos.js';
 
@@ -23,6 +24,30 @@ const HISTORIA = [
     'El <strong>8 de marzo de 2025</strong>, el Club se constituyó formalmente como asociación. Hoy lleva el Libro Genealógico con el objetivo de que la raza entre en el Catálogo Oficial de Razas de Ganado de España.'
   ]]
 ];
+
+// El Club: qué es un club de raza, sus fines y por qué asociarse. Texto aprobado por el
+// Club el 21/11/2026 (con el enfoque de los clubes de raza alemanes y neerlandeses).
+const CLUB = {
+  quees: 'Es una asociación de criadores y aficionados dedicada a una sola raza. Su razón de ser es la propia raza: conservarla, mantenerla fiel a su estándar y darla a conocer. La Asociación Club Gallina Alacantina se constituyó formalmente el 8 de marzo de 2025 y continúa el trabajo que el Club venía haciendo desde 2017. Está integrada en FESACOCUR.',
+  fines: [
+    '<strong>Conservar la raza:</strong> quedan pocos ejemplares, así que hay que criar sin perder variabilidad, evitando la consanguinidad y manteniendo vivas todas las líneas.',
+    '<strong>Cuidar el estándar:</strong> define cómo debe ser la Alacantina y lo defiende ante la Comisión Nacional de Estándares de FESACOCUR.',
+    '<strong>Llevar el Libro Genealógico:</strong> registra cada ave con su anilla, sus padres y su calificación, y ese es el registro que lleva esta app.',
+    '<strong>Mejorar las variedades en proceso</strong>, como la armiñada y la milflores, hasta que puedan reconocerse.',
+    '<strong>Conseguir que la raza entre en el Catálogo Oficial de Razas de Ganado de España.</strong>',
+    '<strong>Darla a conocer</strong> con exposiciones, monográficos y encuentros.'
+  ],
+  comun: 'En un club de raza nadie cría solo. Se revisan juntos los reproductores antes de la temporada y los pollos al final. Se intercambian huevos y gallos entre criadores para que no se cierren las líneas. Y se acompaña a quien empieza. La app ayuda en ese trabajo: el Libro, el planificador de apareamientos y la calificación de cada ejemplar.',
+  porque: [
+    '<strong>Anillas oficiales:</strong> las anillas de FESACOCUR se piden a través del Club.',
+    '<strong>Tus aves en el Libro</strong>, con calificación de un inspector y certificado.',
+    '<strong>Reproductores de otras líneas:</strong> cruzar sin parentesco, con el consejo de criadores con experiencia.',
+    '<strong>Exposiciones y concursos</strong>, y voz en las decisiones sobre el estándar y el futuro de la raza.',
+    '<strong>Tu cría cuenta:</strong> cada criador y cada ave inscrita suman al censo que necesita la raza para su reconocimiento oficial.'
+  ],
+  web: 'https://www.clubalacantina.com/',
+  youtube: 'https://www.youtube.com/channel/UCiW1IoJmsL_f55NOdAKWuRw'
+};
 
 // 3000 → «3», 3500 → «3,5» (sin ceros de relleno)
 const kg = (g) => String(Math.round(g / 10) / 100).replace('.', ',');
@@ -85,6 +110,19 @@ export default function (main) {
     <details class="tarjeta historia" id="historia">
       <summary><span><strong>Historia de la raza</strong><span class="item-sub">De 1905 al reconocimiento de 2020 y el Libro Genealógico</span></span></summary>
       ${HISTORIA.map(([etapa, parrafos]) => h`<h3>${etapa}</h3>${parrafos.map(p => h`<p>${html(p)}</p>`)}`)}
+    </details>
+
+    <details class="tarjeta historia" id="club">
+      <summary><span><strong>El Club Gallina Alacantina</strong><span class="item-sub">Qué es un club de raza, para qué trabaja y por qué asociarse</span></span></summary>
+      <h3>Qué es un club de raza</h3><p>${CLUB.quees}</p>
+      <h3>Para qué trabaja el Club</h3><ul>${CLUB.fines.map(f => h`<li>${html(f)}</li>`)}</ul>
+      <h3>Criar en común</h3><p>${CLUB.comun}</p>
+      <h3>Por qué asociarse</h3><ul>${CLUB.porque.map(f => h`<li>${html(f)}</li>`)}</ul>
+      <h3>Cómo asociarse</h3><p>Escribe a <a href="mailto:${CONFIG.club.email}?subject=${encodeURIComponent('Quiero asociarme al Club Gallina Alacantina')}">${CONFIG.club.email}</a>.</p>
+      <p class="club-enlaces">
+        <a class="btn" href="${CLUB.web}" target="_blank" rel="noopener">${icono('casa')} Web del Club</a>
+        <a class="btn" href="${CLUB.youtube}" target="_blank" rel="noopener">${icono('video')} Canal de YouTube</a>
+      </p>
     </details>
 
     <a class="tarjeta item" href="#/programa" style="display:flex"><span class="tarea-ico" aria-hidden="true">${icono('brujula')}</span>

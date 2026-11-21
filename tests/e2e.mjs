@@ -28,6 +28,8 @@ ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
     'Estándar: rasgos clave (dorso 40º, cola 70º…) y accesos a Guía, Censo y PDF'); }
 ok(await page.$eval('#historia', d => !d.open && d.querySelectorAll('h3').length === 4 && d.textContent.includes('18 de diciembre de 2020') && d.textContent.includes('8 de marzo de 2025')),
   'Estándar: «Historia de la raza» desplegable, con sus cuatro etapas (reconocimiento de 2020 y constitución del Club en 2025)');
+ok(await page.$eval('#club', d => d.querySelectorAll('h3').length === 5 && d.textContent.includes('nadie cría solo') && Boolean(d.querySelector('a[href="https://www.clubalacantina.com/"]')) && Boolean(d.querySelector('a[href*="youtube.com/channel/"]')) && Boolean(d.querySelector('a[href^="mailto:clubalacantina@gmail.com"]'))),
+  'Estándar: «El Club Gallina Alacantina» con qué es, fines, criar en común, por qué asociarse, correo, web y YouTube');
 ok((await page.$$eval('#barra a', a => a.length)) === 3 && !(await page.$('#barra a[href="#/alta"]')), 'Alta Rápida no existe en el DOM del visitante');
 await ir('#/alta');
 ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');

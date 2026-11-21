@@ -492,3 +492,7 @@ details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offs
 .historia h3 { font-size: 1rem; margin: 1rem 0 .3rem; color: var(--azul-t); }
 .historia h3:first-of-type { margin-top: .5rem; }
 .historia p { margin: 0 0 .6rem; max-width: 70ch; }
+.historia ul { margin: 0 0 .6rem; padding-left: 1.2rem; max-width: 70ch; }
+.historia li { margin-bottom: .3rem; }
+.club-enlaces { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
+.club-enlaces .btn { flex: 1 1 auto; justify-content: center; }
