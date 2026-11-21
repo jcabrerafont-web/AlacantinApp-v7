@@ -2,7 +2,7 @@
 import * as datos from '../datos.js';
 import * as auth from '../auth.js';
 import { iniciarSesion } from '../app.js';
-import { h, pintar, $, aviso, descargar, hoyISO } from '../ui.js';
+import { h, pintar, $, aviso, descargar, hoyISO, confirmar } from '../ui.js';
 import { CONFIG } from '../config.js';
 
 export default function (main) {
@@ -25,6 +25,7 @@ export default function (main) {
         <p id="pf-gps" class="muted">${p.latitud != null ? `${Number(p.latitud).toFixed(5)}, ${Number(p.longitud).toFixed(5)}` : 'Sin ubicación registrada'}</p>
         <div class="fila" style="flex-wrap:wrap;gap:.5rem"><button class="btn" type="button" id="pf-capturar">📍 Usar mi ubicación actual</button>
           <button class="btn" type="button" id="pf-borrar-gps" ${p.latitud != null ? '' : h`hidden`}>Borrar la ubicación</button></div>
+        <p class="ayuda"><strong>Pulsa el botón estando en el aviario, junto a los gallineros:</strong> se guarda la posición del móvil en ese momento, así que si lo haces desde casa o desde otro sitio, el inspector irá allí.</p>
         <p class="ayuda">Opcional. Sirve para que el inspector llegue al aviario. Al pulsar «Usar mi ubicación actual» das tu consentimiento para que el Club la guarde; puedes borrarla cuando quieras. Solo la ven tú, la inspección y la administración del Club.</p>
       </fieldset>
       <button class="btn btn-primario" type="submit">Guardar</button>
@@ -85,14 +86,18 @@ Detalle:
     descargar(JSON.stringify(contenido, null, 2), `AlacantinApp_mis_datos_${hoyISO()}.json`, 'application/json');
     aviso('Descargado: un archivo con todos tus datos.', 'ok');
   });
-  $('#pf-capturar', f).addEventListener('click', () => {
+  $('#pf-capturar', f).addEventListener('click', async () => {
     if (!navigator.geolocation) { aviso('Este dispositivo no ofrece geolocalización.', 'error'); return; }
+    if (!(await confirmar('¿Estás ahora en tu aviario?', 'Se guarda la posición del móvil en este momento. Si estás en casa o en otro sitio, hazlo cuando vayas al aviario, junto a los gallineros.', 'Sí, estoy en el aviario'))) return;
     $('#pf-gps', f).textContent = 'Obteniendo ubicación…';
     navigator.geolocation.getCurrentPosition(pos => {
       lat = Math.round(pos.coords.latitude * 1e6) / 1e6;
       lng = Math.round(pos.coords.longitude * 1e6) / 1e6;
-      $('#pf-gps', f).textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(pos.coords.accuracy)} m)`;
+      const prec = Math.round(pos.coords.accuracy);
+      pintar($('#pf-gps', f), h`${lat.toFixed(5)}, ${lng.toFixed(5)} (±${prec} m) · <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}" target="_blank" rel="noopener">comprobar en el mapa</a>`);
       $('#pf-borrar-gps', f).hidden = false;
+      if (prec > 100) aviso(`Precisión baja (±${prec} m). Sal al exterior, espera unos segundos y vuelve a pulsar el botón.`, 'error');
+      else aviso('Ubicación tomada. Compruébala en el mapa y pulsa «Guardar».', 'ok');
     }, err => {
       $('#pf-gps', f).textContent = 'No se pudo obtener la ubicación';
       aviso(err.code === 1 ? 'Permiso de ubicación denegado.' : 'Sin señal GPS. Prueba en exterior.', 'error');
