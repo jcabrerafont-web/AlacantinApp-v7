@@ -26,10 +26,18 @@ ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
 { const t = await page.$eval('main', m => m.textContent);
   ok((await page.$$('main .rasgos li')).length === 6 && t.includes('40º') && t.includes('70º') && (await page.$$('main .accesos a')).length === 3,
     'Estándar: rasgos clave (dorso 40º, cola 70º…) y accesos a Guía, Censo y PDF'); }
+ok(!(await page.$('#historia')) && !(await page.$('#club')) && Boolean(await page.$('main .accesos a[href="#/conoce"]')) && Boolean(await page.$('main .accesos a[href="#/programa"]')),
+  'Estándar: solo el Estándar; arriba, accesos a «La Alacantina y su Club», Guía del criador y PDF (no repite la barra)');
+await ir('#/conoce');
 ok(await page.$eval('#historia', d => !d.open && d.querySelectorAll('h3').length === 4 && d.textContent.includes('18 de diciembre de 2020') && d.textContent.includes('8 de marzo de 2025')),
-  'Estándar: «Historia de la raza» desplegable, con sus cuatro etapas (reconocimiento de 2020 y constitución del Club en 2025)');
+  'La Alacantina y su Club: «Historia de la raza» con sus cuatro etapas');
 ok(await page.$eval('#club', d => d.querySelectorAll('h3').length === 5 && d.textContent.includes('nadie cría solo') && Boolean(d.querySelector('a[href="https://www.clubalacantina.com/"]')) && Boolean(d.querySelector('a[href*="youtube.com/channel/"]')) && Boolean(d.querySelector('a[href^="mailto:clubalacantina@gmail.com"]'))),
-  'Estándar: «El Club Gallina Alacantina» con qué es, fines, criar en común, por qué asociarse, correo, web y YouTube');
+  'La Alacantina y su Club: «El Club» con qué es, fines, criar en común, por qué asociarse, correo, web y YouTube');
+ok(await page.$eval('#libro', d => d.querySelectorAll('h3').length === 5 && d.textContent.includes('Real Decreto 45/2019') && d.textContent.includes('todavía no figura en el Catálogo Oficial') && Boolean(d.querySelector('a[href="#/programa?s=normativa"]'))),
+  'La Alacantina y su Club: «El Libro Genealógico» con qué es, para qué sirve, registros, normas y dónde estamos');
+await ir('#/conoce?s=libro');
+ok(await page.$eval('#libro', d => d.open), 'La Alacantina y su Club: enlace directo a un apartado (?s=libro) lo abre');
+await ir('#/estandar');
 ok((await page.$$eval('#barra a', a => a.length)) === 3 && !(await page.$('#barra a[href="#/alta"]')), 'Alta Rápida no existe en el DOM del visitante');
 await ir('#/alta');
 ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');

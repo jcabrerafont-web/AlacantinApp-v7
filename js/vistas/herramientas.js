@@ -32,7 +32,8 @@ export default function (main) {
     ]],
     ['Consulta', [
       ['#/estandar', '📖', 'Estándar Racial', 'Texto oficial ESGA025'],
-      ['#/guia', '📋', 'Guía de Campo', 'Las 12 regiones y los defectos graves']
+      ['#/guia', '📋', 'Guía de Campo', 'Qué mirar al calificar: las 12 regiones y los defectos graves'],
+      ['#/conoce', '⭐', 'La Alacantina y su Club', 'Historia de la raza, el Club y el Libro Genealógico']
     ]]
   ];
   if (r === 'inspector') grupos.unshift(['Inspección', [['#/inspector', '🩺', 'Panel de inspección', (() => { const n = datos.tareasInspector().filter(x => x.nivel !== 'info').length; return n ? `${n} tarea(s) pendiente(s): llamadas, visitas y calificaciones` : 'Todo al día · llamadas, visitas y calificaciones'; })()]]]);

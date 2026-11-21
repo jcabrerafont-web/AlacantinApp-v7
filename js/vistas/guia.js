@@ -20,7 +20,7 @@ export default function (main) {
   };
   pintar(main, h`
     <h1>Guía de campo</h1>
-    <p class="muted">Las 12 regiones del Estándar ${ESTANDAR.codigo} que se puntúan en el baremo de calificación.</p>
+    <p class="muted">Qué mirar al calificar: las 12 regiones del Estándar ${ESTANDAR.codigo} que se puntúan en el baremo, con sus defectos graves. Para criar, mira la <a href="#/programa">Guía del criador</a>.</p>
     <div class="campo"><label for="guia-buscar">Buscar</label>
       <input id="guia-buscar" type="search" placeholder="Ej.: orejilla, cola, tarsos…" autocomplete="off"></div>
     <div id="guia-lista"></div>

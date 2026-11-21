@@ -12,7 +12,7 @@ for (const tema of ['claro', 'oscuro', 'sol']) {
   await page.goto(base + '/'); await page.waitForSelector('#barra a');
   const ir = async (x) => { await page.evaluate(h => { location.hash = h; }, x); await page.waitForTimeout(450); };
   // visitante
-  const rutasVis = ['#/estandar', '#/guia', '#/censo', '#/programa', '#/acceso', '#/privacidad'];
+  const rutasVis = ['#/estandar', '#/conoce', '#/guia', '#/censo', '#/programa', '#/acceso', '#/privacidad'];
   const rutasUsu = ['#/censo', '#/hoy', '#/alta', '#/puesta', '#/herramientas', '#/reproduccion', '#/inspeccion', '#/campanas', '#/auditoria', '#/acta', '#/perfil', '#/informes', '#/copia', '#/problema', '#/sincronizacion', '#/apareamientos'];
   const revisar = async () => page.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); const c = getComputedStyle(e); return r.width > 0 && r.height > 0 && c.visibility !== 'hidden' && c.display !== 'none' && c.opacity !== '0'; };

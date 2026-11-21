@@ -54,7 +54,7 @@ export default function (main) {
 
   pintar(main, h`
     <h1>Guía del criador</h1>
-    <p class="muted">Qué hay que hacer, cuándo y por qué para que tus gallinas formen parte del Libro Genealógico de la Alacantina. La app te acompaña en cada paso.</p>
+    <p class="muted">Cómo criar para el Libro: qué hay que hacer, cuándo y por qué para que tus gallinas formen parte del Libro Genealógico de la Alacantina. La app te acompaña en cada paso. ¿Empiezas de cero? Lee antes <a href="#/conoce">La Alacantina y su Club</a>.</p>
 
     ${seccion('libro', '1. El Libro Genealógico, en cuatro pasos', h`
       <ol class="pasos">

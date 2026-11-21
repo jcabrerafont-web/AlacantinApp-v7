@@ -16,6 +16,7 @@ const RUTAS = [
   ['guia', 'guia', '*'],
   ['programa', 'programa', '*'],
   ['privacidad', 'privacidad', '*'],
+  ['conoce', 'conoce', '*'],
   ['censo', 'censo', '*'],
   ['animal/:id', 'ficha', '*'],
   ['pedigri/:id', 'pedigri', '*'],
@@ -158,6 +159,7 @@ function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
     informes: 'herramientas', sincronizacion: 'herramientas', calificar: 'censo', usuarios: 'admin', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
   let activo = equivalencias[base] || base;
+  if (activo === 'conoce') activo = document.querySelector('#barra a[data-ruta="estandar"]') ? 'estandar' : 'herramientas';
   if (activo === 'inspector' && !document.querySelector('#barra a[data-ruta="inspector"]') && document.querySelector('#barra a[data-ruta="admin"]')) activo = 'admin';
   if (['admin', 'inspector'].includes(activo) && !(ANCHO.matches && document.querySelector(`#barra a[data-ruta="${activo}"]`))) activo = 'herramientas';
   document.querySelectorAll('#barra a').forEach(a => {
