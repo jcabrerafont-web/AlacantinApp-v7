@@ -24,6 +24,7 @@ export default function (main) {
   const conPadres = cuenta(a => a.padre_id && a.madre_id);
   const criadores = new Set(activos.map(a => a.usuario_id).filter(Boolean));
   const candidatos = datos.rol() === 'administrador' ? datos.candidatosRM() : [];
+  const evolucion = datos.evolucionCenso();
   const porMunicipio = {};
   activos.forEach(a => { const k = [a.municipio, a.provincia].filter(Boolean).join(' · ') || 'Sin municipio'; porMunicipio[k] = (porMunicipio[k] || 0) + 1; });
 
@@ -41,6 +42,17 @@ export default function (main) {
       <div class="kpi"><b>${coma(geMedio)}</b><span>Generaciones equivalentes medias</span></div>
       <div class="kpi"><b>${activos.length ? Math.round(100 * conPadres / activos.length) : 0} %</b><span>Con padre y madre registrados</span></div>
     </div>
+
+    ${evolucion.length ? h`<div class="tarjeta" id="evolucion"><h2>Evolución del censo</h2>
+      <p class="peq muted">Censo a 31 de diciembre de cada año (el año en curso, a hoy). Reproductores: adultos. Protocolo CNZ, apdo. 3.1 f.</p>
+      <div class="tabla-scroll"><table class="tabla-evolucion">
+        <thead><tr><th scope="col">Año</th><th scope="col">Censo</th><th scope="col">♂</th><th scope="col">♀</th><th scope="col">Reprod. ♂ / ♀</th>${tramos.filter(t => t.id !== 'adulto').map(t => h`<th scope="col">${t.nombre}</th>`)}<th scope="col">Nacidos</th><th scope="col">Bajas</th>${auditor ? h`<th scope="col">Criadores</th><th scope="col">Municipios</th>` : ''}<th scope="col">Ne</th><th scope="col">Fx medio</th><th scope="col">Tendencia</th></tr></thead>
+        <tbody>${evolucion.map(f => h`<tr><th scope="row">${f.anio}${f.enCurso ? '*' : ''}</th><td>${f.total}</td><td>${f.machos}</td><td>${f.hembras}</td><td>${f.reproductoresM} / ${f.reproductoras}</td>
+          ${tramos.filter(t => t.id !== 'adulto').map(t => h`<td>${f.edades[t.id].total}</td>`)}<td>${f.nacidos}</td><td>${f.bajas}</td>${auditor ? h`<td>${f.criadores}</td><td>${f.municipios}</td>` : ''}
+          <td>${coma(f.neDem, 1)}</td><td>${f.fxMedio == null ? '—' : pct(f.fxMedio, 2)}</td><td>${f.variacion == null ? '—' : h`<span class="${f.variacion > 0 ? 'sube' : f.variacion < 0 ? 'baja' : ''}">${f.variacion > 0 ? '▲' : f.variacion < 0 ? '▼' : '='} ${Math.abs(Math.round(f.variacion * 100))} %</span>`}</td></tr>`)}</tbody>
+      </table></div>
+      ${evolucion.some(f => f.enCurso) ? h`<p class="peq muted">* Año en curso: censo a hoy.</p>` : ''}
+    </div>` : ''}
 
     <div class="tarjeta"><h2>Censo por sexo y edad</h2><div class="tabla-scroll"><table>
       <thead><tr><th>Tramo</th><th class="num">Gallos</th><th class="num">Gallinas</th><th class="num">Total</th></tr></thead>
@@ -72,6 +84,7 @@ export default function (main) {
       <div class="fila">
         <button class="btn" id="x-pedigri">⬇️ Matriz de pedigrí (CSV · ENDOG/CFC/R)</button>
         <button class="btn" id="x-censo">⬇️ Censo (CSV)</button>
+        ${evolucion.length ? h`<button class="btn" id="x-evolucion">⬇️ Evolución del censo (CSV)</button>` : ''}
         ${auditor ? h`<button class="btn" id="x-criadores">⬇️ Criadores y explotaciones (CSV)</button>` : ''}
         <button class="btn" id="x-imprimir">🖨️ Imprimir informe</button>
       </div>
@@ -100,6 +113,14 @@ export default function (main) {
       tramoEdad(a.fecha_nacimiento)?.nombre || '', a.seccion, a.familia || '', a.peso_g ?? '', a.municipio || '', fxAnimal(a, idx).toFixed(6)]));
     descargar(csv(filas), `ESGA025_censo_${hoyISO()}.csv`);
   });
+  $('#x-evolucion', main)?.addEventListener('click', () => {
+    const tr = tramos.filter(t => t.id !== 'adulto');
+    const filas = [['ANIO', 'FECHA_CENSO', 'CENSO', 'MACHOS', 'HEMBRAS', 'REPRODUCTORES_MACHOS', 'REPRODUCTORAS_HEMBRAS', ...tr.map(t => t.id.toUpperCase()), 'NACIDOS', 'BAJAS', 'CRIADORES', 'EXPLOTACIONES', 'MUNICIPIOS', 'NE_DEMOGRAFICO', 'FX_MEDIO', 'VARIACION_CENSO']];
+    for (const f of evolucion) filas.push([f.anio, f.corte, f.total, f.machos, f.hembras, f.reproductoresM, f.reproductoras, ...tr.map(t => f.edades[t.id].total), f.nacidos, f.bajas,
+      f.criadores, f.explotaciones, f.municipios, f.neDem == null ? '' : f.neDem.toFixed(1), f.fxMedio == null ? '' : f.fxMedio.toFixed(4), f.variacion == null ? '' : f.variacion.toFixed(3)]);
+    descargar(csv(filas), `ESGA025_evolucion_censo_${hoyISO()}.csv`);
+  });
+
   // Relación de criadores y explotaciones con sus efectivos (RD 45/2019, art. 14.5 c y d)
   $('#x-criadores', main)?.addEventListener('click', () => {
     const porTitular = new Map();

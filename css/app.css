@@ -525,3 +525,12 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .leyenda-mapa i, .punto-mapa { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: .35rem; vertical-align: -1px; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .2); }
 .leaflet-container { font: inherit; }
 .leaflet-popup-content { font-size: .9rem; line-height: 1.4; }
+
+/* Evolución del censo */
+.tabla-evolucion td, .tabla-evolucion th { text-align: right; white-space: nowrap; }
+.tabla-evolucion th[scope="row"], .tabla-evolucion thead th:first-child { text-align: left; }
+.tabla-evolucion .sube { color: var(--verde-t); font-weight: 700; }
+.tabla-evolucion .baja { color: var(--rojo-t); font-weight: 700; }
+.expediente .item-titulo { display: block; }
+.expediente .item-titulo .chip { margin-left: .25rem; vertical-align: 1px; }
+.exp-letra { font-weight: 800; color: var(--azul-t); }

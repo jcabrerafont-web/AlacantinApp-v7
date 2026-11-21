@@ -13,6 +13,7 @@ const SECCIONES = [
     ['#/mapa', '🗺️', 'Mapa de aviarios', 'Dónde está cada aviario y qué cría; cómo llegar y exportación para QGIS']
   ]],
   ['Libro Genealógico', [
+    ['#/admin/expediente', '📄', 'Expediente para el Catálogo', 'Los 14 apartados que pide la CNZ: qué está cubierto, qué falta y qué le toca al Club'],
     ['#/admin/libro', '⭐', 'Inscripciones del Libro', 'Registro de Méritos, fundadores (RF y RA) y cambios de titular'],
     ['#/auditoria', '🩺', 'Auditoría del Libro', 'Errores y avisos por corregir, y pureza de variedad'],
     ['#/acta', '📄', 'Acta anual de cierre censal', 'Balance del año para imprimir y firmar'],

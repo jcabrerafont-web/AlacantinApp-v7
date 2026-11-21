@@ -194,6 +194,12 @@ if (process.env.CAPTURAS) { await page.screenshot({ path: `${process.env.CAPTURA
 // 5. Informes y exportación
 await ir('#/informes');
 ok((await page.innerText('main')).includes('Ne demográfico'), 'Informe con Ne y censo por edad');
+{ const ev = await page.$$eval('#evolucion tbody tr', trs => trs.map(t => t.querySelector('th').textContent.trim()));
+  const ult = await page.evaluate(async () => (await import('./js/datos.js')).evolucionCenso().at(-1));
+  ok(ev.length >= 2 && ev[0] === '2024' && ev.at(-1).endsWith('*') && ult.total === 3, `Informes: evolución del censo año a año desde 2024 (${ev.join(', ')}; hoy ${ult.total})`);
+  const [dev] = await Promise.all([page.waitForEvent('download'), page.click('#x-evolucion')]);
+  const lin = (await import('node:fs')).readFileSync(await dev.path(), 'utf8').trim().split(/\r?\n/);
+  ok(lin[0].includes('ANIO') && lin[0].includes('NE_DEMOGRAFICO') && lin.length === ev.length + 1, 'Informes: evolución del censo en CSV'); }
 const [descarga] = await Promise.all([page.waitForEvent('download'), page.click('#x-pedigri')]);
 const ruta = await descarga.path();
 const contenido = (await import('node:fs')).readFileSync(ruta, 'utf8');
@@ -338,6 +344,11 @@ await page.waitForTimeout(200);
 ok((await page.$$('#al-resultados a')).length > 0 && (await page.inputValue('#al-buscar')) === '0001', 'Inscripciones del Libro: buscador por anilla que lleva a la ficha');
 await ir('#/usuarios?filtro=nuevos');
 ok((await page.$eval('[data-filtro="nuevos"]', b => b.getAttribute('aria-pressed'))) === 'true' && (await page.$$('#us-lista details')).length >= 1, 'Usuarios: filtro de altas nuevas y ficha de cada usuario');
+await ir('#/admin/expediente');
+{ const ex = await page.$$eval('main .expediente li', ls => ls.map(l => l.id));
+  const t = await page.innerText('main');
+  ok(ex.length === 14 && ex[0] === 'exp-a' && ex[13] === 'exp-n' && t.includes('entidad científica') && t.includes('Corresponde al Club'),
+    'Expediente para el Catálogo: los 14 apartados del Protocolo CNZ (a–n), con su estado y lo que corresponde al Club'); }
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });

@@ -795,6 +795,33 @@ export function resumenAnual(anio) {
 }
 
 // ---------------------------------------------------------------------------
+// Evolución del censo año a año (Protocolo CNZ 2025, apdo. 3.1 f: «censos y tendencia
+// o evolución de los mismos, por sexo y edades»). Censo a 31 de diciembre de cada año
+// (el año en curso, a hoy), desde el primer nacimiento registrado.
+// ---------------------------------------------------------------------------
+export function evolucionCenso({ hasta = Number(hoyIso().slice(0, 4)) } = {}) {
+  const fechas = censo({ incluirBajas: true }).map(a => a.fecha_nacimiento).filter(Boolean).sort();
+  if (!fechas.length) return [];
+  const desde = Math.max(Number(fechas[0].slice(0, 4)), hasta - 14);
+  const filas = [];
+  for (let anio = desde; anio <= hasta; anio++) {
+    const r = resumenAnual(anio);
+    const tramo = (id) => r.censo.edades.find(e => e.id === id) || { M: 0, H: 0, total: 0 };
+    filas.push({
+      anio, corte: r.corte, enCurso: r.enCurso,
+      total: r.censo.total, machos: r.censo.M, hembras: r.censo.H,
+      reproductoresM: r.genetica.nm, reproductoras: r.genetica.nf,
+      edades: Object.fromEntries(REGLAS.tramosEdadMeses.map(t => [t.id, tramo(t.id)])),
+      nacidos: r.movimientos.nacidos.total, bajas: r.movimientos.bajas,
+      criadores: r.territorio.titulares, explotaciones: r.territorio.explotaciones, municipios: r.territorio.municipios.length,
+      neDem: r.genetica.neDem, fxMedio: r.genetica.fxMedio
+    });
+  }
+  filas.forEach((f, i) => { const a = filas[i - 1]; f.variacion = a && a.total ? (f.total - a.total) / a.total : null; });
+  return filas;
+}
+
+// ---------------------------------------------------------------------------
 // «Hoy»: lo que toca hacer, reunido de todas partes (incubaciones, campaña, pollitos,
 // lotes, inspección, auditoría) y lo propio del mes. nivel: 'hoy' | 'pronto' | 'info'.
 // ---------------------------------------------------------------------------
