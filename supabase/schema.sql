@@ -735,6 +735,61 @@ REVOKE ALL ON public.germoplasma FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.germoplasma TO authenticated;
 
 -- ----------------------------------------------------------------------------
+-- 4i. Comunicados del Club a sus socios (circulares fechadas: avisos sanitarios,
+--     plazos, encuentros…). Los escribe la administración; los leen todos los
+--     usuarios con perfil. Un comunicado no dice «esto está vigente»: dice qué
+--     comunicó el Club y cuándo, con su fuente.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.comunicados (
+  id               uuid PRIMARY KEY,
+  usuario_id       uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,
+  fecha            date NOT NULL,
+  titulo           text NOT NULL CHECK (length(trim(titulo)) BETWEEN 1 AND 120),
+  texto            text NOT NULL CHECK (length(trim(texto)) BETWEEN 1 AND 4000),
+  fuente           text CHECK (fuente IS NULL OR length(fuente) <= 300),
+  enlace           text CHECK (enlace IS NULL OR enlace ~ '^https://'),
+  destacado_hasta  date,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  sync_ts          timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT destacado_tras_fecha CHECK (destacado_hasta IS NULL OR destacado_hasta >= fecha)
+);
+CREATE INDEX IF NOT EXISTS comunicados_sync_ts ON public.comunicados (sync_ts, id);
+
+CREATE OR REPLACE FUNCTION public.validar_comunicado() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.usuario_id := coalesce(auth.uid(), NEW.usuario_id);
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_comunicado ON public.comunicados;
+CREATE TRIGGER trg_validar_comunicado BEFORE INSERT OR UPDATE ON public.comunicados
+  FOR EACH ROW EXECUTE FUNCTION public.validar_comunicado();
+DROP TRIGGER IF EXISTS zz_marcar_sync ON public.comunicados;
+CREATE TRIGGER zz_marcar_sync BEFORE INSERT OR UPDATE ON public.comunicados
+  FOR EACH ROW EXECUTE FUNCTION public.marcar_sync();
+DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.comunicados;
+CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.comunicados
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado();
+DROP TRIGGER IF EXISTS trg_historial_comunicados ON public.comunicados;
+CREATE TRIGGER trg_historial_comunicados AFTER INSERT OR UPDATE OR DELETE ON public.comunicados
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_historial();
+REVOKE ALL ON FUNCTION public.validar_comunicado() FROM PUBLIC, anon, authenticated;
+
+ALTER TABLE public.comunicados ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS comunicados_ver ON public.comunicados;
+DROP POLICY IF EXISTS comunicados_crear ON public.comunicados;
+DROP POLICY IF EXISTS comunicados_editar ON public.comunicados;
+DROP POLICY IF EXISTS comunicados_borrar ON public.comunicados;
+CREATE POLICY comunicados_ver ON public.comunicados FOR SELECT TO authenticated USING (public.rol_actual() IS NOT NULL);
+CREATE POLICY comunicados_crear ON public.comunicados FOR INSERT TO authenticated WITH CHECK (public.es_admin());
+CREATE POLICY comunicados_editar ON public.comunicados FOR UPDATE TO authenticated USING (public.es_admin()) WITH CHECK (public.es_admin());
+CREATE POLICY comunicados_borrar ON public.comunicados FOR DELETE TO authenticated USING (public.es_admin());
+REVOKE ALL ON public.comunicados FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.comunicados TO authenticated;
+
+-- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.perfiles       ENABLE ROW LEVEL SECURITY;
@@ -817,7 +872,7 @@ CREATE POLICY solicitudes_editar ON public.solicitudes FOR UPDATE TO authenticat
   USING (usuario_id = auth.uid() OR public.es_auditor()) WITH CHECK (usuario_id = auth.uid() OR public.es_auditor());
 
 CREATE POLICY borrados_ver ON public.borrados FOR SELECT TO authenticated
-  USING (usuario_id = auth.uid() OR public.es_auditor());
+  USING (usuario_id = auth.uid() OR public.es_auditor() OR tabla = 'comunicados');
 
 CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
 

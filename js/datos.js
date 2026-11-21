@@ -17,6 +17,7 @@ export const estado = {
   calificaciones: [],
   huevos: [],
   germoplasma: [],
+  comunicados: [],
   campanas: [],
   lotes: [],
   incubaciones: [],
@@ -52,8 +53,8 @@ function calentarFx(idx) {
 }
 
 export async function cargar() {
-  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes, germoplasma] = await Promise.all(
-    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma'].map(s => db.todos(s)));
+  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes, germoplasma, comunicados] = await Promise.all(
+    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma', 'comunicados'].map(s => db.todos(s)));
   estado.todos = animales;
   // Si la genealogía no ha cambiado (lo normal al guardar un huevo o una calificación),
   // se conservan los cálculos de consanguinidad ya hechos.
@@ -73,6 +74,7 @@ export async function cargar() {
     estado.incubaciones = [];
     estado.solicitudes = [];
     estado.germoplasma = [];
+    estado.comunicados = [];
   } else if (esAuditor(p.rol)) {
     estado.calificaciones = calificaciones;
     estado.huevos = huevos;
@@ -82,6 +84,7 @@ export async function cargar() {
     estado.incubaciones = incubaciones;
     estado.solicitudes = solicitudes;
     estado.germoplasma = germoplasma;
+    estado.comunicados = comunicados;
   } else {
     const mios = new Set(animales.filter(a => a.usuario_id === p.id).map(a => a.id));
     estado.calificaciones = calificaciones.filter(c => mios.has(c.animal_id));
@@ -92,6 +95,7 @@ export async function cargar() {
     estado.incubaciones = incubaciones.filter(i => i.usuario_id === p.id);
     estado.solicitudes = solicitudes.filter(x => x.usuario_id === p.id);
     estado.germoplasma = [];
+    estado.comunicados = comunicados;
   }
   // Huevos por gallina (evita recorrer todos los huevos para cada gallina)
   estado.huevosPorAnimal = new Map();
@@ -1164,6 +1168,54 @@ export async function darDeBajaUsuario(perfilId) {
   for (const s of estado.solicitudes.filter(x => x.usuario_id === perfilId)) await db.borrar('solicitudes', s.id);
   await cargar();
   return r;
+}
+
+// ---------------------------------------------------------------------------
+// Comunicados del Club: circulares fechadas a los socios (avisos sanitarios,
+// plazos, encuentros…). Los publica la administración; los leen todos los usuarios.
+// ---------------------------------------------------------------------------
+export const comunicados = () => [...estado.comunicados].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.created_at.localeCompare(a.created_at));
+export const comunicadosDestacados = (dia = hoyIso()) => comunicados().filter(c => c.destacado_hasta && c.destacado_hasta >= dia && c.fecha <= dia);
+
+// Destacados que este usuario aún no ha abierto o cerrado (se recuerda en este móvil)
+const claveVistos = () => `comunicados-vistos:${estado.perfil?.id || ''}`;
+export async function comunicadosSinVer() {
+  const vistos = new Set(await db.metaGet(claveVistos(), []));
+  return comunicadosDestacados().filter(c => !vistos.has(c.id));
+}
+export async function marcarComunicadoVisto(id) {
+  const vistos = new Set(await db.metaGet(claveVistos(), []));
+  vistos.add(id);
+  await db.metaSet(claveVistos(), [...vistos].slice(-200));
+}
+
+export async function guardarComunicado(c) {
+  if (rol() !== 'administrador') throw new Error('Los comunicados los publica la administración del Club.');
+  const titulo = String(c.titulo || '').trim(), texto = String(c.texto || '').trim();
+  if (!titulo) throw new Error('Escribe el título.');
+  if (titulo.length > 120) throw new Error('El título es demasiado largo (máximo 120 caracteres).');
+  if (!texto) throw new Error('Escribe el texto del comunicado.');
+  if (texto.length > 4000) throw new Error('El texto es demasiado largo (máximo 4.000 caracteres).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(c.fecha || ''))) throw new Error('Indica la fecha del comunicado.');
+  const enlace = String(c.enlace || '').trim() || null;
+  if (enlace && !/^https:\/\/\S+$/.test(enlace)) throw new Error('El enlace debe empezar por https://');
+  const destacado = c.destacado_hasta || null;
+  if (destacado && destacado < c.fecha) throw new Error('«Destacar hasta» no puede ser anterior a la fecha del comunicado.');
+  const ahora = new Date().toISOString();
+  const previo = c.id ? estado.comunicados.find(x => x.id === c.id) : null;
+  const r = { ...(previo || {}), id: c.id || uuid(), usuario_id: previo?.usuario_id || estado.perfil.id, fecha: c.fecha, titulo, texto,
+    fuente: String(c.fuente || '').trim().slice(0, 300) || null, enlace, destacado_hasta: destacado, created_at: previo?.created_at || ahora, updated_at: ahora };
+  await db.guardar('comunicados', r);
+  await sync.encolar('comunicados', 'upsert', r);
+  await cargar();
+  return r;
+}
+
+export async function borrarComunicado(id) {
+  if (rol() !== 'administrador') throw new Error('Los comunicados los publica la administración del Club.');
+  await db.borrar('comunicados', id);
+  await sync.encolar('comunicados', 'delete', { id });
+  await cargar();
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import { itemTarea } from './hoy.js';
 // [grupo, [[enlace, emoji, título, explicación]]]
 const SECCIONES = [
   ['Personas', [
+    ['#/comunicados', '📣', 'Comunicados del Club', 'Escribir avisos fechados a los socios: sanidad, plazos, encuentros'],
     ['#/usuarios', '👥', 'Usuarios y roles', 'Altas nuevas, contacto de cada socio y quién es inspector o administrador'],
     ['#/mapa', '🗺️', 'Mapa de aviarios', 'Dónde está cada aviario y qué cría; cómo llegar y exportación para QGIS']
   ]],

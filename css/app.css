@@ -538,3 +538,9 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .expediente .item-titulo .chip { margin-left: .25rem; vertical-align: 1px; }
 .exp-letra { font-weight: 800; color: var(--azul-t); }
 .tabla-situacion th[scope="row"] { white-space: normal; min-width: 8.5rem; font-size: .85rem; }
+
+/* Comunicados del Club */
+.comunicado-texto { white-space: pre-line; }
+.comunicados { list-style: none; padding: 0; }
+.comunicado-aviso { display: flex; gap: .75rem; align-items: center; justify-content: space-between; }
+.comunicado-aviso a { color: inherit; text-decoration: none; }

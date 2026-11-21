@@ -31,6 +31,7 @@ export default function (main) {
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],
     ['Consulta', [
+      ['#/comunicados', '📣', 'Comunicados del Club', (() => { const n = datos.comunicados().length; return n ? `${n} comunicado(s); el último, «${datos.comunicados()[0].titulo}»` : 'Avisos del Club a sus socios'; })()],
       ['#/estandar', '📖', 'Estándar Racial', 'Texto oficial ESGA025'],
       ['#/guia', '📋', 'Guía de Campo', 'Qué mirar al calificar: las 12 regiones y los defectos graves'],
       ['#/conoce', '⭐', 'La Alacantina y su Club', 'Historia de la raza, el Club y el Libro Genealógico']

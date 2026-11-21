@@ -23,6 +23,7 @@ export default function (main) {
       ${p ? h`<a class="btn btn-primario btn-pequeno" href="#/alta">${icono('alta')} Alta</a>` : ''}</div>
     ${!p ? h`<p class="muted">Ejemplares inscritos en el Libro Genealógico. No se muestran datos personales de los criadores.</p>` : ''}
     ${p?.rol === 'aspirante' ? h`<div class="aviso-caja aviso">Cuenta de aspirante: añade tu código REGA en <a href="#/perfil">Mi aviario</a> para pasar a Criador.</div>` : ''}
+    ${p ? h`<div id="censo-comunicados"></div>` : ''}
     <div id="censo-riesgo"></div>
     <div id="censo-copia"></div>
     ${p ? h`<div id="censo-hoy"></div>` : ''}
@@ -60,6 +61,16 @@ export default function (main) {
       </div>`);
     }, 0);
     limpiar.push(() => clearTimeout(tHoy));
+    const pintarComunicados = () => datos.comunicadosSinVer().then(lista => {
+      const caja = $('#censo-comunicados', main);
+      if (!caja) return;
+      pintar(caja, h`${lista.slice(0, 2).map(c => h`<div class="aviso-caja info comunicado-aviso">
+        <a href="#/comunicados?c=${c.id}" data-comunicado="${c.id}"><strong>📣 Comunicado del Club:</strong> ${c.titulo} <span class="peq muted">· ${c.fecha.split('-').reverse().join('/')}</span></a>
+        <button type="button" class="enlace peq" data-cerrar-comunicado="${c.id}" aria-label="No volver a mostrar: ${c.titulo}">Cerrar</button></div>`)}`);
+      caja.querySelectorAll('[data-cerrar-comunicado]').forEach(b => b.addEventListener('click', async () => { await datos.marcarComunicadoVisto(b.dataset.cerrarComunicado); pintarComunicados(); }));
+      caja.querySelectorAll('[data-comunicado]').forEach(a => a.addEventListener('click', () => datos.marcarComunicadoVisto(a.dataset.comunicado)));
+    });
+    pintarComunicados();
     instalacion.riesgo().then(r => {
       const caja = $('#censo-riesgo', main);
       if (!r || !caja) return;

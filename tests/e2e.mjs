@@ -42,10 +42,10 @@ ok(await page.$eval('#variedades', d => d.querySelectorAll('li.item').length ===
   'La Alacantina y su Club: «Las variedades» con el plumaje y los pollitos de las 5, señalado como descripción del Club');
 ok(await page.$eval('#glosario', d => d.querySelectorAll('dt').length === 16 && d.textContent.includes('al menos 65 puntos (gallinas) o 70 (gallos)')),
   'La Alacantina y su Club: glosario de 16 términos, con las cifras de la app');
-ok(await page.$eval('#sanidad', d => d.querySelectorAll('h3').length === 7 && d.textContent.includes('Real Decreto 637/2021') && d.textContent.includes('Orden APA/338/2026') && d.textContent.includes('24 de febrero de 2026')
-    && d.textContent.includes('Situación comprobada el') && Boolean(d.querySelector('a[href^="https://www.boe.es/eli/es/rd/2021/07/27/637"]')) && Boolean(d.querySelector('a[href*="influenza-aviar"]')))
+ok(await page.$eval('#sanidad', d => d.querySelectorAll('h3').length === 7 && d.textContent.includes('Real Decreto 637/2021') && d.textContent.includes('veterinario de referencia')
+    && !/Orden APA|Resolución de|20\d\d-20\d\d|de 202\d/.test(d.textContent) && Boolean(d.querySelector('a[href^="https://www.boe.es/eli/es/rd/2021/07/27/637"]')) && Boolean(d.querySelector('a[href*="influenza-aviar"]')))
   && await page.$eval('#empezar', d => Boolean(d.querySelector('a[href="#/conoce?s=sanidad"]'))),
-  'La Alacantina y su Club: «Obligaciones sanitarias» (REGA, veterinario, aviso, gripe aviar, Newcastle, movimientos y bioseguridad) con fecha y fuentes oficiales');
+  'La Alacantina y su Club: «Obligaciones sanitarias» atemporal (sin órdenes ni fechas de temporada), con las fuentes oficiales');
 await ir('#/conoce?s=libro');
 ok(await page.$eval('#libro', d => d.open), 'La Alacantina y su Club: enlace directo a un apartado (?s=libro) lo abre');
 await ir('#/estandar');
@@ -410,6 +410,35 @@ await ir('#/admin/germoplasma');
   await page.click('[data-editar]'); await page.click('#gm-borrar'); await page.click('dialog.dialogo button[value="si"]');
   await page.waitForTimeout(300);
   ok((await page.innerText('#gm-lista')).includes('Todavía no hay muestras'), 'Material genético: se puede borrar un registro, con confirmación'); }
+await ir('#/comunicados');
+{ ok((await page.innerText('main')).includes('Todavía no hay comunicados') && Boolean(await page.$('#com-form')), 'Comunicados: vacío y con formulario para la administración');
+  const hoy = new Date().toISOString().slice(0, 10), fin = `${Number(hoy.slice(0, 4)) + 1}-01-31`;
+  await page.fill('#com-titulo', 'Vacunación de Newcastle en la Comunitat Valenciana');
+  await page.fill('#com-texto', 'Es obligatoria en las explotaciones que no son de autoconsumo.\nPregunta a tu veterinario.');
+  await page.fill('#com-fuente', 'Resolución de 24/2/2026');
+  await page.fill('#com-enlace', 'javascript:alert(1)'); await page.fill('#com-destacado', fin);
+  await page.click('#com-form button[type=submit]'); await page.waitForTimeout(200);
+  ok((await aviso()).includes('https://'), `Comunicados: el enlace tiene que ser https (${await aviso()})`);
+  await page.fill('#com-enlace', 'https://dogv.gva.es/');
+  await page.click('#com-form button[type=submit]');
+  await page.waitForSelector('.comunicado');
+  const t = await page.innerText('.comunicado');
+  ok(t.includes('Vacunación de Newcastle') && t.includes('Pregunta a tu veterinario') && t.includes('Resolución de 24/2/2026') && t.includes('Destacado') && Boolean(await page.$('.comunicado a[href="https://dogv.gva.es/"]')),
+    'Comunicados: publicado con fecha, texto, fuente, enlace oficial y destacado');
+  await ir('#/censo');
+  await page.waitForSelector('#censo-comunicados .comunicado-aviso', { timeout: 3000 });
+  ok((await page.innerText('#censo-comunicados')).includes('Comunicado del Club: Vacunación de Newcastle'), 'Mi censo: el comunicado destacado sale arriba');
+  await page.click('[data-cerrar-comunicado]'); await page.waitForTimeout(200);
+  ok(!(await page.$('#censo-comunicados .comunicado-aviso')), 'Mi censo: al cerrarlo no vuelve a salir');
+  await ir('#/herramientas');
+  ok((await page.innerText('main')).includes('Comunicados del Club') && (await page.innerText('main')).includes('Vacunación de Newcastle'), 'Herramientas: acceso a los comunicados con el último');
+  await ir('#/conoce?s=sanidad');
+  ok(Boolean(await page.$('#sanidad a[href="#/comunicados"]')), 'Obligaciones sanitarias: enlaza a los comunicados del Club (con sesión)');
+  if (process.env.CAPTURAS) { await ir('#/comunicados'); await page.screenshot({ path: `${process.env.CAPTURAS}/comunicados.png`, fullPage: true }); }
+  await ir('#/comunicados');
+  await page.click('[data-editar]'); await page.click('#com-borrar'); await page.click('dialog.dialogo button[value="si"]');
+  await page.waitForTimeout(300);
+  ok((await page.innerText('main')).includes('Todavía no hay comunicados'), 'Comunicados: se pueden borrar, con confirmación'); }
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });

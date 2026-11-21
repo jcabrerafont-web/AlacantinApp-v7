@@ -329,3 +329,30 @@ psql:tests/schema.test.sql:315: ERROR:  new row for relation "germoplasma" viola
 ---------
        1
 
+== 20. Comunicados del Club
+   20a un criador no puede publicar (esperado: error 42501)
+psql:tests/schema.test.sql:330: ERROR:  new row violates row-level security policy for table "comunicados"
+   20b el administrador sí, a su nombre (esperado: 1, t)
+ comunicados | a_su_nombre 
+-------------+-------------
+           1 | t
+
+   20c enlace que no es https o destacado antes de la fecha (esperado: 2 errores 23514)
+psql:tests/schema.test.sql:338: ERROR:  new row for relation "comunicados" violates check constraint "comunicados_enlace_check"
+psql:tests/schema.test.sql:339: ERROR:  new row for relation "comunicados" violates check constraint "destacado_tras_fecha"
+   20d el criador lo lee pero no lo cambia (esperado: 1 y luego 0 filas cambiadas)
+ visibles_criador 
+------------------
+                1
+
+         titulo          
+-------------------------
+ Vacunación de Newcastle
+
+   20e un visitante sin cuenta no lo ve (esperado: error 42501)
+psql:tests/schema.test.sql:349: ERROR:  permission denied for table comunicados
+   20f al borrarlo, el criador ve el borrado para quitarlo de su móvil (esperado: 1)
+ borrado_visible 
+-----------------
+               1
+

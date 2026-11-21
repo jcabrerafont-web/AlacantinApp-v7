@@ -54,7 +54,7 @@ for (const tema of ['claro', 'oscuro', 'sol']) {
   // Administración (rol local de administrador)
   await page.evaluate(async () => { const db = await import('./js/db.js'); const p = await db.obtener('perfiles', await db.metaGet('sesion')); await db.guardar('perfiles', { ...p, rol: 'administrador' }); });
   await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#barra a');
-  for (const r of ['#/admin', '#/admin/libro', '#/usuarios', '#/admin/supabase', '#/admin/historial', '#/admin/expediente', '#/admin/programa', '#/admin/germoplasma', '#/mapa', '#/inspector']) { await ir(r); res['adm ' + r] = await revisar(); }
+  for (const r of ['#/admin', '#/admin/libro', '#/usuarios', '#/admin/supabase', '#/admin/historial', '#/admin/expediente', '#/admin/programa', '#/admin/germoplasma', '#/comunicados', '#/mapa', '#/inspector']) { await ir(r); res['adm ' + r] = await revisar(); }
   await ir('#/usuarios'); await page.click('#us-lista summary'); res['adm #/usuarios abierto'] = await revisar();
   // foco tras navegar
   await ir('#/censo'); await page.click('#barra a[href="#/puesta"]'); await page.waitForTimeout(500);

@@ -323,3 +323,35 @@ SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-000
 DELETE FROM germoplasma WHERE id = '70000000-0000-0000-0000-000000000001';
 SELECT count(*) AS anotado FROM borrados WHERE tabla = 'germoplasma';
 RESET ROLE;
+
+\echo '== 20. Comunicados del Club'
+\echo '   20a un criador no puede publicar (esperado: error 42501)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+INSERT INTO comunicados (id, fecha, titulo, texto) VALUES ('80000000-0000-0000-0000-000000000001', '2026-11-21', 'X', 'Y');
+RESET ROLE;
+\echo '   20b el administrador sí, a su nombre (esperado: 1, t)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+INSERT INTO comunicados (id, fecha, titulo, texto, fuente, enlace, destacado_hasta) VALUES
+  ('80000000-0000-0000-0000-000000000001', '2026-11-21', 'Vacunación de Newcastle', 'Texto del comunicado.', 'Resolución de 24/2/2026', 'https://dogv.gva.es/', '2026-12-31');
+SELECT count(*) AS comunicados, bool_and(usuario_id = auth.uid()) AS a_su_nombre FROM comunicados;
+\echo '   20c enlace que no es https o destacado antes de la fecha (esperado: 2 errores 23514)'
+INSERT INTO comunicados (id, fecha, titulo, texto, enlace) VALUES (gen_random_uuid(), '2026-11-21', 'A', 'B', 'javascript:alert(1)');
+INSERT INTO comunicados (id, fecha, titulo, texto, destacado_hasta) VALUES (gen_random_uuid(), '2026-11-21', 'A', 'B', '2026-11-01');
+RESET ROLE;
+\echo '   20d el criador lo lee pero no lo cambia (esperado: 1 y luego 0 filas cambiadas)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT count(*) AS visibles_criador FROM comunicados;
+UPDATE comunicados SET titulo = 'Cambiado' WHERE id = '80000000-0000-0000-0000-000000000001';
+SELECT titulo FROM comunicados;
+RESET ROLE;
+\echo '   20e un visitante sin cuenta no lo ve (esperado: error 42501)'
+SET ROLE anon;
+SELECT count(*) FROM comunicados;
+RESET ROLE;
+\echo '   20f al borrarlo, el criador ve el borrado para quitarlo de su móvil (esperado: 1)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+DELETE FROM comunicados WHERE id = '80000000-0000-0000-0000-000000000001';
+RESET ROLE;
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT count(*) AS borrado_visible FROM borrados WHERE tabla = 'comunicados';
+RESET ROLE;
