@@ -1,6 +1,7 @@
 // La Alacantina y su Club: los textos para conocer la raza (historia, el Club y el
 // Libro Genealógico). Pública, sin cuenta. El Estándar queda solo con el Estándar.
 import { CONFIG } from '../config.js';
+import { ESTANDAR, REGLAS } from '../estandar.js';
 import { h, html, pintar } from '../ui.js';
 import { icono } from '../iconos.js';
 
@@ -77,6 +78,48 @@ const LIBRO = {
   estado: 'FESACOCUR reconoció la Alacantina en 2020, pero la raza todavía no figura en el Catálogo Oficial. El Club lleva el Libro conforme a estas normas para que, cuando se pida la inclusión, haya años de genealogías, calificaciones y censos que la respalden. Con la raza en el Catálogo, la Administración podría reconocer al Club como asociación oficial de criadores y aprobar su programa de cría, y se abriría la puerta a las ayudas públicas para razas autóctonas.'
 };
 
+// Cómo empezar a criar. Aprobado por el Club el 21/11/2026. El REGA es obligatorio
+// también para el autoconsumo desde 2024 (Real Decreto 637/2021).
+const EMPEZAR = [
+  ['Escribe al Club', `(${CONFIG.club.email}). Te orientará y te pondrá en contacto con criadores que tengan animales.`],
+  ['Inscribe tu gallinero en el REGA.', 'Desde 2024 es obligatorio para cualquier gallinero, aunque sea para consumo propio y tengas pocas gallinas. Se pide en la oficina comarcal agraria o en la consejería de agricultura de tu comunidad, y te dan un código que empieza por ES.'],
+  ['Consigue animales con genealogía conocida', 'de criadores del Club, con su anilla y sus padres. Mejor si el gallo y las gallinas son de líneas distintas, sin parentesco.'],
+  ['Crea tu cuenta en la app', 'y pon tu REGA en «Mi aviario»: pasarás de Aspirante a Criador. Después da de alta tus animales.'],
+  ['Pide las anillas a tiempo', 'a través del Club. FESACOCUR abre plazos en octubre, diciembre y febrero.'],
+  ['Cría con método:', 'forma familias de un gallo con sus gallinas y apunta de qué gallina es cada huevo. Anilla cada pollito y dalo de alta con su padre y su madre.'],
+  ['Cuando un animal cumpla un año, pide su calificación', 'desde la app. Si es apto, pasa al Registro Definitivo.']
+];
+
+// Plumaje y pollitos de cada variedad: descripción del Club (web clubalacantina.com,
+// sección «Colores»), revisada el 21/11/2026. No forma parte del texto del Estándar.
+const PLUMAJE = {
+  'blanca': ['Plumaje completamente blanco.', 'Plumón blanquecino o blanco amarillento.'],
+  'negra-moteada': ['Plumas negras con la punta blanca, repartidas por igual por todo el cuerpo; en alas y cola se admite alguna pluma blanca.', 'Plumón blanco amarillento y negro.'],
+  'pinta': ['Mezcla de plumas enteramente blancas y enteramente negras, mitad y mitad, repartidas lo más uniformemente posible, sin el moteado regular de la negra moteada.', 'Como los de la negra moteada, pero con menos negro.'],
+  'arminada': ['Cuerpo blanco con negro en el cuello, el dorso, la cola y algunas plumas del ala; es el dibujo «Columbia».', 'Plumón blanco amarillento.'],
+  'milflores': ['Cada pluma tiene fondo leonado, una banda negra bien marcada y la punta blanca, repartidas por igual como en la moteada; el subplumón es de color crema. El Club sigue trabajando para mejorar el dibujo.', 'Plumón marrón anaranjado, con el pecho y el vientre amarillos.']
+};
+
+// Glosario. Las cifras salen de REGLAS para que nunca contradigan a la app.
+const GLOSARIO = [
+  ['Anilla', 'anilla cerrada de la Entente Europea que reparte FESACOCUR. Identifica a cada ave para toda su vida; su código lleva el año de nacimiento.'],
+  ['Apto', `animal calificado sin ningún defecto descalificante y con al menos ${REGLAS.puntosMinimosApto.H} puntos (gallinas) o ${REGLAS.puntosMinimosApto.M} (gallos).`],
+  ['Calificación', 'valoración de un inspector del Club sobre 100 puntos, repartidos en las 12 regiones del Estándar.'],
+  ['Catálogo Oficial', 'la lista de razas de ganado reconocidas por el Estado español. La Alacantina aún no figura en él.'],
+  ['CNZ', 'Comisión Nacional de Zootecnia. Informa sobre qué razas entran en el Catálogo Oficial.'],
+  ['Consanguinidad (Fx)', 'cuánto están emparentados los padres de un animal. Cuanto más alta, más riesgo de perder vigor y variabilidad.'],
+  ['Dirección Técnica', 'las personas del Club responsables del Libro y de sus criterios.'],
+  ['Estándar (ESGA025)', 'la descripción oficial de cómo debe ser la Alacantina.'],
+  ['Exchequer o pinta', 'variedad de plumas enteramente blancas y enteramente negras, mitad y mitad. Más en «Las variedades».'],
+  ['Familia', 'un gallo con sus gallinas, criados juntos para saber de quién es cada pollito.'],
+  ['FESACOCUR', 'Federación Española de Avicultura, Colombicultura y Cunicultura de Raza.'],
+  ['Gobe (rotación de)', 'forma de criar en la que cada gallo y cada gallina dejan un hijo como reproductor y los gallos rotan entre familias, para no perder variabilidad.'],
+  ['Ne (tamaño efectivo)', 'a cuántos reproductores «equivale» genéticamente la población. Cuanto más alto, mejor se conserva la raza.'],
+  ['REGA', 'Registro General de Explotaciones Ganaderas. Obligatorio para cualquier gallinero.'],
+  ['RN, RD, RM, RF, RA', 'los registros del Libro: Nacimientos, Definitivo, Méritos, Fundacional y Auxiliar.'],
+  ['Variedad', 'cada color de plumaje de la raza. Están reconocidas la blanca, la negra moteada y la exchequer; la armiñada y la milflores están en proceso de reconocimiento.']
+];
+
 const lista = (items) => h`<ul>${items.map(x => h`<li>${html(x)}</li>`)}</ul>`;
 const apartado = (id, titulo, sub, cuerpo, abierto = false) => h`<details class="tarjeta historia" id="${id}" ${abierto ? h`open` : ''}>
   <summary><span><strong>${titulo}</strong><span class="item-sub">${sub}</span></span></summary>${cuerpo}</details>`;
@@ -86,7 +129,10 @@ export default function (main) {
   pintar(main, h`
     <p class="peq"><a href="#/estandar">‹ Estándar</a></p>
     <h1>La Alacantina y su Club</h1>
-    <p class="muted">De dónde viene la raza, quién la cuida y cómo se lleva su Libro Genealógico.</p>
+    <p class="muted">Cómo empezar, de dónde viene la raza, quién la cuida, cómo se lleva su Libro Genealógico y cómo es cada variedad.</p>
+
+    ${apartado('empezar', 'Cómo empezar a criar Alacantinas', 'Del primer contacto con el Club a la primera calificación', h`
+      <ol class="pasos">${EMPEZAR.map(([a, b]) => h`<li><strong>${a}</strong> ${b}</li>`)}</ol>`, abierto === 'empezar')}
 
     ${apartado('historia', 'Historia de la raza', 'De 1905 al reconocimiento de 2020 y el Libro Genealógico',
       h`${HISTORIA.map(([etapa, parrafos]) => h`<h3>${etapa}</h3>${parrafos.map(p => h`<p>${html(p)}</p>`)}`)}`, abierto === 'historia')}
@@ -109,6 +155,16 @@ export default function (main) {
       <h3>Qué normas lo regulan</h3>${lista(LIBRO.normas)}
       <h3>Dónde estamos</h3><p>${LIBRO.estado}</p>
       <p class="peq">Para saber más: Guía del criador, <a href="#/programa?s=libro">«El Libro Genealógico, en cuatro pasos»</a> y <a href="#/programa?s=normativa">«Normativa»</a>.</p>`, abierto === 'libro')}
+
+    ${apartado('variedades', 'Las variedades', 'Plumaje de los adultos y plumón de los pollitos', h`
+      <p class="peq muted">Descripción del Club; no forma parte del texto del Estándar ${ESTANDAR.codigo}, que describe los tarsos y el pico de cada variedad.</p>
+      <ul class="lista">${ESTANDAR.variedades.map(v => h`<li class="item"><div class="item-principal">
+        <div class="item-titulo"><span class="ave var-${v.id}" style="width:28px;height:28px;vertical-align:middle;margin-right:.4rem" aria-hidden="true"></span>${v.nombre} ${v.oficial ? h`<span class="chip chip-ok">Oficial</span>` : h`<span class="chip chip-aviso">En proceso de reconocimiento</span>`}</div>
+        <p style="margin:.35rem 0 .2rem">${PLUMAJE[v.id]?.[0] || '—'}</p>
+        <p class="peq muted" style="margin:0"><strong>Pollitos:</strong> ${PLUMAJE[v.id]?.[1] || '—'}</p></div></li>`)}</ul>`, abierto === 'variedades')}
+
+    ${apartado('glosario', 'Glosario', 'Las palabras y siglas que usa la app', h`
+      <dl class="glosario">${GLOSARIO.map(([t, d]) => h`<dt>${t}</dt><dd>${d}</dd>`)}</dl>`, abierto === 'glosario')}
 
     <a class="tarjeta item" href="#/programa" style="display:flex"><span class="tarea-ico" aria-hidden="true">${icono('brujula')}</span>
       <span class="item-principal"><span class="item-titulo">¿Quieres criar Alacantinas para el Libro?</span>

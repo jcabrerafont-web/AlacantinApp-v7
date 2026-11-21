@@ -45,6 +45,7 @@ export default function (main) {
           <div class="item-titulo"><span class="ave var-${v.id}" style="width:28px;height:28px;vertical-align:middle;margin-right:.4rem" aria-hidden="true"></span>${v.nombre} ${v.oficial ? h`<span class="chip chip-ok">Oficial</span>` : h`<span class="chip chip-aviso">En proceso de reconocimiento</span>`}</div>
           <div class="item-sub">${v.detalle}</div></div></li>`)}
       </ul>
+      <p class="peq" style="margin:.5rem 0 0"><a href="#/conoce?s=variedades">Plumaje y pollitos de cada variedad →</a></p>
     </div>
 
     <div class="tarjeta">

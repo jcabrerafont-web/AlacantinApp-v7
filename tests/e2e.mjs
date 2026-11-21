@@ -28,6 +28,7 @@ ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
     'Estándar: rasgos clave (dorso 40º, cola 70º…) y accesos a Guía, Censo y PDF'); }
 ok(!(await page.$('#historia')) && !(await page.$('#club')) && Boolean(await page.$('main .accesos a[href="#/conoce"]')) && Boolean(await page.$('main .accesos a[href="#/programa"]')),
   'Estándar: solo el Estándar; arriba, accesos a «La Alacantina y su Club», Guía del criador y PDF (no repite la barra)');
+ok(Boolean(await page.$('main a[href="#/conoce?s=variedades"]')), 'Estándar: enlace «Plumaje y pollitos de cada variedad»');
 await ir('#/conoce');
 ok(await page.$eval('#historia', d => !d.open && d.querySelectorAll('h3').length === 4 && d.textContent.includes('18 de diciembre de 2020') && d.textContent.includes('8 de marzo de 2025')),
   'La Alacantina y su Club: «Historia de la raza» con sus cuatro etapas');
@@ -35,6 +36,12 @@ ok(await page.$eval('#club', d => d.querySelectorAll('h3').length === 5 && d.tex
   'La Alacantina y su Club: «El Club» con qué es, fines, criar en común, por qué asociarse, correo, web y YouTube');
 ok(await page.$eval('#libro', d => d.querySelectorAll('h3').length === 5 && d.textContent.includes('Real Decreto 45/2019') && d.textContent.includes('todavía no figura en el Catálogo Oficial') && Boolean(d.querySelector('a[href="#/programa?s=normativa"]'))),
   'La Alacantina y su Club: «El Libro Genealógico» con qué es, para qué sirve, registros, normas y dónde estamos');
+ok(await page.$eval('#empezar', d => d.querySelectorAll('ol.pasos li').length === 7 && d.textContent.includes('REGA')) && await page.$eval('main', m => m.querySelector('details')?.id === 'empezar'),
+  'La Alacantina y su Club: «Cómo empezar a criar», el primero, con 7 pasos (REGA incluido)');
+ok(await page.$eval('#variedades', d => d.querySelectorAll('li.item').length === 5 && d.textContent.includes('mitad y mitad') && d.textContent.includes('subplumón es de color crema') && d.textContent.includes('no forma parte del texto del Estándar')),
+  'La Alacantina y su Club: «Las variedades» con el plumaje y los pollitos de las 5, señalado como descripción del Club');
+ok(await page.$eval('#glosario', d => d.querySelectorAll('dt').length === 16 && d.textContent.includes('al menos 65 puntos (gallinas) o 70 (gallos)')),
+  'La Alacantina y su Club: glosario de 16 términos, con las cifras de la app');
 await ir('#/conoce?s=libro');
 ok(await page.$eval('#libro', d => d.open), 'La Alacantina y su Club: enlace directo a un apartado (?s=libro) lo abre');
 await ir('#/estandar');

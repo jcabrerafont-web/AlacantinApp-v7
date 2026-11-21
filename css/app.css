@@ -496,3 +496,6 @@ details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offs
 .historia li { margin-bottom: .3rem; }
 .club-enlaces { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .club-enlaces .btn { flex: 1 1 auto; justify-content: center; }
+.glosario { margin: 0; }
+.glosario dt { font-weight: 700; margin-top: .6rem; }
+.glosario dd { margin: .1rem 0 0; max-width: 70ch; }
