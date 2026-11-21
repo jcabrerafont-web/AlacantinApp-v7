@@ -25,10 +25,23 @@ export default function (main, params) {
   const etiqueta = (x) => `${x.anilla}${x.nombre ? ' · ' + x.nombre : ''}${x.usuario_id !== p.id ? ' (otro criador)' : ''}`;
   const puedeSeccionFundacional = esAuditor(p.rol);
   const sinAviario = !p.rega && !p.municipio;
+  // Pollitos de incubaciones sin dar de alta: el camino con la genealogía ya puesta, siempre a mano
+  const q0 = new URLSearchParams(location.hash.split('?')[1] || '');
+  const pollitos = previo || q0.get('inc') ? [] : datos.pollitosPendientes();
+  const anillaDe = (id) => datos.animal(id)?.anilla || '—';
 
   pintar(main, h`
     <h1>${previo ? `Editar ${previo.anilla}` : 'Alta rápida'}</h1>
-    ${sinAviario ? h`<div class="aviso-caja aviso">Completa <a href="#/perfil">Mi aviario</a> (REGA y municipio): cada alta los hereda automáticamente.</div>`
+    ${pollitos.length ? h`<div class="tarjeta pollitos-pend" id="a-pollitos">
+      <p style="margin:0 0 .5rem"><strong>🐣 Tienes ${pollitos.reduce((n, x) => n + x.pendientes, 0)} pollito(s) de tus incubaciones sin dar de alta.</strong>
+        <span class="peq muted">Desde aquí entran con su padre, su madre y su fecha ya puestos.</span></p>
+      <ul class="lista">${pollitos.slice(0, 3).map(x => h`<li class="item"><div class="item-principal">
+        <div class="item-titulo">${x.pendientes} de ${anillaDe(x.fila.madre_id)} × ${x.fila.padre_id ? anillaDe(x.fila.padre_id) : 'padre desconocido'}</div>
+        <div class="item-sub">Nacidos el ${x.nacimiento.split('-').reverse().join('/')}</div></div>
+        <a class="btn btn-pequeno btn-primario" href="#/alta?inc=${x.inc.id}&madre=${x.fila.madre_id}${x.fila.padre_id ? `&padre=${x.fila.padre_id}` : ''}&fecha=${x.nacimiento}">Dar de alta</a></li>`)}</ul>
+      ${pollitos.length > 3 ? h`<p class="peq" style="margin:.25rem 0 0"><a href="#/reproduccion">Ver todos en Reproducción →</a></p>` : ''}
+    </div>` : ''}
+    ${sinAviario ? h`<p class="aviso-linea peq">${icono('aviso')} Completa <a href="#/perfil">Mi aviario</a> (REGA y municipio): cada alta los hereda.</p>`
       : h`<p class="muted peq">Aviario: ${p.rega || 'REGA pendiente'} · ${p.municipio || '—'}${p.latitud ? ' · ubicación registrada' : ''}</p>`}
     <form id="form-alta" class="tarjeta" novalidate>
       <div class="rejilla rejilla-2">

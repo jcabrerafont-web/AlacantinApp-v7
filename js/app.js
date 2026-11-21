@@ -129,7 +129,7 @@ function pintarBarra() {
   const nav = $('#barra');
   nav.dataset.columnas = String(items.length);
   nav.innerHTML = items.map(([ruta, ico, texto]) =>
-    `<a href="#/${ruta}" data-ruta="${ruta}"><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('')
+    `<a href="#/${ruta}" data-ruta="${ruta}"${ruta === 'alta' ? ' class="principal"' : ''}><span class="ico" aria-hidden="true">${svgIcono(nombreDeEmoji(ico)) || ico}</span><span>${esc(texto)}</span></a>`).join('')
     + (extra ? `<a href="#/${extra[0]}" data-ruta="${extra[0]}" class="solo-ancho"><span class="ico" aria-hidden="true">${svgIcono(extra[1])}</span><span>${extra[2]}</span></a>` : '');
   pintarInsignia();
   marcarBarra(resolver(location.hash)?.base);

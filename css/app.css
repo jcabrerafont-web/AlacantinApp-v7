@@ -501,3 +501,20 @@ details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offs
 .glosario dt { font-weight: 700; margin-top: .6rem; }
 .glosario dd { margin: .1rem 0 0; max-width: 70ch; }
 details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; flex-shrink: 0; }
+
+/* Alta Rápida: la acción principal del criador, destacada en la barra */
+.barra a.principal { color: var(--azul-t); font-weight: 800; }
+.barra a.principal .ico { display: grid; place-items: center; width: 54px; height: 54px; margin-top: -24px; border-radius: 50%;
+  background: var(--azul); color: #fff; border: 4px solid var(--superficie); box-shadow: 0 4px 12px rgb(23 32 51 / .25); }
+.barra a.principal .icono { width: 28px; height: 28px; }
+.barra a.principal[aria-current="page"] { box-shadow: none; }
+.barra a.principal[aria-current="page"] .ico { background: var(--cresta); }
+@media (min-width: 900px) {
+  .barra a.principal .ico { margin-top: 0; width: 48px; height: 48px; border-width: 0; }
+  .barra a.principal[aria-current="page"] { box-shadow: inset 3px 0 0 var(--cresta); }
+  .barra a.principal[aria-current="page"] .ico { background: var(--azul); }
+}
+/* Avisos de una línea (sin recuadro) para no empujar el formulario */
+.aviso-linea { color: var(--ambar-t); margin: -.25rem 0 .75rem; }
+.aviso-linea .icono { width: 18px; height: 18px; vertical-align: -3px; margin-right: .3rem; }
+.pollitos-pend { border-color: var(--azul-t); }

@@ -509,6 +509,11 @@ await page.waitForTimeout(800);
 ok(page.url().includes('#/animal/'), `Pollito dado de alta (${(await aviso()).slice(0, 80)})`);
 const vinc = await page.evaluate(async () => { const d = await import('./js/datos.js'); const f = d.estado.incubaciones[0].filas[0]; return { pollitos: f.pollitos.length, pendientes: d.pollitosPendientes().reduce((s, x) => s + x.pendientes, 0) }; });
 ok(vinc.pollitos === 1 && vinc.pendientes === 3, `El pollito queda unido a su incubación (quedan ${vinc.pendientes} por dar de alta)`);
+await ir('#/alta');
+ok(await page.$eval('#a-pollitos', e => e.textContent.includes('3 pollito(s)') && Boolean(e.querySelector('a[href^="#/alta?inc="]'))) && await page.$eval('#barra a.principal', a => a.dataset.ruta === 'alta'),
+  'Alta Rápida: destacada en la barra y, arriba, los pollitos de incubación pendientes con su enlace');
+await page.click('#a-pollitos a[href^="#/alta?inc="]'); await page.waitForTimeout(500);
+ok(!(await page.$('#a-pollitos')) && await page.$eval('#a-madre', s => s.value !== ''), 'Desde el aviso, el alta llega con la madre puesta y sin repetir el aviso');
 const sugerido = await page.evaluate(async (g) => {
   location.hash = '#/censo'; await new Promise(r => setTimeout(r, 300)); location.hash = '#/alta'; await new Promise(r => setTimeout(r, 400));
   const f = document.querySelector('#form-alta'); f.querySelector('#a-fecha').value = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
