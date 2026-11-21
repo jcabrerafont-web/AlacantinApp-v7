@@ -38,7 +38,7 @@ ok(await page.$eval('#libro', d => d.querySelectorAll('h3').length === 5 && d.te
   'La Alacantina y su Club: «El Libro Genealógico» con qué es, para qué sirve, registros, normas y dónde estamos');
 ok(await page.$eval('#empezar', d => d.querySelectorAll('ol.pasos li').length === 7 && d.textContent.includes('REGA')) && await page.$eval('main', m => m.querySelector('details')?.id === 'empezar'),
   'La Alacantina y su Club: «Cómo empezar a criar», el primero, con 7 pasos (REGA incluido)');
-ok(await page.$eval('#variedades', d => d.querySelectorAll('li.item').length === 5 && d.textContent.includes('mitad y mitad') && d.textContent.includes('subplumón es de color crema') && d.textContent.includes('no forma parte del texto del Estándar')),
+ok(await page.$eval('#variedades', d => d.querySelectorAll('li.item').length === 5 && d.textContent.includes('mitad y mitad') && d.textContent.includes('oscuro bajo lo negro y blanco bajo lo blanco') && d.textContent.includes('El subplumón es negro') && d.textContent.includes('subplumón es de color crema') && d.textContent.includes('no forma parte del texto del Estándar')),
   'La Alacantina y su Club: «Las variedades» con el plumaje y los pollitos de las 5, señalado como descripción del Club');
 ok(await page.$eval('#glosario', d => d.querySelectorAll('dt').length === 16 && d.textContent.includes('al menos 65 puntos (gallinas) o 70 (gallos)')),
   'La Alacantina y su Club: glosario de 16 términos, con las cifras de la app');

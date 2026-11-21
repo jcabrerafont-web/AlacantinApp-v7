@@ -91,11 +91,13 @@ const EMPEZAR = [
 ];
 
 // Plumaje y pollitos de cada variedad: descripción del Club (web clubalacantina.com,
-// sección «Colores»), revisada el 21/11/2026. No forma parte del texto del Estándar.
+// sección «Colores»), revisada el 21/11/2026. Exchequer y moteada son el mismo gen (mo):
+// el subplumón de la exchequer sigue al color de cada pluma (estándar ABA de la Leghorn
+// exchequer); el de la moteada es negro (estándar de la Ancona). No forma parte del texto del Estándar.
 const PLUMAJE = {
   'blanca': ['Plumaje completamente blanco.', 'Plumón blanquecino o blanco amarillento.'],
-  'negra-moteada': ['Plumas negras con la punta blanca, repartidas por igual por todo el cuerpo; en alas y cola se admite alguna pluma blanca.', 'Plumón blanco amarillento y negro.'],
-  'pinta': ['Mezcla de plumas enteramente blancas y enteramente negras, mitad y mitad, repartidas lo más uniformemente posible, sin el moteado regular de la negra moteada.', 'Como los de la negra moteada, pero con menos negro.'],
+  'negra-moteada': ['Plumas negras hasta la raíz, con la punta blanca, repartidas por igual por todo el cuerpo; en alas y cola se admite alguna pluma blanca. El subplumón es negro.', 'Plumón blanco amarillento y negro.'],
+  'pinta': ['Blanco y negro mitad y mitad, repartidos al azar por todo el cuerpo. Hay plumas enteramente blancas, enteramente negras y muchas en parte blancas y en parte negras, en proporciones distintas y sin un dibujo fijo. El blanco forma manchas grandes e irregulares, no la punta blanca regular de cada pluma que tiene la negra moteada. El subplumón sigue al color de cada pluma: oscuro bajo lo negro y blanco bajo lo blanco, mezclado como la superficie. Es el mismo gen que la negra moteada, con más blanco.', 'Como los de la negra moteada, pero con menos negro.'],
   'arminada': ['Cuerpo blanco con negro en el cuello, el dorso, la cola y algunas plumas del ala; es el dibujo «Columbia».', 'Plumón blanco amarillento.'],
   'milflores': ['Cada pluma tiene fondo leonado, una banda negra bien marcada y la punta blanca, repartidas por igual como en la moteada; el subplumón es de color crema. El Club sigue trabajando para mejorar el dibujo.', 'Plumón marrón anaranjado, con el pecho y el vientre amarillos.']
 };
@@ -110,7 +112,7 @@ const GLOSARIO = [
   ['Consanguinidad (Fx)', 'cuánto están emparentados los padres de un animal. Cuanto más alta, más riesgo de perder vigor y variabilidad.'],
   ['Dirección Técnica', 'las personas del Club responsables del Libro y de sus criterios.'],
   ['Estándar (ESGA025)', 'la descripción oficial de cómo debe ser la Alacantina.'],
-  ['Exchequer o pinta', 'variedad de plumas enteramente blancas y enteramente negras, mitad y mitad. Más en «Las variedades».'],
+  ['Exchequer o pinta', 'variedad blanca y negra, mitad y mitad, repartida al azar: plumas blancas, negras y en parte de cada color. Es el mismo gen que la negra moteada, con más blanco. Más en «Las variedades».'],
   ['Familia', 'un gallo con sus gallinas, criados juntos para saber de quién es cada pollito.'],
   ['FESACOCUR', 'Federación Española de Avicultura, Colombicultura y Cunicultura de Raza.'],
   ['Gobe (rotación de)', 'forma de criar en la que cada gallo y cada gallina dejan un hijo como reproductor y los gallos rotan entre familias, para no perder variabilidad.'],
