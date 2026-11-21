@@ -488,3 +488,7 @@ details > summary:focus-visible { outline: 3px solid var(--azul-t); outline-offs
 .auditoria-grupo > summary .chip { margin-left: auto; }
 .auditoria-grupo > summary::after { margin-left: .5rem; }
 @media (prefers-reduced-motion: reduce) { details > summary::after { transition: none; } }
+/* Historia de la raza (portada del Estándar) */
+.historia h3 { font-size: 1rem; margin: 1rem 0 .3rem; color: var(--azul-t); }
+.historia h3:first-of-type { margin-top: .5rem; }
+.historia p { margin: 0 0 .6rem; max-width: 70ch; }

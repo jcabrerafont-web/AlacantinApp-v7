@@ -1,6 +1,28 @@
 import { ESTANDAR } from '../estandar.js';
-import { h, pintar } from '../ui.js';
+import { h, html, pintar } from '../ui.js';
 import { icono } from '../iconos.js';
+
+// Historia de la raza: resumen del documento del Club «Historia y recuperación de la
+// gallina alacantina» (Protocolo CNZ 2025, apdo. 3.1 b). Aprobado por el Club el 21/11/2026.
+const HISTORIA = [
+  ['Antes de su desaparición', [
+    'En 1905, la revista <em>La Avicultura Práctica</em>, de Salvador Castelló, ya citaba la gallina alicantina como raza ponedora regional.',
+    'Fernando Orozco recordaba en 1987 que Joaquín Ferrán, de Valencia, había seleccionado las alicantinas blancas, llamadas también «blanqueñas». En 1989, en su libro <em>Razas de Gallinas Españolas</em>, la dio por desaparecida.'
+  ]],
+  ['Redescubrimiento (1999–2011)', [
+    'En 1999, el Grupo Naturalista Heliaca de Monóvar encontró gallinas de la raza en una casa de campo de Monóvar. Julio Díez Moltó, de Aspe, las reconoció como iguales a un núcleo que él conservaba desde los años sesenta.',
+    'Orozco confirmó por fotografías que eran alicantinas y los puso en contacto con Amadeu Francesch, del IRTA, que asesoró la caracterización de la raza desde 2004.',
+    'Se localizaron otros núcleos en l’Alcoià, el Vinalopó Mitjà y el Baix Vinalopó: unos 15 gallos y 50 gallinas «afabades», las actuales negra moteada y exchequer, además de las «pintadas», hoy milflores.'
+  ]],
+  ['Primera asociación (2011–2016)', [
+    'En 2011 se inscribió la Asociación de Criadores de Gallinas de Raza Alicantina. Aprobó el primer patrón racial, organizó exposiciones monográficas en San Vicente del Raspeig y se adhirió a FESACOCUR en 2013.'
+  ]],
+  ['Club Gallina Alacantina (2017–hoy)', [
+    'En 2016 se retomó el contacto entre criadores y el trabajo de reconocimiento, y en enero de 2017 se reunió por primera vez el Club, en Benissa. Se definió el estándar, se presentaron ejemplares en las exposiciones validadas por la Comisión Nacional de Estándares y se trabajó en la mejora de la variedad milflores.',
+    'El <strong>18 de diciembre de 2020</strong>, FESACOCUR reconoció la raza Alacantina con tres variedades: blanca, negra moteada y exchequer.',
+    'El <strong>8 de marzo de 2025</strong>, el Club se constituyó formalmente como asociación. Hoy lleva el Libro Genealógico con el objetivo de que la raza entre en el Catálogo Oficial de Razas de Ganado de España.'
+  ]]
+];
 
 // 3000 → «3», 3500 → «3,5» (sin ceros de relleno)
 const kg = (g) => String(Math.round(g / 10) / 100).replace('.', ',');
@@ -59,6 +81,11 @@ export default function (main) {
         <tbody>${E.regiones.map(r => h`<tr><th scope="row">${r.nombre}</th><td>${r.gallo}</td><td>${r.gallina}</td></tr>`)}</tbody>
       </table></div>
     </div>
+
+    <details class="tarjeta historia" id="historia">
+      <summary><span><strong>Historia de la raza</strong><span class="item-sub">De 1905 al reconocimiento de 2020 y el Libro Genealógico</span></span></summary>
+      ${HISTORIA.map(([etapa, parrafos]) => h`<h3>${etapa}</h3>${parrafos.map(p => h`<p>${html(p)}</p>`)}`)}
+    </details>
 
     <a class="tarjeta item" href="#/programa" style="display:flex"><span class="tarea-ico" aria-hidden="true">${icono('brujula')}</span>
       <span class="item-principal"><span class="item-titulo">¿Quieres criar Alacantinas para el Libro?</span>

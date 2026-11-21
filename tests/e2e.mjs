@@ -26,6 +26,8 @@ ok(page.url().endsWith('#/estandar'), 'Visitante aterriza en el Estándar');
 { const t = await page.$eval('main', m => m.textContent);
   ok((await page.$$('main .rasgos li')).length === 6 && t.includes('40º') && t.includes('70º') && (await page.$$('main .accesos a')).length === 3,
     'Estándar: rasgos clave (dorso 40º, cola 70º…) y accesos a Guía, Censo y PDF'); }
+ok(await page.$eval('#historia', d => !d.open && d.querySelectorAll('h3').length === 4 && d.textContent.includes('18 de diciembre de 2020') && d.textContent.includes('8 de marzo de 2025')),
+  'Estándar: «Historia de la raza» desplegable, con sus cuatro etapas (reconocimiento de 2020 y constitución del Club en 2025)');
 ok((await page.$$eval('#barra a', a => a.length)) === 3 && !(await page.$('#barra a[href="#/alta"]')), 'Alta Rápida no existe en el DOM del visitante');
 await ir('#/alta');
 ok(page.url().endsWith('#/acceso'), 'Visitante que fuerza #/alta va a Acceso');
