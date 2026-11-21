@@ -349,6 +349,13 @@ await ir('#/admin/expediente');
   const t = await page.innerText('main');
   ok(ex.length === 14 && ex[0] === 'exp-a' && ex[13] === 'exp-n' && t.includes('entidad científica') && t.includes('Corresponde al Club'),
     'Expediente para el Catálogo: los 14 apartados del Protocolo CNZ (a–n), con su estado y lo que corresponde al Club'); }
+await ir('#/informes');
+{ const t = await page.innerText('#situacion');
+  const sp = await page.evaluate(async () => { const d = await import('./js/datos.js'); const r = d.situacionPoblacional(); return { anios: r.anios, grado: r.grado, am: r.amenazada, u: r.umbrales }; });
+  ok(t.includes('Raza amenazada · grado de amenaza alto') && sp.am && sp.grado === 'alto' && sp.u.hembras === 25000 && sp.u.machos === 500 && sp.u.reposicion === 15000 && sp.anios.length === 3,
+    `Informes: situación poblacional con los criterios CNZ para aves (${sp.anios.join('–')}: amenazada, grado ${sp.grado})`);
+  await ir('#/admin/expediente');
+  ok((await page.innerText('#exp-g')).includes('Cubierto') && (await page.innerText('#exp-g')).includes('grado alto'), 'Expediente: el apartado g) pasa a cubierto con el resultado'); }
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });

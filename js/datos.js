@@ -822,6 +822,51 @@ export function evolucionCenso({ hasta = Number(hoyIso().slice(0, 4)) } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Situación poblacional para la categoría del Catálogo (Protocolo CNZ 2025, apdo.
+// 3.1 g). Criterios del «Protocolo con los criterios para determinar la situación de
+// amenaza de una raza» (CNZ, 21/7/2022), umbrales de aves: la raza está amenazada si
+// la media de los tres años anteriores queda por debajo en cualquiera de a), b) o c);
+// el grado se fija con c). Ne, consanguinidad, tendencia y explotaciones son
+// información complementaria que la CNZ puede tener en cuenta de forma excepcional.
+// ---------------------------------------------------------------------------
+export const UMBRALES_AMENAZA_AVES = Object.freeze({
+  hembras: 25000, machos: 500, reposicion: 15000, edadMeses: 6,
+  grados: Object.freeze([['alto', 750], ['medio', 7499], ['bajo', 14999]])
+});
+
+export function situacionPoblacional({ hasta = Number(hoyIso().slice(0, 4)) - 1 } = {}) {
+  const U = UMBRALES_AMENAZA_AVES;
+  const todos = censo({ incluirBajas: true });
+  const enLibro = new Set(todos.map(a => a.id));
+  const vivoEn = (a, fecha) => a.fecha_nacimiento && a.fecha_nacimiento <= fecha && (a.estado !== 'baja' || !a.baja_fecha || a.baja_fecha > fecha);
+  const meses = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+  const anios = [hasta - 2, hasta - 1, hasta];
+  const filas = anios.map(anio => {
+    const ini = `${anio}-01-01`, fin = `${anio}-12-31`;
+    // a) Hembras que se reprodujeron en pureza: madres de algún pollito del año con padre y madre inscritos
+    const madres = new Set(todos.filter(h => String(h.fecha_nacimiento || '').startsWith(String(anio)) && enLibro.has(h.madre_id) && enLibro.has(h.padre_id)).map(h => h.madre_id));
+    // b) Machos que pueden usarse como reproductores: vivos a 31 de diciembre y con 6 meses o más
+    const machos = todos.filter(a => a.sexo === 'M' && vivoEn(a, fin) && meses(a.fecha_nacimiento, U.edadMeses) <= fin).length;
+    // c) Reposición: hembras inscritas que cumplieron 6 meses durante el año (y seguían vivas)
+    const reposicion = todos.filter(a => { if (a.sexo !== 'H' || !a.fecha_nacimiento) return false; const f6 = meses(a.fecha_nacimiento, U.edadMeses); return f6 >= ini && f6 <= fin && vivoEn(a, f6); }).length;
+    return { anio, hembras: madres.size, machos, reposicion };
+  });
+  const media = (k) => filas.reduce((n, f) => n + f[k], 0) / filas.length;
+  const m = { hembras: media('hembras'), machos: media('machos'), reposicion: media('reposicion') };
+  const bajo = { hembras: m.hembras < U.hembras, machos: m.machos < U.machos, reposicion: m.reposicion < U.reposicion };
+  const amenazada = bajo.hembras || bajo.machos || bajo.reposicion;
+  const grado = !amenazada ? null : !bajo.reposicion ? 'bajo' : (U.grados.find(([, max]) => m.reposicion <= max) || ['bajo'])[0];
+  const evol = evolucionCenso();
+  const ult = evol.at(-1) || null;
+  const hace = evol.length > 3 ? evol.at(-4) : evol[0] || null;
+  return {
+    anios, filas, medias: m, bajo, amenazada, grado, umbrales: U,
+    complementaria: ult ? { neDem: ult.neDem, fxMedio: ult.fxMedio, explotaciones: ult.explotaciones, municipios: ult.municipios, criadores: ult.criadores,
+      tendencia: hace && hace !== ult && hace.total ? (ult.total - hace.total) / hace.total : null, desde: hace?.anio ?? null, germoplasma: 0 } : null
+  };
+}
+
+// ---------------------------------------------------------------------------
 // «Hoy»: lo que toca hacer, reunido de todas partes (incubaciones, campaña, pollitos,
 // lotes, inspección, auditoría) y lo propio del mes. nivel: 'hoy' | 'pronto' | 'info'.
 // ---------------------------------------------------------------------------

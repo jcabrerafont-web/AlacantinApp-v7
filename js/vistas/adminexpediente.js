@@ -18,6 +18,7 @@ function apartados() {
   const inspectores = datos.estado.perfiles.filter(p => p.rol === 'inspector').length;
   const conUbic = datos.aviarios().conUbicacion.length;
   const campanas = datos.estado.campanas.length;
+  const sit = activos.length ? datos.situacionPoblacional() : null;
   return [
     ['a', 'Nombre de la raza', 'cubierto', 'Alacantina, con el Estándar oficial ESGA025.', [['#/estandar', 'Estándar']]],
     ['b', 'Historia de la raza', 'parte', 'Historia en cuatro etapas, del documento del Club. Faltan la primera directiva (2011–2013) y el VII encuentro, y conviene detallar la evolución territorial histórica.', [['#/conoce?s=historia', 'Historia de la raza']]],
@@ -25,7 +26,9 @@ function apartados() {
     ['d', 'Estudios comparativos con razas afines', 'club', 'Estudio morfológico y productivo frente a razas afines (otras mediterráneas). Lo hace una entidad científica; la app aporta los datos de calificación y puesta.', []],
     ['e', 'Aptitudes pasadas y presentes', 'parte', `Presentes: control de puesta individual (${campanas} campaña(s) registradas). Pasadas: en la historia. Falta un resumen de puesta de toda la raza por año.`, [['#/campanas', 'Control de puesta']]],
     ['f', 'Censos y su tendencia por sexo y edad, criadores y distribución territorial', 'cubierto', `Evolución del censo año a año (${evol.length} año(s)), censo por sexo y edad, ${criadores} criador(es) con ejemplares, distribución por municipio y mapa (${conUbic} aviario(s) con ubicación).`, [['#/informes', 'Informes'], ['#/mapa', 'Mapa de aviarios']]],
-    ['g', 'Situación poblacional para la categoría del Catálogo', 'pendiente', 'Reunir hembras reproductoras de los últimos años, Ne, tendencia y explotaciones para justificar la categoría (por ejemplo, en peligro de extinción). Los datos ya están en la app.', [['#/informes', 'Informes']]],
+    ['g', 'Situación poblacional para la categoría del Catálogo', sit ? 'cubierto' : 'parte', sit
+      ? `Con los criterios de la CNZ para aves (media ${sit.anios[0]}–${sit.anios[2]}): ${sit.amenazada ? `raza amenazada, grado ${sit.grado}` : 'no amenazada'} (${Math.round(sit.medias.hembras)} hembras que criaron en pureza, ${Math.round(sit.medias.machos)} machos y ${Math.round(sit.medias.reposicion)} de reposición al año), con Ne, consanguinidad y tendencia como información complementaria.`
+      : 'Se calcula con los criterios de la CNZ para aves en cuanto haya ejemplares en el Libro.', [['#/informes', 'Informes › Situación poblacional']]],
     ['h', 'Caracterización genética', 'club', 'Análisis de ADN en un laboratorio, salvo que el número de ejemplares no lo permita.', []],
     ['i', 'Gestión y organización de la raza', 'club', `Estatutos, Dirección Técnica e inspectores. En la app: ${inspectores} inspector(es) nombrado(s), roles y panel de inspección.`, [['#/usuarios', 'Usuarios y roles']]],
     ['j', 'Tamaño efectivo, variabilidad genética y endogamia', 'cubierto', 'Ne demográfico y realizado, consanguinidad de Wright, generaciones equivalentes y matriz de pedigrí para ENDOG.', [['#/informes', 'Informes']]],

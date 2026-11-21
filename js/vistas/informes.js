@@ -25,6 +25,7 @@ export default function (main) {
   const criadores = new Set(activos.map(a => a.usuario_id).filter(Boolean));
   const candidatos = datos.rol() === 'administrador' ? datos.candidatosRM() : [];
   const evolucion = datos.evolucionCenso();
+  const situacion = auditor && activos.length ? datos.situacionPoblacional() : null;
   const porMunicipio = {};
   activos.forEach(a => { const k = [a.municipio, a.provincia].filter(Boolean).join(' · ') || 'Sin municipio'; porMunicipio[k] = (porMunicipio[k] || 0) + 1; });
 
@@ -52,6 +53,20 @@ export default function (main) {
           <td>${coma(f.neDem, 1)}</td><td>${f.fxMedio == null ? '—' : pct(f.fxMedio, 2)}</td><td>${f.variacion == null ? '—' : h`<span class="${f.variacion > 0 ? 'sube' : f.variacion < 0 ? 'baja' : ''}">${f.variacion > 0 ? '▲' : f.variacion < 0 ? '▼' : '='} ${Math.abs(Math.round(f.variacion * 100))} %</span>`}</td></tr>`)}</tbody>
       </table></div>
       ${evolucion.some(f => f.enCurso) ? h`<p class="peq muted">* Año en curso: censo a hoy.</p>` : ''}
+    </div>` : ''}
+
+    ${situacion ? h`<div class="tarjeta" id="situacion"><h2>Situación poblacional (Catálogo)</h2>
+      <p class="peq muted">Criterios de la Comisión Nacional de Zootecnia (21/7/2022) para aves, con la media de ${situacion.anios[0]}–${situacion.anios[2]}. Una raza está amenazada si queda por debajo en cualquiera de los tres; el grado lo da la reposición. Protocolo CNZ 2025, apdo. 3.1 g.</p>
+      <div class="tabla-scroll"><table class="tabla-evolucion tabla-situacion">
+        <thead><tr><th scope="col">Criterio</th>${situacion.anios.map(a => h`<th scope="col">${a}</th>`)}<th scope="col">Media</th><th scope="col">Umbral</th></tr></thead>
+        <tbody>${[['hembras', 'a) Hembras que criaron en pureza'], ['machos', 'b) Machos reproductores (6 meses o más)'], ['reposicion', 'c) Reposición: hembras que cumplieron 6 meses']].map(([k, n]) => h`<tr>
+          <th scope="row">${n}</th>${situacion.filas.map(f => h`<td>${f[k]}</td>`)}<td><strong>${coma(situacion.medias[k], 1)}</strong></td><td><span class="${situacion.bajo[k] ? 'baja' : 'sube'}">${situacion.umbrales[k].toLocaleString('es-ES')}</span></td></tr>`)}</tbody>
+      </table></div>
+      <p class="aviso-caja ${situacion.amenazada ? 'alerta' : 'ok'}" style="margin:.75rem 0 .5rem">${situacion.amenazada
+        ? h`<strong>Raza amenazada · grado de amenaza ${situacion.grado}.</strong> Queda por debajo de los umbrales de la CNZ para aves (grado alto: 750 o menos hembras de reposición al año).`
+        : h`<strong>No amenazada</strong> según los tres criterios censales.`}</p>
+      ${situacion.complementaria ? h`<p class="peq">Información complementaria, que la CNZ puede valorar de forma excepcional: Ne ${coma(situacion.complementaria.neDem, 1)} · consanguinidad media ${situacion.complementaria.fxMedio == null ? '—' : pct(situacion.complementaria.fxMedio, 2)} · ${situacion.complementaria.criadores} criador(es) · ${situacion.complementaria.explotaciones} explotación(es) con REGA · ${situacion.complementaria.municipios} municipio(s)${situacion.complementaria.tendencia == null ? '' : ` · censo ${situacion.complementaria.tendencia >= 0 ? '+' : ''}${Math.round(situacion.complementaria.tendencia * 100)} % desde ${situacion.complementaria.desde}`} · sin material genético en banco de germoplasma.</p>` : ''}
+      <p class="peq muted">Aproximaciones del Libro: a) madres de pollitos del año con padre y madre inscritos; b) machos vivos a 31 de diciembre; c) hembras que cumplieron 6 meses en el año. Los umbrales de aves son los del protocolo de 2022; comprobadlos con el texto oficial antes de presentar el expediente.</p>
     </div>` : ''}
 
     <div class="tarjeta"><h2>Censo por sexo y edad</h2><div class="tabla-scroll"><table>

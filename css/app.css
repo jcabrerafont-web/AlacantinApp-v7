@@ -534,3 +534,4 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .expediente .item-titulo { display: block; }
 .expediente .item-titulo .chip { margin-left: .25rem; vertical-align: 1px; }
 .exp-letra { font-weight: 800; color: var(--azul-t); }
+.tabla-situacion th[scope="row"] { white-space: normal; min-width: 8.5rem; font-size: .85rem; }
