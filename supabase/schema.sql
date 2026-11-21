@@ -680,6 +680,61 @@ REVOKE ALL ON FUNCTION public.dar_baja_usuario(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.dar_baja_usuario(uuid) TO authenticated;
 
 -- ----------------------------------------------------------------------------
+-- 4h. Material genético almacenado (Protocolo CNZ 2025, apdo. 3.1 m; RD 45/2019,
+--     arts. 3 n y 15): muestras de la raza conservadas en un centro o banco.
+--     Lo anota la administración; lo ven la administración y la inspección.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.germoplasma (
+  id                uuid PRIMARY KEY,
+  usuario_id        uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,
+  animal_id         uuid REFERENCES public.animales(id) ON DELETE SET NULL,
+  tipo              text NOT NULL CHECK (tipo IN ('semen', 'pgc', 'celulas', 'adn')),
+  muestras          integer NOT NULL CHECK (muestras > 0),
+  fecha             date NOT NULL,
+  centro            text NOT NULL CHECK (length(trim(centro)) > 0),
+  centro_reconocido boolean NOT NULL DEFAULT false,
+  referencia        text,
+  notas             text,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  sync_ts           timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS germoplasma_sync_ts ON public.germoplasma (sync_ts, id);
+
+CREATE OR REPLACE FUNCTION public.validar_germoplasma() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.usuario_id := coalesce(auth.uid(), NEW.usuario_id);
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_validar_germoplasma ON public.germoplasma;
+CREATE TRIGGER trg_validar_germoplasma BEFORE INSERT OR UPDATE ON public.germoplasma
+  FOR EACH ROW EXECUTE FUNCTION public.validar_germoplasma();
+DROP TRIGGER IF EXISTS zz_marcar_sync ON public.germoplasma;
+CREATE TRIGGER zz_marcar_sync BEFORE INSERT OR UPDATE ON public.germoplasma
+  FOR EACH ROW EXECUTE FUNCTION public.marcar_sync();
+DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.germoplasma;
+CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.germoplasma
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado();
+DROP TRIGGER IF EXISTS trg_historial_germoplasma ON public.germoplasma;
+CREATE TRIGGER trg_historial_germoplasma AFTER INSERT OR UPDATE OR DELETE ON public.germoplasma
+  FOR EACH ROW EXECUTE FUNCTION public.anotar_historial();
+REVOKE ALL ON FUNCTION public.validar_germoplasma() FROM PUBLIC, anon, authenticated;
+
+ALTER TABLE public.germoplasma ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS germoplasma_ver ON public.germoplasma;
+DROP POLICY IF EXISTS germoplasma_crear ON public.germoplasma;
+DROP POLICY IF EXISTS germoplasma_editar ON public.germoplasma;
+DROP POLICY IF EXISTS germoplasma_borrar ON public.germoplasma;
+CREATE POLICY germoplasma_ver ON public.germoplasma FOR SELECT TO authenticated USING (public.es_auditor());
+CREATE POLICY germoplasma_crear ON public.germoplasma FOR INSERT TO authenticated WITH CHECK (public.es_admin());
+CREATE POLICY germoplasma_editar ON public.germoplasma FOR UPDATE TO authenticated USING (public.es_admin()) WITH CHECK (public.es_admin());
+CREATE POLICY germoplasma_borrar ON public.germoplasma FOR DELETE TO authenticated USING (public.es_admin());
+REVOKE ALL ON public.germoplasma FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.germoplasma TO authenticated;
+
+-- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.perfiles       ENABLE ROW LEVEL SECURITY;

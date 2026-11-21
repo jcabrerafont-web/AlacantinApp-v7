@@ -8,7 +8,7 @@ import * as sync from './sync.js';
 import { CONFIG, supabaseConfigurado } from './config.js';
 
 export const FORMATO = 'alacantinapp-respaldo';
-const TABLAS = ['animales', 'calificaciones', 'huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'perfiles'];
+const TABLAS = ['animales', 'calificaciones', 'huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'perfiles', 'germoplasma'];
 const DIAS_RECORDATORIO = 30;
 
 const sinFotosLocales = (a) => {
@@ -54,6 +54,7 @@ export function validarCopia(obj) {
     if (t === 'calificaciones') return typeof r.animal_id === 'string' && r.puntos && typeof r.puntos === 'object';
     if (t === 'campanas' || t === 'lotes') return Array.isArray(r.gallinas) && /^\d{4}-\d{2}-\d{2}$/.test(r.inicio || '');
     if (t === 'solicitudes') return Array.isArray(r.animales) && typeof r.estado === 'string';
+    if (t === 'germoplasma') return typeof r.tipo === 'string' && Number.isInteger(Number(r.muestras));
     if (t === 'incubaciones') return Array.isArray(r.filas) && /^\d{4}-\d{2}-\d{2}$/.test(r.entrada || '');
     return true;
   };
@@ -91,7 +92,7 @@ export async function restaurar(copia, perfil, { modo = 'fusionar' } = {}) {
   datos.perfiles = datos.perfiles.filter(p => p.id !== perfil?.id && p.id !== viejo);
 
   if (modo === 'reemplazar') {
-    for (const t of ['animales', 'calificaciones', 'huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes']) await db.vaciar(t);
+    for (const t of ['animales', 'calificaciones', 'huevos', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma']) await db.vaciar(t);
   }
   const fecha = (r) => r.updated_at || r.created_at || '';
   const cuenta = {};

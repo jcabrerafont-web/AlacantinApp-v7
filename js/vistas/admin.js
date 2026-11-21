@@ -14,6 +14,7 @@ const SECCIONES = [
   ]],
   ['Libro Genealógico', [
     ['#/admin/expediente', '📄', 'Expediente para el Catálogo', 'Los 14 apartados que pide la CNZ: qué está cubierto, qué falta y qué le toca al Club'],
+    ['#/admin/germoplasma', '🧪', 'Material genético', 'Inventario de semen, PGC y ADN de la raza guardados en centros o bancos'],
     ['#/admin/programa', '🧬', 'Programa de cría (borrador)', 'La propuesta de programa de cría con las reglas de la app y los resultados del Libro, para imprimir'],
     ['#/admin/libro', '⭐', 'Inscripciones del Libro', 'Registro de Méritos, fundadores (RF y RA) y cambios de titular'],
     ['#/auditoria', '🩺', 'Auditoría del Libro', 'Errores y avisos por corregir, y pureza de variedad'],

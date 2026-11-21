@@ -19,6 +19,7 @@ function apartados() {
   const conUbic = datos.aviarios().conUbicacion.length;
   const campanas = datos.estado.campanas.length;
   const sit = activos.length ? datos.situacionPoblacional() : null;
+  const gm = datos.resumenGermoplasma();
   return [
     ['a', 'Nombre de la raza', 'cubierto', 'Alacantina, con el Estándar oficial ESGA025.', [['#/estandar', 'Estándar']]],
     ['b', 'Historia de la raza', 'parte', 'Historia en cuatro etapas, del documento del Club. Faltan la primera directiva (2011–2013) y el VII encuentro, y conviene detallar la evolución territorial histórica.', [['#/conoce?s=historia', 'Historia de la raza']]],
@@ -34,7 +35,9 @@ function apartados() {
     ['j', 'Tamaño efectivo, variabilidad genética y endogamia', 'cubierto', 'Ne demográfico y realizado, consanguinidad de Wright, generaciones equivalentes y matriz de pedigrí para ENDOG.', [['#/informes', 'Informes']]],
     ['k', 'Utilización sostenible de la raza', 'club', 'Plan del Club: usos (huevo, exposición, conservación), difusión y relevo de criadores.', []],
     ['l', 'Asociación de criadores y número de criadores', 'cubierto', `Asociación Club Gallina Alacantina; ${datos.estado.perfiles.length} usuario(s), ${criadores} con ejemplares.`, [['#/usuarios', 'Usuarios'], ['#/conoce?s=club', 'El Club']]],
-    ['m', 'Material genético almacenado (banco de germoplasma)', 'pendiente', 'Inventario de muestras (semen, etc.) cuando las haya. Hoy no hay muestras.', []],
+    ['m', 'Material genético almacenado (banco de germoplasma)', gm.germoplasma ? (gm.reconocido ? 'cubierto' : 'parte') : 'club', gm.lista.length
+      ? `Inventario: ${gm.germoplasma} muestra(s) de germoplasma (semen o PGC), ${gm.reconocido} en centros reconocidos, de ${gm.donantes} donante(s)${gm.lista.some(x => !datos.esGermoplasma(x.tipo)) ? ', y otras colecciones de ADN o células' : ''}.`
+      : 'Hoy no hay muestras guardadas. Conservar semen o PGC en un centro o banco reconocido le corresponde al Club; la app lleva el inventario.', [['#/admin/germoplasma', 'Material genético']]],
     ['n', 'Propuesta de programa de cría, con datos y resultados', 'parte', 'Borrador generado por la app según el Reglamento (UE) 2016/1012 (anexo I, parte 2): finalidad, identificación, genealogías, objetivos, control de puesta y estructura del Libro, con los datos y resultados reales. El Club decide lo marcado y lo aprueba la autoridad competente.', [['#/admin/programa', 'Programa de cría (borrador)'], ['#/programa', 'Guía del criador']]]
   ];
 }

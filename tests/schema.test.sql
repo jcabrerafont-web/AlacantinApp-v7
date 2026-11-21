@@ -298,3 +298,28 @@ SELECT nombre, email, telefono, rega, municipio, baja = current_date AS baja_hoy
 \echo '   18g borrar la cuenta directamente en el panel de Supabase hace lo mismo (esperado: Inspector, sin correo)'
 DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000000b';
 SELECT nombre, email IS NULL AS sin_correo, baja = current_date AS baja_hoy FROM perfiles WHERE id = '00000000-0000-0000-0000-00000000000b';
+
+\echo '== 19. Material genético (germoplasma)'
+\echo '   19a un criador no puede anotar muestras (esperado: error 42501)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+INSERT INTO germoplasma (id, tipo, muestras, fecha, centro) VALUES ('70000000-0000-0000-0000-000000000001', 'semen', 20, '2026-03-01', 'Centro X');
+RESET ROLE;
+\echo '   19b el administrador sí, y queda en el historial a su nombre (esperado: 1, t, 1)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+INSERT INTO germoplasma (id, animal_id, tipo, muestras, fecha, centro, centro_reconocido) VALUES
+  ('70000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'semen', 20, '2026-03-01', 'Banco Nacional de Germoplasma Animal', true);
+SELECT count(*) AS muestras_admin, bool_and(usuario_id = auth.uid()) AS a_su_nombre FROM germoplasma;
+SELECT count(*) AS en_historial FROM historial WHERE tabla = 'germoplasma';
+\echo '   19c tipo no previsto o sin centro (esperado: 2 errores 23514)'
+INSERT INTO germoplasma (id, tipo, muestras, fecha, centro) VALUES (gen_random_uuid(), 'embriones', 1, '2026-03-01', 'X');
+INSERT INTO germoplasma (id, tipo, muestras, fecha, centro) VALUES (gen_random_uuid(), 'adn', 1, '2026-03-01', '  ');
+RESET ROLE;
+\echo '   19d el criador no ve el inventario (esperado: 0)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT count(*) AS visibles_criador FROM germoplasma;
+RESET ROLE;
+\echo '   19e al borrarla queda anotado para los móviles (esperado: 1)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+DELETE FROM germoplasma WHERE id = '70000000-0000-0000-0000-000000000001';
+SELECT count(*) AS anotado FROM borrados WHERE tabla = 'germoplasma';
+RESET ROLE;

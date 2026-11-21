@@ -51,7 +51,8 @@ const RUTAS = [
   ['admin/historial', 'adminhistorial', ['administrador']],
   ['mapa', 'mapa', ['inspector', 'administrador']],
   ['admin/expediente', 'adminexpediente', ['administrador']],
-  ['admin/programa', 'adminprograma', ['administrador']]
+  ['admin/programa', 'adminprograma', ['administrador']],
+  ['admin/germoplasma', 'admingermoplasma', ['administrador']]
 ];
 
 // Barra inferior: visitante 3 columnas; usuarios registrados 4 columnas.

@@ -19,7 +19,8 @@ export function datosPrograma() {
       media: cal.length ? cal.reduce((s, c) => s + Number(c.total), 0) / cal.length : null },
     evolucion: datos.evolucionCenso(),
     puesta: datos.puestaRaza(),
-    situacion: vivos.length ? datos.situacionPoblacional() : null
+    situacion: vivos.length ? datos.situacionPoblacional() : null,
+    germoplasma: datos.resumenGermoplasma()
   };
 }
 

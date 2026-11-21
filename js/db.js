@@ -3,8 +3,8 @@
 // trabajar en gallineros sin cobertura. Supabase es la copia central.
 // ============================================================================
 const NOMBRE = 'alacantinapp-v7';
-const VERSION = 4;
-export const STORES = ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes'];
+const VERSION = 5;
+export const STORES = ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma'];
 
 let conexion = null;
 

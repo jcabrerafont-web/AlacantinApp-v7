@@ -4,7 +4,7 @@ import * as datos from '../datos.js';
 import { supabaseConfigurado } from '../config.js';
 import { h, pintar, $ } from '../ui.js';
 
-const FILTROS = [['', 'Todo'], ['animales', 'Ejemplares'], ['calificaciones', 'Calificaciones']];
+const FILTROS = [['', 'Todo'], ['animales', 'Ejemplares'], ['calificaciones', 'Calificaciones'], ['germoplasma', 'Material genético']];
 const ACCION = { INSERT: 'Alta', UPDATE: 'Cambio', DELETE: 'Borrado' };
 const dia = (iso) => new Date(iso).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const hora = (iso) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });

@@ -382,6 +382,30 @@ await ir('#/admin/programa');
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/programa-cria.png`, fullPage: true });
   await ir('#/admin/expediente');
   ok((await page.$('#exp-n a[href="#/admin/programa"]')) !== null, 'Expediente: el apartado n) enlaza al borrador'); }
+await ir('#/admin/germoplasma');
+{ ok((await page.innerText('#gm-lista')).includes('Todavía no hay muestras'), 'Material genético: inventario vacío explicado');
+  const [gallo, gallina] = await page.evaluate(async () => { const d = await import('./js/datos.js'); const t = d.estado.todos; return [t.find(a => a.sexo === 'M').anilla, t.find(a => a.sexo === 'H').anilla]; });
+  const rellenar = async (anilla) => {
+    await page.selectOption('#gm-tipo', 'semen'); await page.fill('#gm-muestras', '24'); await page.fill('#gm-fecha', '2026-03-10');
+    await page.fill('#gm-anilla', anilla); await page.fill('#gm-centro', 'Banco Nacional de Germoplasma Animal'); await page.check('#gm-reconocido');
+    await page.click('#gm-form button[type=submit]');
+  };
+  await rellenar(gallina);
+  await page.waitForTimeout(200);
+  ok((await aviso()).includes('tiene que ser de un gallo'), `Material genético: el semen tiene que ser de un gallo (${await aviso()})`);
+  await rellenar(gallo);
+  await page.waitForSelector('#gm-lista table');
+  const t = await page.innerText('#gm-lista');
+  const r = await page.evaluate(async () => { const d = await import('./js/datos.js'); return { r: d.resumenGermoplasma(), cola: (await (await import('./js/db.js')).todos('cola')).some(i => i.tabla === 'germoplasma') }; });
+  ok(t.includes(gallo) && t.includes('24') && r.r.germoplasma === 24 && r.r.reconocido === 24 && r.r.donantes === 1, `Material genético: muestras anotadas con su donante y centro reconocido (${JSON.stringify({ g: r.r.germoplasma, d: r.r.donantes })})`);
+  await ir('#/admin/expediente');
+  ok((await page.innerText('#exp-m')).includes('Cubierto') && (await page.innerText('#exp-m')).includes('24 muestra'), 'Expediente: el apartado m) pasa a cubierto con el inventario');
+  await ir('#/informes');
+  ok((await page.innerText('#situacion')).includes('24 muestra(s) de germoplasma'), 'Situación poblacional: recoge el germoplasma como información complementaria');
+  await ir('#/admin/germoplasma');
+  await page.click('[data-editar]'); await page.click('#gm-borrar'); await page.click('dialog.dialogo button[value="si"]');
+  await page.waitForTimeout(300);
+  ok((await page.innerText('#gm-lista')).includes('Todavía no hay muestras'), 'Material genético: se puede borrar un registro, con confirmación'); }
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });
@@ -822,7 +846,10 @@ const bajada = await page.evaluate(async () => {
     auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
     from: (t) => { const st = { t, desde: null }; const b = {
       select: () => b, gte: (c, v) => { st.desde = v; return b; }, order: () => b,
-      range: async (a, z) => { consultas.push(`${t}:${a}`); let f = [...tablas[t]].sort((x, y) => x.sync_ts.localeCompare(y.sync_ts));
+      range: async (a, z) => { consultas.push(`${t}:${a}`);
+        // Servidor con el esquema sin actualizar: no tiene la tabla del material genético
+        if (!tablas[t]) return { data: null, error: { message: `Could not find the table 'public.${t}' in the schema cache` } };
+        let f = [...tablas[t]].sort((x, y) => x.sync_ts.localeCompare(y.sync_ts));
         if (st.desde) f = f.filter(x => x.sync_ts >= st.desde); return { data: f.slice(a, z + 1), error: null }; } }; return b; }
   };
   sync.usarCliente(fake);
@@ -844,6 +871,7 @@ const bajada = await page.evaluate(async () => {
   await d.cargar();
   return { r1, paginas1, enMovil1, r2, enMovil2, huevoSigue };
 });
+ok(bajada.r1 && bajada.r1.filas >= 2500, 'Descarga con un servidor sin la tabla nueva (esquema sin actualizar): se omite y sigue');
 ok(bajada.enMovil1 === 2500 && bajada.paginas1 === 3, `Descarga por páginas: 2.500 aves en ${bajada.paginas1} páginas de 1.000 (antes se perdían las que pasaban de 1.000)`);
 ok(bajada.r2.filas < 30 && bajada.enMovil2 === 2501, `Segunda descarga: solo lo cambiado (${bajada.r2.filas} filas, no 2.500)`);
 ok(bajada.r2.borradas === 1 && !bajada.huevoSigue, 'Lo borrado en el servidor se borra también en el móvil');

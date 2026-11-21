@@ -304,3 +304,28 @@ CONTEXT:  PL/pgSQL function dar_baja_usuario(uuid) line 5 at RAISE
 -----------+------------+----------
  Inspector | t          | t
 
+== 19. Material genético (germoplasma)
+   19a un criador no puede anotar muestras (esperado: error 42501)
+psql:tests/schema.test.sql:305: ERROR:  new row violates row-level security policy for table "germoplasma"
+   19b el administrador sí, y queda en el historial a su nombre (esperado: 1, t, 1)
+ muestras_admin | a_su_nombre 
+----------------+-------------
+              1 | t
+
+ en_historial 
+--------------
+            1
+
+   19c tipo no previsto o sin centro (esperado: 2 errores 23514)
+psql:tests/schema.test.sql:314: ERROR:  new row for relation "germoplasma" violates check constraint "germoplasma_tipo_check"
+psql:tests/schema.test.sql:315: ERROR:  new row for relation "germoplasma" violates check constraint "germoplasma_centro_check"
+   19d el criador no ve el inventario (esperado: 0)
+ visibles_criador 
+------------------
+                0
+
+   19e al borrarla queda anotado para los móviles (esperado: 1)
+ anotado 
+---------
+       1
+

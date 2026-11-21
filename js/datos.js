@@ -16,6 +16,7 @@ export const estado = {
   idx: new Map(),
   calificaciones: [],
   huevos: [],
+  germoplasma: [],
   campanas: [],
   lotes: [],
   incubaciones: [],
@@ -51,8 +52,8 @@ function calentarFx(idx) {
 }
 
 export async function cargar() {
-  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes] = await Promise.all(
-    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes'].map(s => db.todos(s)));
+  const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes, germoplasma] = await Promise.all(
+    ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma'].map(s => db.todos(s)));
   estado.todos = animales;
   // Si la genealogía no ha cambiado (lo normal al guardar un huevo o una calificación),
   // se conservan los cálculos de consanguinidad ya hechos.
@@ -71,6 +72,7 @@ export async function cargar() {
     estado.lotes = [];
     estado.incubaciones = [];
     estado.solicitudes = [];
+    estado.germoplasma = [];
   } else if (esAuditor(p.rol)) {
     estado.calificaciones = calificaciones;
     estado.huevos = huevos;
@@ -79,6 +81,7 @@ export async function cargar() {
     estado.lotes = lotes;
     estado.incubaciones = incubaciones;
     estado.solicitudes = solicitudes;
+    estado.germoplasma = germoplasma;
   } else {
     const mios = new Set(animales.filter(a => a.usuario_id === p.id).map(a => a.id));
     estado.calificaciones = calificaciones.filter(c => mios.has(c.animal_id));
@@ -88,6 +91,7 @@ export async function cargar() {
     estado.lotes = lotes.filter(l => l.usuario_id === p.id);
     estado.incubaciones = incubaciones.filter(i => i.usuario_id === p.id);
     estado.solicitudes = solicitudes.filter(x => x.usuario_id === p.id);
+    estado.germoplasma = [];
   }
   // Huevos por gallina (evita recorrer todos los huevos para cada gallina)
   estado.huevosPorAnimal = new Map();
@@ -917,7 +921,7 @@ export function situacionPoblacional({ hasta = Number(hoyIso().slice(0, 4)) - 1 
   return {
     anios, filas, medias: m, bajo, amenazada, grado, umbrales: U,
     complementaria: ult ? { neDem: ult.neDem, fxMedio: ult.fxMedio, explotaciones: ult.explotaciones, municipios: ult.municipios, criadores: ult.criadores,
-      tendencia: hace && hace !== ult && hace.total ? (ult.total - hace.total) / hace.total : null, desde: hace?.anio ?? null, germoplasma: 0 } : null
+      tendencia: hace && hace !== ult && hace.total ? (ult.total - hace.total) / hace.total : null, desde: hace?.anio ?? null, germoplasma: resumenGermoplasma().germoplasma } : null
   };
 }
 
@@ -1163,6 +1167,61 @@ export async function darDeBajaUsuario(perfilId) {
 }
 
 // ---------------------------------------------------------------------------
+// Material genético almacenado (Protocolo CNZ 2025, apdo. 3.1 m; RD 45/2019,
+// arts. 3 n y 15). En aves no se conservan ovocitos ni embriones: semen y células
+// germinales primordiales (PGC) son el germoplasma; ADN y células somáticas, otras
+// colecciones (art. 15.4). Lo anota la administración.
+// ---------------------------------------------------------------------------
+export const TIPOS_GERMOPLASMA = Object.freeze({ semen: 'semen congelado', pgc: 'células germinales primordiales (PGC)', celulas: 'células somáticas', adn: 'ADN (sangre o plumas)' });
+export const esGermoplasma = (tipo) => tipo === 'semen' || tipo === 'pgc';
+
+export async function guardarGermoplasma(m) {
+  if (rol() !== 'administrador') throw new Error('Solo la administración anota el material genético.');
+  if (!TIPOS_GERMOPLASMA[m.tipo]) throw new Error('Elige el tipo de muestra.');
+  const muestras = Number(m.muestras);
+  if (!Number.isInteger(muestras) || muestras < 1) throw new Error('Indica cuántas muestras (dosis, pajuelas o tubos) hay.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(m.fecha || '')) || m.fecha > hoyIso()) throw new Error('Indica la fecha de recogida (no puede ser futura).');
+  const centro = String(m.centro || '').trim();
+  if (!centro) throw new Error('Indica el centro o banco donde se guarda.');
+  let animalId = null;
+  if (m.anilla) {
+    const a = estado.todos.find(x => normalizarAnilla(x.anilla) === normalizarAnilla(m.anilla));
+    if (!a) throw new Error(`No hay ningún ejemplar con la anilla ${m.anilla}.`);
+    if (m.tipo === 'semen' && a.sexo !== 'M') throw new Error('El semen tiene que ser de un gallo.');
+    animalId = a.id;
+  }
+  const ahora = new Date().toISOString();
+  const previo = m.id ? estado.germoplasma.find(x => x.id === m.id) : null;
+  const r = { id: m.id || uuid(), usuario_id: estado.perfil.id, animal_id: animalId, tipo: m.tipo, muestras, fecha: m.fecha, centro,
+    centro_reconocido: Boolean(m.centro_reconocido), referencia: String(m.referencia || '').trim() || null, notas: String(m.notas || '').trim() || null,
+    created_at: previo?.created_at || ahora, updated_at: ahora };
+  await db.guardar('germoplasma', r);
+  await sync.encolar('germoplasma', 'upsert', r);
+  await cargar();
+  return r;
+}
+
+export async function borrarGermoplasma(id) {
+  if (rol() !== 'administrador') throw new Error('Solo la administración anota el material genético.');
+  await db.borrar('germoplasma', id);
+  await sync.encolar('germoplasma', 'delete', { id });
+  await cargar();
+}
+
+export function resumenGermoplasma() {
+  const lista = [...estado.germoplasma].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const porTipo = Object.keys(TIPOS_GERMOPLASMA).map(t => {
+    const de = lista.filter(x => x.tipo === t);
+    return { tipo: t, nombre: TIPOS_GERMOPLASMA[t], registros: de.length, muestras: de.reduce((s, x) => s + x.muestras, 0),
+      donantes: new Set(de.map(x => x.animal_id).filter(Boolean)).size };
+  });
+  const germo = lista.filter(x => esGermoplasma(x.tipo));
+  return { lista, porTipo, germoplasma: germo.reduce((s, x) => s + x.muestras, 0),
+    reconocido: germo.filter(x => x.centro_reconocido).reduce((s, x) => s + x.muestras, 0),
+    donantes: new Set(germo.map(x => x.animal_id).filter(Boolean)).size };
+}
+
+// ---------------------------------------------------------------------------
 // Historial de cambios del Libro (quién cambió qué y cuándo). Lo escriben los
 // triggers del servidor; solo lo leen administración e inspección, y solo en línea.
 // ---------------------------------------------------------------------------
@@ -1187,6 +1246,11 @@ export function describirHistorial(e) {
   const fila = e.despues || e.antes || {};
   const nombrePerfil = (id) => estado.perfiles.find(p => p.id === id)?.nombre || null;
   const quien = e.usuario_id ? (nombrePerfil(e.usuario_id) || 'Usuario dado de baja') : 'El servidor';
+  if (e.tabla === 'germoplasma') {
+    const a = animal(fila.animal_id);
+    const t = `${fila.muestras ?? ''} muestra(s) de ${TIPOS_GERMOPLASMA[fila.tipo] || fila.tipo || 'material genético'}${a ? ` de ${a.anilla}` : ''}`;
+    return { quien, que: e.operacion === 'INSERT' ? `Anotó ${t}` : e.operacion === 'DELETE' ? `Borró ${t}` : `Cambió ${cambiosHistorial(e).join(', ') || 'el registro'} de ${t}`, enlace: '#/admin/germoplasma' };
+  }
   if (e.tabla === 'calificaciones') {
     const a = animal(fila.animal_id);
     return { quien, que: `Calificó ${a ? a.anilla : 'un ejemplar'}${fila.total != null ? ` (${fila.total} puntos)` : ''}`, enlace: a ? `#/animal/${a.id}` : null };

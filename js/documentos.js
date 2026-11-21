@@ -272,6 +272,7 @@ export function plantillaProgramaCria(d) {
       <tr><th>Consanguinidad media</th><td class="num">${g.fxMedio == null ? '—' : pct(g.fxMedio, 2)}</td></tr>
       <tr><th>Con padre y madre registrados</th><td class="num">${g.conPadres == null ? '—' : pct(g.conPadres, 0)}</td></tr>
       <tr><th>Calificaciones (todas) · aptas · media</th><td class="num">${d.calif.n} · ${d.calif.aptos} · ${n(d.calif.media, 1)} puntos</td></tr>
+      <tr><th>Material genético almacenado</th><td class="num">${d.germoplasma?.germoplasma ? `${d.germoplasma.germoplasma} muestra(s) de germoplasma, ${d.germoplasma.reconocido} en centros reconocidos` : 'ninguno'}</td></tr>
       ${d.situacion ? h`<tr><th>Situación (criterios CNZ para aves)</th><td class="num">${d.situacion.amenazada ? `amenazada, grado ${d.situacion.grado}` : 'no amenazada'}</td></tr>` : ''}
     </tbody></table>
     ${d.evolucion.length ? h`<h3>Evolución del censo</h3><table><thead><tr><th>Año</th><th class="num">Censo</th><th class="num">Nacidos</th><th class="num">Bajas</th><th class="num">Ne</th><th class="num">Fx medio</th></tr></thead><tbody>
