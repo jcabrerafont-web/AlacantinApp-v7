@@ -25,6 +25,7 @@ export default function (main) {
   const criadores = new Set(activos.map(a => a.usuario_id).filter(Boolean));
   const candidatos = datos.rol() === 'administrador' ? datos.candidatosRM() : [];
   const evolucion = datos.evolucionCenso();
+  const puesta = datos.puestaRaza();
   const situacion = auditor && activos.length ? datos.situacionPoblacional() : null;
   const porMunicipio = {};
   activos.forEach(a => { const k = [a.municipio, a.provincia].filter(Boolean).join(' · ') || 'Sin municipio'; porMunicipio[k] = (porMunicipio[k] || 0) + 1; });
@@ -53,6 +54,23 @@ export default function (main) {
           <td>${coma(f.neDem, 1)}</td><td>${f.fxMedio == null ? '—' : pct(f.fxMedio, 2)}</td><td>${f.variacion == null ? '—' : h`<span class="${f.variacion > 0 ? 'sube' : f.variacion < 0 ? 'baja' : ''}">${f.variacion > 0 ? '▲' : f.variacion < 0 ? '▼' : '='} ${Math.abs(Math.round(f.variacion * 100))} %</span>`}</td></tr>`)}</tbody>
       </table></div>
       ${evolucion.some(f => f.enCurso) ? h`<p class="peq muted">* Año en curso: censo a hoy.</p>` : ''}
+    </div>` : ''}
+
+    ${puesta.length ? h`<div class="tarjeta" id="puesta"><h2>${auditor ? 'Puesta de la raza' : 'Puesta de mi aviario'}</h2>
+      <p class="peq muted">Puesta: días con huevo sobre días controlados en las campañas de control (una gallina pone como mucho un huevo al día). Peso: todos los huevos pesados del año. Estándar: mínimo ${ESTANDAR.huevo.min} g, habitual hasta ${ESTANDAR.huevo.habitualMax} g, cáscara ${ESTANDAR.huevo.cascara.toLowerCase()}.${auditor ? ' Protocolo CNZ 2025, apdo. 3.1 e (aptitudes presentes).' : ''}</p>
+      <div class="tabla-scroll"><table class="tabla-evolucion tabla-puesta">
+        <thead><tr><th scope="col">Año</th>${auditor ? h`<th scope="col">Criadores</th>` : ''}<th scope="col">Gallinas controladas</th><th scope="col">Días-gallina</th><th scope="col">Puesta</th><th scope="col">1.er año / adultas</th><th scope="col">Huevos pesados</th><th scope="col">Peso medio (g)</th><th scope="col">Mín.–máx.</th><th scope="col">Aptos</th><th scope="col">Más de ${ESTANDAR.huevo.habitualMax} g</th></tr></thead>
+        <tbody>${puesta.map(f => h`<tr><th scope="row">${f.anio}${f.enCurso ? '*' : ''}</th>${auditor ? h`<td>${f.criadores}</td>` : ''}<td>${f.gallinas}</td><td>${f.diasGallina}</td>
+          <td><strong>${f.puesta == null ? '—' : pct(f.puesta, 0)}</strong></td><td>${f.jovenes.puesta == null ? '—' : pct(f.jovenes.puesta, 0)} / ${f.adultas.puesta == null ? '—' : pct(f.adultas.puesta, 0)}</td>
+          <td>${f.peso.n}</td><td>${f.peso.media == null ? '—' : h`${coma(f.peso.media, 1)}${f.peso.de == null ? '' : h` <span class="muted">± ${coma(f.peso.de, 1)}</span>`}`}</td>
+          <td>${f.peso.n ? `${coma(f.peso.min, 0)}–${coma(f.peso.max, 0)}` : '—'}</td><td>${f.aptos == null ? '—' : pct(f.aptos, 0)}</td><td>${f.grandes == null ? '—' : pct(f.grandes, 0)}</td></tr>`)}</tbody>
+      </table></div>
+      ${puesta.some(f => f.enCurso) ? h`<p class="peq muted">* Año en curso: hasta hoy.</p>` : ''}
+      ${puesta.filter(f => f.variedades.length).slice(0, 1).map(f => h`<details class="peq"><summary><strong>Por variedad (${f.anio})</strong></summary>
+        <div class="tabla-scroll"><table class="tabla-evolucion"><thead><tr><th scope="col">Variedad</th><th scope="col">Gallinas</th><th scope="col">Puesta</th><th scope="col">Peso medio (g)</th></tr></thead>
+        <tbody>${f.variedades.map(v => h`<tr><th scope="row">${nombreVariedad(v.id) || 'Sin variedad'}</th><td>${v.gallinas}</td><td>${v.puesta == null ? '—' : pct(v.puesta, 0)}</td><td>${v.peso.media == null ? '—' : coma(v.peso.media, 1)}</td></tr>`)}</tbody></table></div>
+      </details>`)}
+      ${puesta.every(f => !f.campanas) ? h`<p class="peq">Todavía no hay campañas de control: sin ellas no se puede calcular la intensidad de puesta. <a href="#/campanas">Organizar una campaña</a>.</p>` : ''}
     </div>` : ''}
 
     ${situacion ? h`<div class="tarjeta" id="situacion"><h2>Situación poblacional (Catálogo)</h2>
@@ -100,6 +118,7 @@ export default function (main) {
         <button class="btn" id="x-pedigri">⬇️ Matriz de pedigrí (CSV · ENDOG/CFC/R)</button>
         <button class="btn" id="x-censo">⬇️ Censo (CSV)</button>
         ${evolucion.length ? h`<button class="btn" id="x-evolucion">⬇️ Evolución del censo (CSV)</button>` : ''}
+        ${puesta.length ? h`<button class="btn" id="x-puesta">⬇️ Puesta por año (CSV)</button>` : ''}
         ${auditor ? h`<button class="btn" id="x-criadores">⬇️ Criadores y explotaciones (CSV)</button>` : ''}
         <button class="btn" id="x-imprimir">🖨️ Imprimir informe</button>
       </div>
@@ -134,6 +153,14 @@ export default function (main) {
     for (const f of evolucion) filas.push([f.anio, f.corte, f.total, f.machos, f.hembras, f.reproductoresM, f.reproductoras, ...tr.map(t => f.edades[t.id].total), f.nacidos, f.bajas,
       f.criadores, f.explotaciones, f.municipios, f.neDem == null ? '' : f.neDem.toFixed(1), f.fxMedio == null ? '' : f.fxMedio.toFixed(4), f.variacion == null ? '' : f.variacion.toFixed(3)]);
     descargar(csv(filas), `ESGA025_evolucion_censo_${hoyISO()}.csv`);
+  });
+
+  $('#x-puesta', main)?.addEventListener('click', () => {
+    const d = (x, n = 1) => (x == null ? '' : x.toFixed(n));
+    const filas = [['ANIO', 'CAMPANAS', 'CRIADORES', 'GALLINAS_CONTROLADAS', 'DIAS_GALLINA', 'HUEVOS_EN_CAMPANA', 'PUESTA', 'PUESTA_PRIMER_ANIO', 'PUESTA_ADULTAS', 'HUEVOS_PESADOS', 'PESO_MEDIO_G', 'PESO_DE_G', 'PESO_MIN_G', 'PESO_MAX_G', 'APTOS', 'MAYORES_HABITUAL']];
+    for (const f of puesta) filas.push([f.anio, f.campanas, f.criadores, f.gallinas, f.diasGallina, f.huevosCampana, d(f.puesta, 3), d(f.jovenes.puesta, 3), d(f.adultas.puesta, 3),
+      f.peso.n, d(f.peso.media), d(f.peso.de), d(f.peso.min), d(f.peso.max), d(f.aptos, 3), d(f.grandes, 3)]);
+    descargar(csv(filas), `ESGA025_puesta_${hoyISO()}.csv`);
   });
 
   // Relación de criadores y explotaciones con sus efectivos (RD 45/2019, art. 14.5 c y d)

@@ -194,6 +194,23 @@ if (process.env.CAPTURAS) { await page.screenshot({ path: `${process.env.CAPTURA
 // 5. Informes y exportación
 await ir('#/informes');
 ok((await page.innerText('main')).includes('Ne demográfico'), 'Informe con Ne y censo por edad');
+{ const pr = await page.evaluate(async () => {
+    const d = await import('./js/datos.js');
+    const filas = d.puestaRaza(); const anio = new Date().getFullYear();
+    // Esperado calculado aparte: días con huevo / días controlados de todas las campañas del año
+    let dg = 0, dc = 0;
+    for (const c of d.estado.campanas.filter(c => c.temporada === anio)) { const r = d.resultadosCampana(c); for (const f of r.filas) { dg += r.transcurridos; dc += f.diasConHuevo; } }
+    const pesos = d.estado.huevos.filter(h => h.fecha.startsWith(String(anio))).map(h => h.peso_g);
+    const f = filas.find(x => x.anio === anio);
+    return { f, esperado: dg ? dc / dg : null, n: pesos.length, media: pesos.reduce((s, x) => s + x, 0) / pesos.length };
+  });
+  ok(pr.f && Math.abs(pr.f.puesta - pr.esperado) < 1e-9 && pr.f.gallinas >= 2 && pr.f.peso.n === pr.n && Math.abs(pr.f.peso.media - pr.media) < 1e-9 && pr.f.aptos > 0 && pr.f.aptos < 1 && pr.f.variedades.length >= 1,
+    `Puesta de la raza: intensidad de las campañas y peso de todos los huevos del año (${JSON.stringify({ puesta: pr.f?.puesta, esperado: pr.esperado, n: pr.f?.peso.n, aptos: pr.f?.aptos })})`);
+  ok((await page.$$('#puesta tbody tr')).length >= 1 && (await page.innerText('#puesta')).includes('Puesta de mi aviario'), 'Informes: tabla de puesta por año');
+  const [dp] = await Promise.all([page.waitForEvent('download'), page.click('#x-puesta')]);
+  ok(dp.suggestedFilename().startsWith('ESGA025_puesta_'), 'Puesta por año exportable en CSV');
+  if (process.env.CAPTURAS) { await page.$eval('#puesta details', e => { e.open = true; }); await (await page.$('#puesta')).screenshot({ path: `${process.env.CAPTURAS}/puesta-raza.png` }); }
+}
 { const ev = await page.$$eval('#evolucion tbody tr', trs => trs.map(t => t.querySelector('th').textContent.trim()));
   const ult = await page.evaluate(async () => (await import('./js/datos.js')).evolucionCenso().at(-1));
   ok(ev.length >= 2 && ev[0] === '2024' && ev.at(-1).endsWith('*') && ult.total === 3, `Informes: evolución del censo año a año desde 2024 (${ev.join(', ')}; hoy ${ult.total})`);

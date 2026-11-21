@@ -5,7 +5,7 @@
 // ============================================================================
 import * as db from './db.js';
 import * as sync from './sync.js';
-import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
+import { ESTANDAR, REGLAS, BAREMO, puntoValido, variedadPorId, evaluarCalificacion, huevoApto, huevoGrande, edadMeses, normalizarAnilla, comprobarAnilla, tramoEdad } from './estandar.js';
 import { indice, fxAnimal, creaCiclo, animalesEnCiclo, nivelFx, neDemografico, neRealizado, generacionesEquivalentes, heredarMemoria } from './genetica.js';
 import { esAuditor, actualizarPerfil, obtenerCliente } from './auth.js';
 import { uuid, hoyISO } from './ui.js';
@@ -819,6 +819,61 @@ export function evolucionCenso({ hasta = Number(hoyIso().slice(0, 4)) } = {}) {
   }
   filas.forEach((f, i) => { const a = filas[i - 1]; f.variacion = a && a.total ? (f.total - a.total) / a.total : null; });
   return filas;
+}
+
+// ---------------------------------------------------------------------------
+// Puesta de la raza por año (Protocolo CNZ 2025, apdo. 3.1 e: aptitudes presentes).
+// La intensidad de puesta sale solo de las campañas de control (días controlados);
+// el peso del huevo, de todos los huevos pesados del año. Para el criador, su aviario.
+// ---------------------------------------------------------------------------
+const estadisticas = (v) => {
+  if (!v.length) return { n: 0, media: null, de: null, min: null, max: null };
+  const media = v.reduce((s, x) => s + x, 0) / v.length;
+  const de = v.length > 1 ? Math.sqrt(v.reduce((s, x) => s + (x - media) ** 2, 0) / (v.length - 1)) : null;
+  return { n: v.length, media, de, min: Math.min(...v), max: Math.max(...v) };
+};
+export function puestaRaza({ hoy = hoyIso() } = {}) {
+  const porAnio = new Map();
+  const fila = (anio) => {
+    if (!porAnio.has(anio)) porAnio.set(anio, { anio, campanas: 0, criadores: new Set(), gallinas: new Set(), diasGallina: 0, diasConHuevo: 0,
+      huevosCampana: 0, variedades: new Map(), edades: { jovenes: { d: 0, c: 0, g: new Set() }, adultas: { d: 0, c: 0, g: new Set() } }, pesos: [], aptos: 0, grandes: 0 });
+    return porAnio.get(anio);
+  };
+  for (const c of estado.campanas) {
+    if (estadoCampana(c, hoy) === 'programada') continue;
+    const res = resultadosCampana(c, hoy);
+    if (!res.transcurridos || !res.filas.length) continue;
+    const f = fila(c.temporada);
+    f.campanas += 1; f.criadores.add(c.usuario_id);
+    for (const g of res.filas) {
+      f.gallinas.add(g.id); f.diasGallina += res.transcurridos; f.diasConHuevo += g.diasConHuevo; f.huevosCampana += g.n;
+      const v = f.variedades.get(g.a.variedad) || { d: 0, c: 0, g: new Set(), pesos: [] };
+      v.d += res.transcurridos; v.c += g.diasConHuevo; v.g.add(g.id); v.pesos.push(...g.pesos);
+      f.variedades.set(g.a.variedad, v);
+      const e = f.edades[g.edadMeses != null && g.edadMeses < 12 ? 'jovenes' : 'adultas'];
+      e.d += res.transcurridos; e.c += g.diasConHuevo; e.g.add(g.id);
+    }
+  }
+  for (const x of estado.huevos) {
+    if (!x.fecha || x.fecha > hoy || !Number.isFinite(Number(x.peso_g))) continue;
+    const f = fila(Number(x.fecha.slice(0, 4)));
+    f.pesos.push(Number(x.peso_g));
+    if (x.apto) f.aptos += 1;
+    if (huevoGrande(x.peso_g)) f.grandes += 1;
+  }
+  return [...porAnio.values()].sort((a, b) => b.anio - a.anio).map(f => {
+    const peso = estadisticas(f.pesos);
+    const tasa = (d, c) => (d ? c / d : null);
+    return {
+      anio: f.anio, enCurso: f.anio === Number(hoy.slice(0, 4)), campanas: f.campanas, criadores: f.criadores.size, gallinas: f.gallinas.size,
+      diasGallina: f.diasGallina, huevosCampana: f.huevosCampana, puesta: tasa(f.diasGallina, f.diasConHuevo),
+      jovenes: { gallinas: f.edades.jovenes.g.size, puesta: tasa(f.edades.jovenes.d, f.edades.jovenes.c) },
+      adultas: { gallinas: f.edades.adultas.g.size, puesta: tasa(f.edades.adultas.d, f.edades.adultas.c) },
+      peso, aptos: peso.n ? f.aptos / peso.n : null, grandes: peso.n ? f.grandes / peso.n : null,
+      variedades: [...f.variedades.entries()].map(([id, v]) => ({ id, gallinas: v.g.size, puesta: tasa(v.d, v.c), peso: estadisticas(v.pesos) }))
+        .sort((a, b) => b.gallinas - a.gallinas)
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
