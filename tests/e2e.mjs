@@ -532,6 +532,32 @@ await ir('#/tesoreria');
   await page.waitForSelector('#te-pagos');
   ok((await page.$$('#te-pagos li')).length === 2 && (await page.innerText('#te-pagos')).includes('Cuotas de socios 2026'), 'Ficha del socio: sus movimientos (cuota 2026 y anillas)');
   await page.click('#te-volver');
+  // Fase 3: cuotas por año
+  await page.click('[data-pestana=cuotas]'); await page.waitForSelector('#cu-anio');
+  { const t = await page.innerText('#te-cuerpo');
+    ok(t.includes('2 / 3') && t.includes('50,00 €') && t.includes('Recaudado de 75,00 €') && (await page.$$('#cu-lista .cuota')).length === 1 && (await page.innerText('#cu-lista')).includes('Zacarías Secretísimo'),
+      'Cuotas 2026: han pagado 2 de 3, 50 € de 75 €, y falta Zacarías'); }
+  // Le ponemos teléfono: sale el recordatorio por WhatsApp con la cuenta del Club
+  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', 'zacar');
+  await page.click('#te-lista [data-socio]'); await page.waitForSelector('#ts-telefono');
+  await page.fill('#ts-telefono', '600 111 222'); await page.click('#te-ficha button[type=submit]'); await page.waitForSelector('#te-lista');
+  await page.fill('#te-buscar', '');
+  await page.click('[data-pestana=cuotas]'); await page.waitForSelector('#cu-lista');
+  { const wa = await page.getAttribute('#cu-lista a[href^="https://wa.me/"]', 'href');
+    const txt = decodeURIComponent(wa.split('text=')[1]);
+    ok(wa.startsWith('https://wa.me/34600111222?') && txt.includes('Hola, Zacarías') && txt.includes('cuota 2026') && txt.includes('25,00 €') && txt.includes('ES91 2100 0418 4502 0005 1332'),
+      `Cuotas: recordatorio por WhatsApp con su nombre, el año, lo que falta y la cuenta (${txt.slice(0, 60)}…)`); }
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Cuotas: en el móvil no se sale de la pantalla');
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/cuotas.png`, fullPage: true });
+  await page.click('[data-efectivo]'); await page.fill('#dlg-importe', '25'); await page.click('dialog.dialogo button[value="si"]');
+  await page.waitForTimeout(500);
+  { const t = await page.innerText('#te-cuerpo');
+    ok(t.includes('3 / 3') && t.includes('¡Todos han pagado la cuota de este año!'), 'Cuotas: el pago en efectivo cuenta y ya han pagado todos'); }
+  ok(await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const m = t.movimientos().find(x => x.nota === 'Efectivo'); return Boolean(m) && m.anio === 2026 && t.nombrePartida(m.partida) === 'Cuotas de socios' && m.origen === 'manual'; }),
+    'Cuotas: el pago en efectivo queda como movimiento de «Cuotas de socios» 2026');
+  // Exento y cuota especial
+  const esp = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.nombre === 'Bernat'); await t.guardarSocio({ ...s, cuota_especial: '0' }); const c = t.cuotasAnio(2026); return [c.cuenta.exento, c.previsto, t.socios().find(x => x.nombre === 'Bernat').cuota_especial]; });
+  ok(JSON.stringify(esp) === JSON.stringify([1, 50, 0]), `Cuotas: un socio exento (cuota especial 0) no cuenta en lo previsto (${JSON.stringify(esp)})`);
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }

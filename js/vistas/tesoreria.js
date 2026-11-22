@@ -9,13 +9,14 @@ import { leerXlsx } from '../tesoreria/xlsx.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['movimientos', 'Movimientos'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
   let pestana = 'movimientos', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
   const filtro = { anio: new Date().getFullYear(), partida: '', texto: '' };
   let editandoMov = null, reglaPropuesta = '';
+  const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -38,6 +39,7 @@ export default async function (main) {
     $('#te-cerrar', main).addEventListener('click', () => { tes.cerrar(); });
     const cuerpo = $('#te-cuerpo', main);
     if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
+    else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
     else if (pestana === 'socios') pintarSocios(cuerpo);
     else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
@@ -249,6 +251,64 @@ export default async function (main) {
     });
   };
 
+  // --- Cuotas por año ---------------------------------------------------------
+  const ESTADOS = { pagado: ['Pagada', 'chip-ok'], parcial: ['Pago parcial', 'chip-aviso'], pendiente: ['Pendiente', 'chip-alerta'], exento: ['Exento', 'chip-info'] };
+  const pintarCuotas = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const anios = tes.aniosCuotas();
+    if (!anios.includes(fc.anio)) fc.anio = anios[0];
+    const c = tes.cuotasAnio(fc.anio);
+    const debenPagar = (f) => f.estado === 'pendiente' || f.estado === 'parcial';
+    const lista = c.filas.filter(f => fc.ver === 'todos' || (fc.ver === 'pendientes' ? debenPagar(f) : f.estado === 'pagado'));
+    pintar(cuerpo, h`
+      <div class="tarjeta fila" style="align-items:flex-end">
+        <div class="campo" style="margin:0"><label for="cu-anio">Cuota del año</label><select id="cu-anio">${anios.map(a => h`<option value="${a}" ${a === fc.anio ? h`selected` : ''}>${a}</option>`)}</select></div>
+        <div class="pestanas" role="group" aria-label="Qué socios ver" style="flex:1 1 auto">${[['pendientes', 'Pendientes'], ['pagados', 'Pagadas'], ['todos', 'Todos']].map(([k, n]) => h`<button type="button" class="btn btn-pequeno ${fc.ver === k ? 'btn-primario' : ''}" aria-pressed="${fc.ver === k}" data-ver="${k}">${n}</button>`)}</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b>${c.cuenta.pagado} / ${c.filas.length - c.cuenta.exento}</b><span>Han pagado</span></div>
+        <div class="kpi"><b>${c.cuenta.pendiente + c.cuenta.parcial}</b><span>Faltan${c.cuenta.parcial ? ` (${c.cuenta.parcial} con pago parcial)` : ''}</span></div>
+        <div class="kpi"><b>${euros(c.recaudado)}</b><span>Recaudado de ${euros(c.previsto)}</span></div>
+        <div class="kpi"><b>${euros(c.pendiente)}</b><span>Por cobrar</span></div>
+      </div>
+      ${c.filas.length ? '' : h`<p class="muted tarjeta">No hay socios dados de alta en ${fc.anio}. Añádelos o impórtalos en «Socios».</p>`}
+      ${lista.length ? h`<ul class="lista tarjeta" id="cu-lista">${lista.map(f => { const correo = f.socio.email; const tel = f.socio.telefono; const texto = tes.mensajeRecordatorio({ ...f, anio: fc.anio }); const wa = tes.enlaceWhatsApp(tel, texto);
+        return h`<li class="item cuota" data-cuota="${f.socio.id}"><div class="item-principal">
+          <div class="item-titulo">${f.socio.numero ? `${f.socio.numero} · ` : ''}${tes.nombreCompleto(f.socio)} <span class="chip ${ESTADOS[f.estado][1]}">${ESTADOS[f.estado][0]}</span></div>
+          <div class="item-sub">${f.estado === 'exento' ? 'No paga cuota' : `Pagado ${euros(f.pagado)} de ${euros(f.debe)}`}${f.pagos.length ? ` · ${f.pagos.map(m => fecha(m.fecha)).join(', ')}` : ''}</div>
+          ${debenPagar(f) ? h`<div class="fila" style="margin-top:.35rem">
+            ${wa ? h`<a class="btn btn-pequeno" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+            ${correo ? h`<a class="btn btn-pequeno" href="mailto:${correo}?subject=${encodeURIComponent(`Cuota ${fc.anio} del Club Gallina Alacantina`)}&body=${encodeURIComponent(texto)}">Correo</a>` : ''}
+            <button type="button" class="btn btn-pequeno" data-efectivo="${f.socio.id}" data-falta="${f.falta}">Pago en efectivo</button></div>` : ''}
+        </div></li>`; })}</ul>`
+      : c.filas.length ? h`<p class="muted tarjeta">${fc.ver === 'pendientes' ? '¡Todos han pagado la cuota de este año!' : 'Nadie en esta lista.'}</p>` : ''}
+      ${c.fuera.length ? h`<p class="aviso-caja info peq">Hay ${c.fuera.length} cuota(s) de ${fc.anio} de personas que no constan como socias ese año (revisa sus fechas de alta y baja).</p>` : ''}
+      <div class="fila">${c.cuenta.pendiente + c.cuenta.parcial ? h`<button class="btn" id="cu-copiar">📋 Copiar la lista de pendientes</button>` : ''}
+        ${c.filas.length ? h`<button class="btn" id="cu-csv">⬇️ Cuotas ${fc.anio} (CSV)</button>` : ''}</div>
+      <p class="peq muted">Cuenta como pagada la cuota con movimientos en «Cuotas de socios» de ese año asignados al socio. El texto del recordatorio y el importe de la cuota se cambian en «Partidas»; la cuota especial o la exención, en la ficha del socio.</p>`);
+    $('#cu-anio', cuerpo).addEventListener('change', (ev) => { fc.anio = Number(ev.target.value); pintarCuotas(cuerpo); });
+    cuerpo.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => { fc.ver = b.dataset.ver; pintarCuotas(cuerpo); }));
+    cuerpo.querySelectorAll('[data-efectivo]').forEach(b => b.addEventListener('click', async () => {
+      const s = c.filas.find(f => f.socio.id === b.dataset.efectivo).socio;
+      const ok = await dialogo({ titulo: `Pago en efectivo · ${tes.nombreCompleto(s)}`, cuerpo: h`<label for="dlg-importe">Importe (€)</label><input id="dlg-importe" inputmode="decimal" value="${String(b.dataset.falta).replace('.', ',')}">
+        <label for="dlg-fecha">Fecha</label><input id="dlg-fecha" type="date" value="${hoyISO()}">`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Anotar el pago', primario: true }] });
+      const importe = document.getElementById('dlg-importe')?.value, f = document.getElementById('dlg-fecha')?.value;
+      if (ok !== 'si') return;
+      try { await tes.pagoEnEfectivo(s.id, fc.anio, importe, f); aviso(`Pago de ${tes.nombreCompleto(s)} anotado`, 'ok'); pintarCuotas(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
+    $('#cu-copiar', cuerpo)?.addEventListener('click', async () => {
+      const txt = `Cuota ${fc.anio}: pendientes\n` + c.filas.filter(debenPagar).map(f => `${f.socio.numero ? `${f.socio.numero} · ` : ''}${tes.nombreCompleto(f.socio)} · falta ${euros(f.falta)}${f.socio.telefono ? ` · ${f.socio.telefono}` : ''}`).join('\n');
+      try { await navigator.clipboard.writeText(txt); aviso('Lista copiada', 'ok'); } catch { aviso('No se pudo copiar.', 'error'); }
+    });
+    $('#cu-csv', cuerpo)?.addEventListener('click', () => {
+      const filas = [['NUMERO', 'NOMBRE', 'ESTADO', 'CUOTA', 'PAGADO', 'FALTA', 'FECHAS_PAGO', 'TELEFONO', 'CORREO']];
+      c.filas.forEach(f => filas.push([f.socio.numero || '', tes.nombreCompleto(f.socio), ESTADOS[f.estado][0], f.debe, f.pagado, f.falta, f.pagos.map(m => m.fecha).join(' '), f.socio.telefono || '', f.socio.email || '']));
+      descargar(csv(filas), `CGA_cuotas_${fc.anio}_${hoyISO()}.csv`);
+      aviso('Ojo: el CSV no va cifrado. Guárdalo en un sitio seguro.', 'info', { ms: 7000 });
+    });
+  };
+
   // --- Partidas, reglas y cuota --------------------------------------------------
   const pintarPartidas = async (cuerpo) => {
     await tes.asegurarPartidas();
@@ -284,6 +344,8 @@ export default async function (main) {
           <div class="campo"><label for="tc-cuota">Importe de la cuota anual (€)</label><input id="tc-cuota" inputmode="decimal" value="${String(conf.cuota).replace('.', ',')}"></div>
           <div class="campo"><label>Cuenta del Club</label><p style="margin:.4rem 0">${conf.cuenta ? tes.formatearIban(conf.cuenta) : 'Se guarda al importar el primer Excel del banco'}</p></div>
         </div>
+        <div class="campo"><label for="tc-mensaje">Texto del recordatorio de la cuota</label><textarea id="tc-mensaje" rows="4">${conf.mensaje || tes.MENSAJE_CUOTA}</textarea>
+          <p class="ayuda">Se rellenan solos: {nombre}, {anio}, {importe} (lo que falta) y {cuenta}.</p></div>
         <button class="btn" type="submit">Guardar</button>
       </form>`);
     if (propuesta) { $('#tr-texto', cuerpo).focus(); $('#tp-reglas', cuerpo).scrollIntoView({ block: 'start' }); reglaPropuesta = ''; }
@@ -306,7 +368,7 @@ export default async function (main) {
       catch (e) { aviso(e.message, 'error'); }
     });
     $('#tr-aplicar', cuerpo).addEventListener('click', async () => { const n = await tes.aplicarReglas(); aviso(n ? `${n} movimiento(s) clasificados.` : 'No había nada nuevo que clasificar.', 'ok'); });
-    $('#tc-config', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarConfiguracion({ cuota: $('#tc-cuota', cuerpo).value }); aviso('Guardado', 'ok'); } catch (e) { aviso(e.message, 'error'); } });
+    $('#tc-config', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarConfiguracion({ cuota: $('#tc-cuota', cuerpo).value, mensaje: $('#tc-mensaje', cuerpo).value.trim() || null }); aviso('Guardado', 'ok'); } catch (e) { aviso(e.message, 'error'); } });
   };
 
   // --- Importar desde Excel -----------------------------------------------

@@ -149,6 +149,7 @@ export const CAMPOS_SOCIO = [
   ['iban', 'IBAN (cuenta)', ['iban', 'cuenta', 'ccc', 'cuenta bancaria']],
   ['mandato_ref', 'Referencia del mandato SEPA', ['mandato', 'referencia mandato', 'ref mandato']],
   ['mandato_fecha', 'Fecha de firma del mandato', ['fecha mandato', 'firma mandato']],
+  ['cuota_especial', 'Cuota especial (€; 0 si está exento)', ['cuota especial', 'exento']],
   ['notas', 'Notas', ['notas', 'observaciones', 'comentarios']]
 ];
 const CAMPOS_FECHA = new Set(['fecha_alta', 'fecha_baja', 'mandato_fecha']);
@@ -183,6 +184,7 @@ function limpiarSocio(s) {
     r[k] = typeof v === 'string' ? (v.trim() || null) : v;
   }
   if (r.iban) r.iban = formatearIban(r.iban);
+  if (r.cuota_especial !== null) { const c = Number(String(r.cuota_especial).replace(',', '.')); r.cuota_especial = Number.isFinite(c) && c >= 0 ? Math.round(c * 100) / 100 : r.cuota_especial; }
   if (r.dni) r.dni = String(r.dni).replace(/[\s.-]+/g, '').toUpperCase();
   if (r.email) r.email = r.email.toLowerCase();
   r.perfil_id = s.perfil_id || null;
@@ -197,6 +199,7 @@ export function validarSocio(s, { id = null } = {}) {
   if (s.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.email)) e.push('El correo no parece válido.');
   for (const k of CAMPOS_FECHA) if (s[k] && !/^\d{4}-\d{2}-\d{2}$/.test(s[k])) e.push(`La ${CAMPOS_SOCIO.find(c => c[0] === k)[1].toLowerCase()} no es una fecha válida.`);
   if (s.fecha_alta && s.fecha_baja && s.fecha_baja < s.fecha_alta) e.push('La fecha de baja es anterior a la de alta.');
+  if (s.cuota_especial !== null && s.cuota_especial !== undefined && !(typeof s.cuota_especial === 'number' && s.cuota_especial >= 0)) e.push('La cuota especial debe ser un importe (0 si está exento).');
   return e;
 }
 
@@ -572,3 +575,58 @@ export function resumen(anio) {
 }
 
 export const movimientosDeSocio = (id) => t.movimientos.filter(m => m.socio_id === id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+// ===========================================================================
+// Fase 3: cuotas por año
+// ===========================================================================
+// Socio del Club durante el año: dado de alta antes de que acabe y sin baja antes de que empiece
+export const socioEnAnio = (s, anio) => (!s.fecha_alta || s.fecha_alta <= `${anio}-12-31`) && (!s.fecha_baja || s.fecha_baja >= `${anio}-01-01`);
+export const cuotaDe = (s) => (typeof s.cuota_especial === 'number' ? s.cuota_especial : configuracion().cuota);
+
+export function cuotasAnio(anio) {
+  exigirAbierta();
+  vigilar();
+  const pc = partidaCuotas();
+  const pagos = t.movimientos.filter(m => pc && m.partida === pc.id && Number(m.anio) === Number(anio) && m.socio_id);
+  const filas = socios().filter(s => socioEnAnio(s, anio)).map(s => {
+    const suyos = pagos.filter(m => m.socio_id === s.id);
+    const pagado = Math.round(suyos.reduce((x, m) => x + m.importe, 0) * 100) / 100;
+    const debe = cuotaDe(s);
+    const estado = debe === 0 ? 'exento' : pagado >= debe - 0.005 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente';
+    return { socio: s, debe, pagado, falta: Math.max(0, Math.round((debe - pagado) * 100) / 100), estado, pagos: suyos };
+  });
+  // Cuotas cobradas de personas que ya no figuran como socias ese año
+  const fuera = pagos.filter(m => !filas.some(f => f.socio.id === m.socio_id));
+  const total = (k) => Math.round(filas.reduce((x, f) => x + f[k], 0) * 100) / 100;
+  return { anio: Number(anio), filas, fuera,
+    cuenta: Object.fromEntries(['pagado', 'parcial', 'pendiente', 'exento'].map(e => [e, filas.filter(f => f.estado === e).length])),
+    recaudado: total('pagado'), previsto: total('debe'), pendiente: total('falta') };
+}
+export const aniosCuotas = () => {
+  const a = new Set([new Date().getFullYear(), ...t.movimientos.filter(m => m.anio).map(m => Number(m.anio))]);
+  return [...a].sort((x, y) => y - x);
+};
+
+export async function pagoEnEfectivo(socioId, anio, importe, fecha = hoyISO()) {
+  exigirAbierta();
+  await asegurarPartidas();
+  const s = t.socios.find(x => x.id === socioId);
+  if (!s) throw new Error('Socio no encontrado.');
+  await guardarMovimiento({ fecha, importe, concepto: `Cuota ${anio} en efectivo · ${nombreCompleto(s)}`, partida: partidaCuotas().id, socio_id: socioId, anio, nota: 'Efectivo' });
+}
+
+// Recordatorio: texto editable en Partidas › Cuota; {nombre}, {anio}, {importe}, {cuenta}
+export const MENSAJE_CUOTA = 'Hola, {nombre}. Te recordamos que está pendiente la cuota {anio} del Club Gallina Alacantina ({importe}). Puedes pagarla por transferencia a la cuenta {cuenta}, indicando tu nombre. ¡Gracias!';
+export function mensajeRecordatorio(fila) {
+  const c = configuracion();
+  const euros = `${fila.falta.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  return String(c.mensaje || MENSAJE_CUOTA).replaceAll('{nombre}', fila.socio.nombre || nombreCompleto(fila.socio)).replaceAll('{anio}', String(fila.anio ?? ''))
+    .replaceAll('{importe}', euros).replaceAll('{cuenta}', c.cuenta ? formatearIban(c.cuenta) : '(cuenta del Club)');
+}
+export function enlaceWhatsApp(telefono, texto) {
+  let n = String(telefono || '').replace(/\D/g, '');
+  if (!n) return null;
+  if (n.length === 9) n = `34${n}`;
+  if (n.startsWith('00')) n = n.slice(2);
+  return `https://wa.me/${n}?text=${encodeURIComponent(texto)}`;
+}
