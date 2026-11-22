@@ -790,6 +790,90 @@ REVOKE ALL ON public.comunicados FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.comunicados TO authenticated;
 
 -- ----------------------------------------------------------------------------
+-- 4j. Tesorería del Club. Independiente del Libro Genealógico y de sus roles:
+--   · Solo la ven las personas de public.tesoreria_miembros. Ser administrador
+--     del Libro NO da acceso, y la app no puede nombrar tesoreros: se nombran
+--     aquí, en el SQL Editor de Supabase (ver al final de esta sección).
+--   · Los datos llegan CIFRADOS desde el dispositivo del tesorero (AES-GCM con
+--     una clave que solo se abre con la contraseña de tesorería). El servidor,
+--     el panel de Supabase y quien tenga acceso a la base solo ven texto cifrado.
+--   · Sin historial (lo leen administración e inspección) y con los borrados
+--     visibles solo para tesorería.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.tesoreria_miembros (
+  usuario_id  uuid PRIMARY KEY REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  desde       timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.tesoreria_miembros ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tesoreria_miembros_ver ON public.tesoreria_miembros;
+CREATE POLICY tesoreria_miembros_ver ON public.tesoreria_miembros FOR SELECT TO authenticated USING (usuario_id = auth.uid());
+REVOKE ALL ON public.tesoreria_miembros FROM anon, authenticated;
+GRANT SELECT ON public.tesoreria_miembros TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.es_tesorero() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.tesoreria_miembros WHERE usuario_id = auth.uid())
+$$;
+REVOKE ALL ON FUNCTION public.es_tesorero() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.es_tesorero() TO authenticated;
+
+-- La clave de los datos, envuelta (cifrada) con la contraseña de tesorería. Una fila.
+CREATE TABLE IF NOT EXISTS public.tesoreria_clave (
+  id           uuid PRIMARY KEY,
+  sal          text NOT NULL,
+  iteraciones  integer NOT NULL CHECK (iteraciones >= 100000),
+  iv           text NOT NULL,
+  clave        text NOT NULL,
+  version      integer NOT NULL DEFAULT 1,
+  usuario_id   uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  sync_ts      timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+-- Los registros: socios, movimientos, reglas… El contenido va cifrado en «datos».
+CREATE TABLE IF NOT EXISTS public.tesoreria (
+  id          uuid PRIMARY KEY,
+  tipo        text NOT NULL CHECK (tipo ~ '^[a-z_]{1,30}$'),
+  datos       text NOT NULL CHECK (length(datos) <= 200000),
+  usuario_id  uuid REFERENCES public.perfiles(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  sync_ts     timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS tesoreria_sync_ts ON public.tesoreria (sync_ts, id);
+CREATE INDEX IF NOT EXISTS tesoreria_clave_sync_ts ON public.tesoreria_clave (sync_ts, id);
+
+CREATE OR REPLACE FUNCTION public.validar_tesoreria() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.usuario_id := coalesce(auth.uid(), NEW.usuario_id);
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.validar_tesoreria() FROM PUBLIC, anon, authenticated;
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['tesoreria', 'tesoreria_clave'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_validar_tesoreria ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER trg_validar_tesoreria BEFORE INSERT OR UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.validar_tesoreria()', t);
+    EXECUTE format('DROP TRIGGER IF EXISTS zz_marcar_sync ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER zz_marcar_sync BEFORE INSERT OR UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.marcar_sync()', t);
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_anotar_borrado ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER trg_anotar_borrado AFTER DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.anotar_borrado()', t);
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_tesoreros', t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (public.es_tesorero()) WITH CHECK (public.es_tesorero())', t || '_tesoreros', t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
+  END LOOP;
+END $$;
+
+-- Nombrar tesorero (solo desde el SQL Editor, con el correo de su cuenta de la app):
+--   INSERT INTO public.tesoreria_miembros (usuario_id)
+--   SELECT id FROM public.perfiles WHERE email = 'correo@ejemplo.es' ON CONFLICT DO NOTHING;
+-- Quitarlo:
+--   DELETE FROM public.tesoreria_miembros WHERE usuario_id = (SELECT id FROM public.perfiles WHERE email = 'correo@ejemplo.es');
+
+-- ----------------------------------------------------------------------------
 -- 5. Seguridad a nivel de fila (RLS)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.perfiles       ENABLE ROW LEVEL SECURITY;
@@ -872,7 +956,8 @@ CREATE POLICY solicitudes_editar ON public.solicitudes FOR UPDATE TO authenticat
   USING (usuario_id = auth.uid() OR public.es_auditor()) WITH CHECK (usuario_id = auth.uid() OR public.es_auditor());
 
 CREATE POLICY borrados_ver ON public.borrados FOR SELECT TO authenticated
-  USING (usuario_id = auth.uid() OR public.es_auditor() OR tabla = 'comunicados');
+  USING (CASE WHEN tabla IN ('tesoreria', 'tesoreria_clave') THEN public.es_tesorero()
+              ELSE usuario_id = auth.uid() OR public.es_auditor() OR tabla = 'comunicados' END);
 
 CREATE POLICY historial_ver ON public.historial FOR SELECT TO authenticated USING (public.es_auditor());
 

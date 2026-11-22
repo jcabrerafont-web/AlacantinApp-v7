@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import * as auth from './auth.js';
 import * as sync from './sync.js';
 import * as datos from './datos.js';
+import * as tesoreria from './tesoreria.js';
 import * as instalacion from './instalacion.js';
 import * as diagnostico from './diagnostico.js';
 import { $, aviso, esc } from './ui.js';
@@ -53,7 +54,8 @@ const RUTAS = [
   ['mapa', 'mapa', ['inspector', 'administrador']],
   ['admin/expediente', 'adminexpediente', ['administrador']],
   ['admin/programa', 'adminprograma', ['administrador']],
-  ['admin/germoplasma', 'admingermoplasma', ['administrador']]
+  ['admin/germoplasma', 'admingermoplasma', ['administrador']],
+  ['tesoreria', 'tesoreria', 'tesoreria']
 ];
 
 // Barra inferior: visitante 3 columnas; usuarios registrados 4 columnas.
@@ -91,6 +93,7 @@ function resolver(hash) {
 function permitido(roles) {
   if (roles === '*') return true;
   if (!datos.estado.perfil) return false;
+  if (roles === 'tesoreria') return Boolean(datos.estado.tesorero); // rol aparte del Libro
   return roles === 'usuario' || roles.includes(datos.rol());
 }
 
@@ -162,7 +165,7 @@ function pintarInsignia() {
 
 function marcarBarra(base) {
   const equivalencias = { animal: 'censo', pedigri: 'censo', editar: 'alta', perfil: 'herramientas', apareamientos: 'herramientas',
-    informes: 'herramientas', sincronizacion: 'herramientas', comunicados: 'herramientas', calificar: 'censo', usuarios: 'admin', mapa: 'inspector', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
+    informes: 'herramientas', sincronizacion: 'herramientas', comunicados: 'herramientas', tesoreria: 'herramientas', calificar: 'censo', usuarios: 'admin', mapa: 'inspector', admin: 'admin', inspector: 'inspector', inspecciones: 'inspector', dossier: 'inspector' };
   let activo = equivalencias[base] || base;
   if (activo === 'conoce') activo = document.querySelector('#barra a[data-ruta="estandar"]') ? 'estandar' : 'herramientas';
   if (activo === 'inspector' && !document.querySelector('#barra a[data-ruta="inspector"]') && document.querySelector('#barra a[data-ruta="admin"]')) activo = 'admin';
@@ -190,6 +193,7 @@ export async function iniciarSesion(perfil) {
   datos.estado.perfil = perfil;
   instalacion.pedirPersistencia(); // que el navegador no borre el Libro del móvil
   await datos.cargar();
+  await Promise.race([tesoreria.comprobarTesorero(), new Promise(r => setTimeout(r, 3000))]).catch(() => {});
   pintarBarra();
   pintarCabecera();
   if (navigator.onLine && auth.obtenerCliente()) {
@@ -198,6 +202,8 @@ export async function iniciarSesion(perfil) {
 }
 
 export async function cerrarSesion() {
+  tesoreria.cerrar();
+  datos.estado.tesorero = false;
   await auth.salir();
   datos.estado.perfil = null;
   await datos.cargar();
@@ -241,6 +247,8 @@ async function arrancar() {
     console.warn('[auth]', e);
   }
   await datos.cargar();
+  // Rol de tesorería (aparte del Libro): sin esperar más de 3 s al servidor
+  await Promise.race([tesoreria.comprobarTesorero(), new Promise(r => setTimeout(r, 3000))]).catch(() => {});
   if (!datos.estado.perfil && navigator.onLine && cliente) {
     sync.descargar(null).then(() => datos.cargar()).catch(() => {});
   }

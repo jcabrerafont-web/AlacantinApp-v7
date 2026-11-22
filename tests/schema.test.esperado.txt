@@ -356,3 +356,36 @@ psql:tests/schema.test.sql:349: ERROR:  permission denied for table comunicados
 -----------------
                1
 
+== 21. Tesorería: independiente del Libro y solo para tesoreros
+   21a el administrador del Libro no ve nada ni puede escribir (esperado: 0 y error 42501)
+ admin_es_tesorero | ve_admin 
+-------------------+----------
+ f                 |        0
+
+psql:tests/schema.test.sql:363: ERROR:  new row violates row-level security policy for table "tesoreria"
+   21b ni puede nombrarse tesorero (esperado: error 42501)
+psql:tests/schema.test.sql:365: ERROR:  permission denied for table tesoreria_miembros
+   21c se nombra desde el SQL Editor (postgres)
+   21d como tesorero sí (esperado: t, 1, 1)
+ es_tesorero | registros | claves 
+-------------+-----------+--------
+ t           |         1 |      1
+
+   21e tipo con caracteres raros o iteraciones bajas (esperado: 2 errores 23514)
+psql:tests/schema.test.sql:375: ERROR:  new row for relation "tesoreria" violates check constraint "tesoreria_tipo_check"
+psql:tests/schema.test.sql:376: ERROR:  new row for relation "tesoreria_clave" violates check constraint "tesoreria_clave_iteraciones_check"
+   21f nada de tesorería en el historial y sus borrados no los ve otro usuario (esperado: 0, 0)
+ en_historial 
+--------------
+            0
+
+ borrados_tesoreria_visibles 
+-----------------------------
+                           0
+
+ claves_visibles 
+-----------------
+               0
+
+   21g un visitante sin cuenta no puede ni intentarlo (esperado: error 42501)
+psql:tests/schema.test.sql:387: ERROR:  permission denied for table tesoreria

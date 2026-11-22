@@ -439,6 +439,63 @@ await ir('#/comunicados');
   await page.click('[data-editar]'); await page.click('#com-borrar'); await page.click('dialog.dialogo button[value="si"]');
   await page.waitForTimeout(300);
   ok((await page.innerText('main')).includes('Todavía no hay comunicados'), 'Comunicados: se pueden borrar, con confirmación'); }
+
+// 6m. Tesorería: rol aparte, datos cifrados en el dispositivo (modo dispositivo: el administrador local)
+await ir('#/herramientas');
+ok((await page.innerText('main')).includes('Tesorería del Club'), 'Herramientas: acceso a Tesorería para quien tiene el rol');
+await ir('#/tesoreria');
+{ await page.fill('#te-c1', 'corta'); await page.fill('#te-c2', 'corta'); await page.click('#te-crear button[type=submit]'); await page.waitForTimeout(200);
+  ok((await aviso()).includes('al menos 12 caracteres'), 'Tesorería: la contraseña tiene que ser larga');
+  await page.fill('#te-c1', 'gallinas del club 2026'); await page.fill('#te-c2', 'gallinas del club 2026'); await page.click('#te-crear button[type=submit]');
+  await page.waitForSelector('#te-nuevo', { timeout: 8000 });
+  await page.click('#te-nuevo');
+  await page.fill('#ts-numero', '7'); await page.fill('#ts-nombre', 'Zacarías'); await page.fill('#ts-apellidos', 'Secretísimo'); await page.fill('#ts-dni', '12345678Z');
+  await page.fill('#ts-iban', 'ES91 2100 0418 4502 0005 1332');
+  await page.click('#te-ficha button[type=submit]');
+  await page.waitForSelector('#te-lista');
+  ok((await page.innerText('#te-lista')).includes('7 · Zacarías Secretísimo'), 'Tesorería: alta de un socio');
+  const enMovil = await page.evaluate(async () => { const db = await import('./js/db.js'); return JSON.stringify([await db.todos('tesoreria'), await db.todos('tesoreria_clave'), await db.todos('cola')]); });
+  ok(!/Zacar|Secret|12345678Z|ES91|gallinas del club/i.test(enMovil) && /v1\./.test(enMovil), 'Tesorería: en el móvil solo hay texto cifrado (ni nombre, ni DNI, ni IBAN, ni la contraseña)');
+  await page.click('#te-cerrar');
+  await page.waitForSelector('#te-abrir');
+  await page.fill('#te-clave', 'otra contraseña cualquiera'); await page.click('#te-abrir button[type=submit]');
+  await page.waitForFunction(() => document.querySelector('#aviso')?.textContent.includes('no es correcta'), null, { timeout: 8000 });
+  ok(true, 'Tesorería: con otra contraseña no se abre');
+  await page.fill('#te-clave', 'gallinas del club 2026'); await page.click('#te-abrir button[type=submit]');
+  await page.waitForSelector('#te-lista', { timeout: 8000 });
+  ok((await page.innerText('#te-lista')).includes('Zacarías'), 'Tesorería: con su contraseña se abre y los datos están');
+  // Importar el Excel de socios (datos ficticios): hoja «SOCIOS», títulos en la fila 3
+  await page.click('[data-pestana=importar]');
+  await page.setInputFiles('#te-archivo', 'tests/fixtures/socios_ficticios.xlsx');
+  await page.waitForSelector('#te-importar', { timeout: 5000 });
+  const imp = await page.evaluate(() => ({ hoja: document.querySelector('#te-hoja').selectedOptions[0].textContent, fila: document.querySelector('#te-fila').value,
+    mapa: Object.fromEntries([...document.querySelectorAll('[data-mapa]')].filter(x => x.value !== '').map(x => [x.dataset.mapa, x.selectedOptions[0].textContent.split(' · ')[1]])) }));
+  ok(imp.hoja === 'SOCIOS' && imp.fila === '3' && imp.mapa.numero === 'Nº SOCIO' && imp.mapa.dni === 'DNI' && imp.mapa.telefono === 'TELÉFONO' && imp.mapa.email === 'E-MAIL'
+    && imp.mapa.municipio === 'POBLACIÓN' && imp.mapa.fecha_alta === 'FECHA ALTA' && imp.mapa.iban === 'IBAN' && imp.mapa.cp === 'C.P.' && imp.mapa.direccion === 'DOMICILIO',
+    `Importar: encuentra la hoja de socios, la fila de títulos y adivina las columnas (${JSON.stringify(imp)})`);
+  ok((await page.innerText('#te-cuerpo')).includes('3 socio(s) para importar') && (await page.innerText('#te-cuerpo')).includes('01/03/2021'), 'Importar: vista previa con las fechas del Excel');
+  await page.click('#te-importar');
+  await page.waitForTimeout(1500);
+  ok((await aviso()).includes('2 nuevos') && (await aviso()).includes('1 con errores') && (await page.innerText('main')).includes('IBAN no es válido'),
+    `Importar: 2 socios nuevos y el del IBAN erróneo se señala sin importar (${await aviso()})`);
+  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-lista');
+  { const n = await page.$$eval('#te-lista [data-socio]', l => l.map(x => x.textContent.trim().slice(0, 30))); ok(n.length === 3, `Tesorería: 3 socios en la lista (${n.join(' | ')})`); }
+  await page.fill('#te-buscar', 'denia');
+  ok((await page.$$('#te-lista [data-socio]')).length === 1, 'Tesorería: búsqueda sin acentos (Dénia)');
+  await page.click('[data-pestana=seguridad]');
+  const [cop] = await Promise.all([page.waitForEvent('download'), page.click('#te-copia')]);
+  const txtCopia = fs.readFileSync(await cop.path(), 'utf8');
+  ok(cop.suggestedFilename().startsWith('CGA_tesoreria_cifrada_') && !/Zacar|Bernat|00000000T/.test(txtCopia) && JSON.parse(txtCopia).registros.length === 3, 'Tesorería: copia cifrada descargable, sin datos legibles');
+  const unidad = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.ibanValido('ES9121000418450200051332'), t.ibanValido('ES9121000418450200051333'), t.ibanValido('ES91 2100 0418 4502 0005 1332')]; });
+  ok(JSON.stringify(unidad) === '[true,false,true]', 'IBAN: comprobación de los dígitos de control');
+  if (process.env.CAPTURAS) { await page.click('[data-pestana=socios]'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
+}
+await cambiarRolLocal('criador');
+await ir('#/herramientas');
+ok(!(await page.innerText('main')).includes('Tesorería del Club'), 'Tesorería: un criador no la ve en Herramientas');
+await ir('#/tesoreria');
+ok(!page.url().includes('#/tesoreria'), 'Tesorería: un criador no puede entrar ni escribiendo la dirección');
+await cambiarRolLocal('administrador');
 await ir('#/admin/supabase');
 ok((await page.innerText('main')).includes('modo dispositivo'), 'Tareas en Supabase: en modo dispositivo explica que no hay servidor');
 { const sb = await page.evaluate(async () => { const m = await import('./js/vistas/adminsupabase.js'); return [m.refProyecto('https://mliunedrpbigybsovdyu.supabase.co'), m.refProyecto('')]; });

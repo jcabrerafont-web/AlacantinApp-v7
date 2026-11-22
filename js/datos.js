@@ -18,6 +18,7 @@ export const estado = {
   huevos: [],
   germoplasma: [],
   comunicados: [],
+  tesorero: false,   // rol de tesorería (aparte del Libro): ver tesoreria.js
   campanas: [],
   lotes: [],
   incubaciones: [],

@@ -30,6 +30,7 @@ export default function (main) {
       ['#/acta', '📄', esAuditor(r) ? 'Acta anual de cierre censal' : 'Resumen anual de mi aviario', 'Balance del año para imprimir y firmar: censo, movimientos, Ne, reproducción y puesta'],
       ['#/informes', '📊', esAuditor(r) ? 'Informes del Libro' : 'Informe de mi censo', 'Censo por sexo y edad, Ne, consanguinidad y exportaciones']
     ]],
+    ...(datos.estado.tesorero ? [['Tesorería', [['#/tesoreria', '💶', 'Tesorería del Club', 'Socios, cuotas y cuentas. Solo para tesorería, con datos cifrados']]]] : []),
     ['Consulta', [
       ['#/comunicados', '📣', 'Comunicados del Club', (() => { const n = datos.comunicados().length; return n ? `${n} comunicado(s); el último, «${datos.comunicados()[0].titulo}»` : 'Avisos del Club a sus socios'; })()],
       ['#/estandar', '📖', 'Estándar Racial', 'Texto oficial ESGA025'],

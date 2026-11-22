@@ -355,3 +355,34 @@ RESET ROLE;
 SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 SELECT count(*) AS borrado_visible FROM borrados WHERE tabla = 'comunicados';
 RESET ROLE;
+
+\echo '== 21. Tesorería: independiente del Libro y solo para tesoreros'
+\echo '   21a el administrador del Libro no ve nada ni puede escribir (esperado: 0 y error 42501)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+SELECT public.es_tesorero() AS admin_es_tesorero, (SELECT count(*) FROM tesoreria) AS ve_admin;
+INSERT INTO tesoreria (id, tipo, datos) VALUES ('90000000-0000-0000-0000-000000000001', 'socio', 'cifrado');
+\echo '   21b ni puede nombrarse tesorero (esperado: error 42501)'
+INSERT INTO tesoreria_miembros (usuario_id) VALUES (auth.uid());
+RESET ROLE;
+\echo '   21c se nombra desde el SQL Editor (postgres)'
+INSERT INTO tesoreria_miembros (usuario_id) VALUES ('00000000-0000-0000-0000-00000000000d');
+\echo '   21d como tesorero sí (esperado: t, 1, 1)'
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+INSERT INTO tesoreria_clave (id, sal, iteraciones, iv, clave) VALUES ('91000000-0000-0000-0000-000000000001', 's', 600000, 'i', 'k');
+INSERT INTO tesoreria (id, tipo, datos) VALUES ('90000000-0000-0000-0000-000000000001', 'socio', 'cifrado');
+SELECT public.es_tesorero() AS es_tesorero, (SELECT count(*) FROM tesoreria) AS registros, (SELECT count(*) FROM tesoreria_clave) AS claves;
+\echo '   21e tipo con caracteres raros o iteraciones bajas (esperado: 2 errores 23514)'
+INSERT INTO tesoreria (id, tipo, datos) VALUES (gen_random_uuid(), 'Socio;DROP', 'x');
+INSERT INTO tesoreria_clave (id, sal, iteraciones, iv, clave) VALUES (gen_random_uuid(), 's', 1000, 'i', 'k');
+DELETE FROM tesoreria WHERE id = '90000000-0000-0000-0000-000000000001';
+RESET ROLE;
+\echo '   21f nada de tesorería en el historial y sus borrados no los ve otro usuario (esperado: 0, 0)'
+SELECT count(*) AS en_historial FROM historial WHERE tabla LIKE 'tesoreria%';
+SET ROLE authenticated; SET request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+SELECT count(*) AS borrados_tesoreria_visibles FROM borrados WHERE tabla = 'tesoreria';
+SELECT count(*) AS claves_visibles FROM tesoreria_clave;
+RESET ROLE;
+\echo '   21g un visitante sin cuenta no puede ni intentarlo (esperado: error 42501)'
+SET ROLE anon;
+SELECT count(*) FROM tesoreria;
+RESET ROLE;
