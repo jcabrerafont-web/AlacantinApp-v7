@@ -544,3 +544,10 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .comunicados { list-style: none; padding: 0; }
 .comunicado-aviso { display: flex; gap: .75rem; align-items: center; justify-content: space-between; }
 .comunicado-aviso a { color: inherit; text-decoration: none; }
+/* Tesorería: importes */
+.item.mov { align-items: center; }
+.importe { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.importe.positivo { color: var(--verde-t, #166534); } .importe.negativo { color: var(--rojo-t, #b91c1c); }
+.mov-editar { display: block; background: var(--fondo-2, transparent); }
+.tabla-resumen td.num, .tabla-resumen th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pestanas { display: flex; flex-wrap: wrap; gap: .35rem; flex: 1 1 100%; }

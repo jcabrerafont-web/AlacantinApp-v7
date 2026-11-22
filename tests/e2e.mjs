@@ -447,7 +447,9 @@ await ir('#/tesoreria');
 { await page.fill('#te-c1', 'corta'); await page.fill('#te-c2', 'corta'); await page.click('#te-crear button[type=submit]'); await page.waitForTimeout(200);
   ok((await aviso()).includes('al menos 12 caracteres'), 'Tesorería: la contraseña tiene que ser larga');
   await page.fill('#te-c1', 'gallinas del club 2026'); await page.fill('#te-c2', 'gallinas del club 2026'); await page.click('#te-crear button[type=submit]');
-  await page.waitForSelector('#te-nuevo', { timeout: 8000 });
+  await page.waitForSelector('[data-pestana=socios]', { timeout: 8000 });
+  ok(await page.$eval('[data-pestana=movimientos]', b => b.getAttribute('aria-selected') === 'true'), 'Tesorería: se abre en Movimientos');
+  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-nuevo');
   await page.click('#te-nuevo');
   await page.fill('#ts-numero', '7'); await page.fill('#ts-nombre', 'Zacarías'); await page.fill('#ts-apellidos', 'Secretísimo'); await page.fill('#ts-dni', '12345678Z');
   await page.fill('#ts-iban', 'ES91 2100 0418 4502 0005 1332');
@@ -485,10 +487,57 @@ await ir('#/tesoreria');
   await page.click('[data-pestana=seguridad]');
   const [cop] = await Promise.all([page.waitForEvent('download'), page.click('#te-copia')]);
   const txtCopia = fs.readFileSync(await cop.path(), 'utf8');
-  ok(cop.suggestedFilename().startsWith('CGA_tesoreria_cifrada_') && !/Zacar|Bernat|00000000T/.test(txtCopia) && JSON.parse(txtCopia).registros.length === 3, 'Tesorería: copia cifrada descargable, sin datos legibles');
+  ok(cop.suggestedFilename().startsWith('CGA_tesoreria_cifrada_') && !/Zacar|Bernat|00000000T/.test(txtCopia) && JSON.parse(txtCopia).registros.filter(r => r.tipo === 'socio').length === 3 && !/Cuotas de socios/.test(txtCopia), 'Tesorería: copia cifrada descargable, sin datos legibles');
   const unidad = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.ibanValido('ES9121000418450200051332'), t.ibanValido('ES9121000418450200051333'), t.ibanValido('ES91 2100 0418 4502 0005 1332')]; });
   ok(JSON.stringify(unidad) === '[true,false,true]', 'IBAN: comprobación de los dígitos de control');
-  if (process.env.CAPTURAS) { await page.click('[data-pestana=socios]'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
+  // Fase 2: movimientos del banco (Excel con el formato de Caixa Popular, datos ficticios)
+  await page.click('[data-pestana=movimientos]');
+  await page.waitForSelector('#te-banco', { state: 'attached' });
+  ok((await page.innerText('#te-cuerpo')).includes('Todavía no hay movimientos'), 'Movimientos: vacío, con el botón para importar el Excel del banco');
+  await page.setInputFiles('#te-banco', 'tests/fixtures/banco_ficticio_1.xlsx');
+  await page.waitForSelector('#te-movs', { timeout: 8000 });
+  ok((await aviso()).includes('5 nuevos (4 clasificados solos)') && (await aviso()).includes('Quedan 1 por clasificar'), `Movimientos: 5 importados, 4 clasificados solos (${await aviso()})`);
+  const movs = await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
+    return t.movimientos().map(m => [m.concepto.slice(0, 14), t.nombrePartida(m.partida), m.socio_id ? t.socios().find(s => s.id === m.socio_id).nombre : null, m.anio]); });
+  const por = Object.fromEntries(movs.map(m => [m[0], m.slice(1)]));
+  ok(JSON.stringify(por['trf. ana prueb']) === JSON.stringify(['Cuotas de socios', 'Ana', 2026]) && JSON.stringify(por['trf. prueba do']) === JSON.stringify(['Cuotas de socios', 'Bernat', 2026])
+    && por['rcbo.federaion'][0] === 'Federación (FESACOCUR)' && por['comision mante'][0] === 'Comisiones y gastos del banco' && por['trf. fulano de'][0] === null && por['trf. fulano de'][1] === null,
+    `Clasificación: cuotas por socio e importe (también con el nombre al revés), federación y comisiones por regla, y lo desconocido sin clasificar (${JSON.stringify(por)})`);
+  ok((await page.innerText('#te-cuerpo')).includes('973,00 €'), 'Movimientos: saldo según el banco (el del último apunte)');
+  await page.setInputFiles('#te-banco', 'tests/fixtures/banco_ficticio_2.xlsx');
+  await page.waitForSelector('#te-huecos', { timeout: 8000 });
+  ok((await aviso()).includes('1 nuevos') && (await aviso()).includes('1 que ya estaban') && (await page.innerText('#te-huecos')).includes('Faltan los apuntes 15'),
+    `Movimientos: al volver a importar no se duplican y avisa del apunte que falta (${await aviso()})`);
+  await page.setInputFiles('#te-banco', 'tests/fixtures/banco_otra_cuenta.xlsx');
+  await page.waitForTimeout(800);
+  ok((await aviso()).includes('es de otra cuenta'), 'Movimientos: rechaza el Excel de otra cuenta');
+  // Clasificar a mano el desconocido y crear una regla desde un movimiento
+  await page.selectOption('#mf-partida', 'sin');
+  await page.waitForTimeout(200);
+  await page.click('[data-editar-mov]');
+  await page.selectOption('#me-partida', { label: 'Otros' }); await page.fill('#me-nota', 'Donativo en mano');
+  await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(300);
+  ok((await page.innerText('#te-cuerpo')).includes('Ningún movimiento con estos filtros'), 'Movimientos: clasificado a mano, ya no queda ninguno sin clasificar');
+  await page.selectOption('#mf-partida', ''); await page.waitForTimeout(200);
+  ok((await page.innerText('#te-cuerpo')).includes('Resumen por partidas 2026'), 'Movimientos: resumen por partidas del año');
+  const tot = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const r = t.resumen(2026); return [r.ingresos, r.gastos, r.filas.find(f => f.partida.nombre === 'Anillas')?.ingresos]; });
+  ok(JSON.stringify(tot) === JSON.stringify([72, 87, 12]), `Resumen 2026: 72 € de ingresos, 87 € de gastos, anillas 12 € (${JSON.stringify(tot)})`);
+  await page.click('[data-pestana=partidas]');
+  await page.waitForSelector('#tr-nueva');
+  await page.fill('#tr-texto', 'loteria'); await page.selectOption('#tr-partida', { label: 'Otros' }); await page.click('#tr-nueva button[type=submit]'); await page.waitForTimeout(300);
+  ok((await page.innerText('#tp-reglas')).includes('«loteria» → Otros'), 'Partidas: regla nueva');
+  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar');
+  await page.fill('#te-buscar', ''); await page.waitForSelector('#te-lista');
+  await page.click('#te-lista [data-socio]');
+  await page.waitForSelector('#te-pagos');
+  ok((await page.$$('#te-pagos li')).length === 2 && (await page.innerText('#te-pagos')).includes('Cuotas de socios 2026'), 'Ficha del socio: sus movimientos (cuota 2026 y anillas)');
+  await page.click('#te-volver');
+  await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
+  { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
+    ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
+  ok((await page.innerText('#te-huecos')).includes('entre el 09/10/2026 y el 02/11/2026'), 'Movimientos: el aviso del apunte que falta sigue al volver');
+  if (process.env.CAPTURAS) { await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
+  if (process.env.CAPTURAS) { await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
 }
 await cambiarRolLocal('criador');
 await ir('#/herramientas');

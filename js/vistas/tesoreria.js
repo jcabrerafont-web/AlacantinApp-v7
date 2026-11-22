@@ -9,10 +9,13 @@ import { leerXlsx } from '../tesoreria/xlsx.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['socios', 'Socios'], ['importar', 'Importar'], ['seguridad', 'Seguridad']];
+const PESTANAS = [['movimientos', 'Movimientos'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
-  let pestana = 'socios', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
+  let pestana = 'movimientos', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
+  const filtro = { anio: new Date().getFullYear(), partida: '', texto: '' };
+  let editandoMov = null, reglaPropuesta = '';
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -27,14 +30,16 @@ export default async function (main) {
     tes.actividad();
     pintar(main, h`${cabecera()}
       <div class="fila entre tarjeta" style="align-items:center">
-        <div class="segmentado" role="tablist">${PESTANAS.map(([k, n]) => h`<button type="button" role="tab" class="btn btn-pequeno ${k === pestana ? 'btn-primario' : ''}" aria-selected="${k === pestana}" data-pestana="${k}">${n}</button>`)}</div>
-        <button type="button" class="btn btn-pequeno" id="te-cerrar">🔒 Cerrar tesorería</button>
+        <div class="pestanas" role="tablist">${PESTANAS.map(([k, n]) => h`<button type="button" role="tab" class="btn btn-pequeno ${k === pestana ? 'btn-primario' : ''}" aria-selected="${k === pestana}" data-pestana="${k}">${n}</button>`)}</div>
+        <button type="button" class="btn btn-pequeno" id="te-cerrar" style="margin-left:auto">🔒 Cerrar tesorería</button>
       </div>
       <div id="te-cuerpo"></div>`);
-    main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; dibujar(); }));
+    main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; editandoMov = null; dibujar(); }));
     $('#te-cerrar', main).addEventListener('click', () => { tes.cerrar(); });
     const cuerpo = $('#te-cuerpo', main);
-    if (pestana === 'socios') pintarSocios(cuerpo);
+    if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
+    else if (pestana === 'socios') pintarSocios(cuerpo);
+    else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
     else pintarSeguridad(cuerpo);
   };
@@ -120,7 +125,11 @@ export default async function (main) {
       <div class="fila"><button class="btn btn-primario" type="submit">${nuevo ? 'Añadir socio' : 'Guardar cambios'}</button>
         ${nuevo ? '' : h`<button class="btn btn-peligro" type="button" id="te-borrar">Borrar</button>`}</div>
       <p class="peq muted">Para un socio que deja el Club, mejor poner la fecha de baja que borrarlo: así se conserva su historial de cuotas.</p>
-    </form>`);
+    </form>
+    ${nuevo ? '' : (() => { const pagos = tes.movimientosDeSocio(s.id); return h`<div class="tarjeta" id="te-pagos"><h2>Movimientos de este socio</h2>
+      ${pagos.length ? h`<ul class="lista">${pagos.map(m => h`<li class="item"><span class="item-principal"><span class="item-titulo">${fecha(m.fecha)} · ${euros(m.importe)}</span>
+        <span class="item-sub">${tes.nombrePartida(m.partida) || 'Sin clasificar'}${m.anio ? ` ${m.anio}` : ''} · ${m.concepto}</span></span></li>`)}</ul>`
+      : h`<p class="muted peq">Todavía no tiene movimientos asignados.</p>`}</div>`; })()}`);
     $('#te-volver', cuerpo).addEventListener('click', () => { editando = null; pintarSocios(cuerpo); });
     $('#ts-iban', cuerpo).addEventListener('change', (ev) => { if (ev.target.value && !tes.ibanValido(ev.target.value)) aviso('Ese IBAN no es válido: revisa los dígitos.', 'error'); });
     $('#te-borrar', cuerpo)?.addEventListener('click', async () => {
@@ -133,6 +142,171 @@ export default async function (main) {
       try { await tes.guardarSocio({ ...s, ...d, id: s.id }); aviso(nuevo ? 'Socio añadido' : 'Cambios guardados', 'ok'); editando = null; pintarSocios(cuerpo); }
       catch (e) { aviso(e.message, 'error'); }
     });
+  };
+
+  // --- Movimientos del banco -------------------------------------------------
+  const pintarMovimientos = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const anios = tes.aniosMovimientos();
+    if (anios.length && !anios.includes(filtro.anio)) filtro.anio = anios[0];
+    const parts = tes.partidas();
+    const lista = tes.movimientos({ anio: filtro.anio, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
+    const r = tes.resumen(filtro.anio);
+    const sb = tes.saldoBanco();
+    const huecos = tes.comprobarSaldos();
+    const socios = tes.socios();
+    const nombreSocio = (id) => { const x = socios.find(y => y.id === id); return x ? tes.nombreCompleto(x) : (id ? 'socio borrado' : null); };
+    const fila = (m) => {
+      if (editandoMov === m.id) return h`<li class="item mov-editar" id="mov-${m.id}"><form class="mov-form" data-mov="${m.id}" style="width:100%">
+        <p style="margin:0 0 .5rem"><strong>${fecha(m.fecha)} · ${euros(m.importe)}</strong><br><span class="peq">${m.concepto}</span></p>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="me-partida">Partida</label><select id="me-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}" ${m.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="me-socio">Socio</label><select id="me-socio"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${m.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
+          <div class="campo"><label for="me-anio">Año de la cuota</label><input id="me-anio" type="number" min="2000" max="2100" value="${m.anio ?? ''}" placeholder="Solo para cuotas"></div>
+          <div class="campo"><label for="me-nota">Nota</label><input id="me-nota" value="${m.nota || ''}"></div>
+        </div>
+        <div class="fila"><button class="btn btn-primario btn-pequeno" type="submit">Guardar</button><button class="btn btn-pequeno" type="button" data-cancelar>Cancelar</button>
+          <button class="btn btn-pequeno" type="button" data-regla="${m.concepto}">Crear regla con este concepto</button>
+          ${m.origen === 'banco' ? '' : h`<button class="btn btn-peligro btn-pequeno" type="button" data-borrar-mov="${m.id}">Borrar</button>`}</div>
+      </form></li>`;
+      return h`<li><a class="item mov" href="#/tesoreria" data-editar-mov="${m.id}" id="mov-${m.id}">
+        <span class="item-principal"><span class="item-titulo">${m.concepto}</span>
+          <span class="item-sub">${fecha(m.fecha)} · ${m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
+        <span class="importe ${m.importe < 0 ? 'negativo' : 'positivo'}">${euros(m.importe)}</span></a></li>`;
+    };
+    pintar(cuerpo, h`
+      <div class="kpis">
+        <div class="kpi"><b>${sb ? euros(sb.saldo) : '—'}</b><span>Saldo según el banco${sb ? ` (${fecha(sb.fecha)})` : ''}</span></div>
+        <div class="kpi"><b>${euros(r.ingresos)}</b><span>Ingresos ${filtro.anio}</span></div>
+        <div class="kpi"><b>${euros(r.gastos)}</b><span>Gastos ${filtro.anio}</span></div>
+        <div class="kpi"><b>${r.sinClasificar}</b><span>Sin clasificar</span></div>
+      </div>
+      ${huecos.length ? h`<div class="aviso-caja alerta peq" id="te-huecos"><strong>Revisa los movimientos:</strong><ul>${huecos.map(x => h`<li>${x.texto}</li>`)}</ul>Descarga del banco un periodo que los incluya e impórtalo: los que ya están no se duplican.</div>` : ''}
+      <div class="tarjeta">
+        <label class="btn btn-primario">⬆️ Importar movimientos del banco (Excel)<input type="file" id="te-banco" accept=".xlsx" hidden></label>
+        <p class="peq muted" style="margin:.4rem 0 0">El Excel que descargas de la banca online. Se puede importar las veces que haga falta: los movimientos que ya están no se repiten.</p>
+      </div>
+      <div class="tarjeta">
+        <div class="rejilla rejilla-3">
+          <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio">${(anios.length ? anios : [filtro.anio]).map(a => h`<option value="${a}" ${a === filtro.anio ? h`selected` : ''}>${a}</option>`)}</select></div>
+          <div class="campo"><label for="mf-partida">Partida</label><select id="mf-partida"><option value="">Todas</option><option value="sin" ${filtro.partida === 'sin' ? h`selected` : ''}>Sin clasificar</option>${parts.map(p => h`<option value="${p.id}" ${filtro.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="mf-texto">Buscar</label><input id="mf-texto" type="search" value="${filtro.texto}" placeholder="Concepto, nota…"></div>
+        </div>
+        ${r.filas.length ? h`<details><summary><strong>Resumen por partidas ${filtro.anio}</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
+          <thead><tr><th>Partida</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Neto</th></tr></thead>
+          <tbody>${r.filas.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${euros(f.ingresos)}</td><td class="num">${euros(f.gastos)}</td><td class="num">${euros(f.ingresos - f.gastos)}</td></tr>`)}
+            <tr><th>Total</th><th class="num">${euros(r.ingresos)}</th><th class="num">${euros(r.gastos)}</th><th class="num">${euros(r.ingresos - r.gastos)}</th></tr></tbody></table></div></details>` : ''}
+      </div>
+      ${lista.length ? h`<ul class="lista tarjeta" id="te-movs">${lista.map(fila)}</ul>` : h`<p class="muted tarjeta">${tes.aniosMovimientos().length ? 'Ningún movimiento con estos filtros.' : 'Todavía no hay movimientos. Importa el Excel del banco.'}</p>`}
+      <details class="tarjeta"><summary><strong>Añadir un movimiento a mano</strong> <span class="muted peq">(efectivo, por ejemplo)</span></summary>
+        <form id="te-manual" class="rejilla rejilla-2" style="margin-top:.5rem">
+          <div class="campo"><label for="mm-fecha">Fecha</label><input id="mm-fecha" type="date" value="${hoyISO()}" required></div>
+          <div class="campo"><label for="mm-importe">Importe (negativo si es gasto)</label><input id="mm-importe" inputmode="decimal" required placeholder="25 o -12,50"></div>
+          <div class="campo"><label for="mm-concepto">Concepto</label><input id="mm-concepto" required></div>
+          <div class="campo"><label for="mm-partida">Partida</label><select id="mm-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}">${p.nombre}</option>`)}</select></div>
+          <div><button class="btn btn-primario" type="submit">Añadir</button></div>
+        </form></details>`);
+
+    $('#te-banco', cuerpo).addEventListener('change', async (ev) => {
+      const f = ev.target.files?.[0]; ev.target.value = '';
+      if (!f) return;
+      try {
+        const res = await tes.importarMovimientos(await leerXlsx(f));
+        aviso(`Movimientos: ${res.nuevos} nuevos (${res.clasificados} clasificados solos) y ${res.repetidos} que ya estaban.${res.sinClasificar ? ` Quedan ${res.sinClasificar} por clasificar.` : ''}`, 'ok', { ms: 8000 });
+        filtro.anio = tes.aniosMovimientos()[0] || filtro.anio;
+      } catch (e) { aviso(e.message || 'No se pudo leer el Excel.', 'error'); }
+      dibujar();
+    });
+    $('#mf-anio', cuerpo).addEventListener('change', (ev) => { filtro.anio = Number(ev.target.value); pintarMovimientos(cuerpo); });
+    $('#mf-partida', cuerpo).addEventListener('change', (ev) => { filtro.partida = ev.target.value; pintarMovimientos(cuerpo); });
+    $('#mf-texto', cuerpo).addEventListener('input', async (ev) => { filtro.texto = ev.target.value; await pintarMovimientos(cuerpo); const c = $('#mf-texto', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
+    cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));
+    const form = $('.mov-form', cuerpo);
+    if (form) {
+      const m = tes.movimientos().find(x => x.id === form.dataset.mov);
+      // Al elegir la partida de cuotas, el año se propone solo
+      $('#me-partida', form).addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
+      form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; pintarMovimientos(cuerpo); });
+      form.querySelector('[data-regla]').addEventListener('click', (ev) => { reglaPropuesta = ev.target.dataset.regla; pestana = 'partidas'; editandoMov = null; dibujar(); });
+      form.querySelector('[data-borrar-mov]')?.addEventListener('click', async () => {
+        if (!await confirmar('¿Borrar este movimiento?', 'Solo se pueden borrar los añadidos a mano.', 'Borrar', true)) return;
+        try { await tes.borrarMovimiento(m.id); editandoMov = null; aviso('Movimiento borrado', 'ok'); pintarMovimientos(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+      });
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        try {
+          await tes.guardarMovimiento({ id: m.id, partida: $('#me-partida', form).value, socio_id: $('#me-socio', form).value, anio: $('#me-anio', form).value, nota: $('#me-nota', form).value });
+          editandoMov = null; aviso('Movimiento guardado', 'ok'); pintarMovimientos(cuerpo);
+        } catch (e) { aviso(e.message, 'error'); }
+      });
+    }
+    $('#te-manual', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await tes.guardarMovimiento({ fecha: $('#mm-fecha', cuerpo).value, importe: $('#mm-importe', cuerpo).value, concepto: $('#mm-concepto', cuerpo).value, partida: $('#mm-partida', cuerpo).value });
+        aviso('Movimiento añadido', 'ok'); pintarMovimientos(cuerpo);
+      } catch (e) { aviso(e.message, 'error'); }
+    });
+  };
+
+  // --- Partidas, reglas y cuota --------------------------------------------------
+  const pintarPartidas = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const parts = tes.partidas(), rs = tes.reglas(), conf = tes.configuracion();
+    const usos = (id) => tes.movimientos({ partida: id }).length;
+    const TIPOS = { ingreso: 'Ingresos', gasto: 'Gastos', ambos: 'Ingresos y gastos' };
+    const propuesta = reglaPropuesta ? tes.normalizar(reglaPropuesta).split(' ').filter(w => w.length > 2 && !['trf', 'rcbo'].includes(w)).slice(0, 3).join(' ') : '';
+    pintar(cuerpo, h`
+      <div class="tarjeta"><h2>Partidas</h2>
+        <p class="peq muted">Los grupos en que se reparten ingresos y gastos para las cuentas. «Cuotas de socios» es la que cuenta para saber quién ha pagado.</p>
+        <ul class="lista">${parts.map(p => h`<li class="item"><span class="item-principal"><span class="item-titulo">${p.nombre}${p.cuotas ? h` <span class="chip chip-info">Cuotas</span>` : ''}</span>
+          <span class="item-sub">${TIPOS[p.tipo] || ''} · ${usos(p.id)} movimiento(s)</span></span>
+          <span class="fila"><button class="btn btn-pequeno" data-renombrar="${p.id}">Renombrar</button>${p.cuotas ? '' : h`<button class="btn btn-pequeno" data-borrar-partida="${p.id}">Borrar</button>`}</span></li>`)}</ul>
+        <form class="fila" id="tp-nueva" style="margin-top:.5rem;align-items:flex-end">
+          <div class="campo" style="flex:1;margin:0"><label for="tp-nombre">Nueva partida</label><input id="tp-nombre" placeholder="p. ej. Lotería de Navidad"></div>
+          <div class="campo" style="margin:0"><label for="tp-tipo">Tipo</label><select id="tp-tipo"><option value="ambos">Ingresos y gastos</option><option value="ingreso">Ingresos</option><option value="gasto">Gastos</option></select></div>
+          <button class="btn btn-primario" type="submit">Añadir</button></form>
+      </div>
+      <div class="tarjeta" id="tp-reglas"><h2>Reglas automáticas</h2>
+        <p class="peq muted">Al importar, si el concepto del banco contiene el texto, el movimiento va a esa partida. Las transferencias de un socio por el importe de la cuota van solas a «Cuotas de socios».</p>
+        ${rs.length ? h`<ul class="lista">${rs.map(r => h`<li class="item"><span class="item-principal"><span class="item-titulo">«${r.texto}» → ${tes.nombrePartida(r.partida) || '¿?'}</span>
+          <span class="item-sub">${r.signo === '+' ? 'Solo ingresos' : r.signo === '-' ? 'Solo gastos' : 'Ingresos y gastos'}</span></span>
+          <button class="btn btn-pequeno" data-borrar-regla="${r.id}" aria-label="Borrar la regla ${r.texto}">Borrar</button></li>`)}</ul>` : h`<p class="muted peq">Sin reglas.</p>`}
+        <form id="tr-nueva" class="rejilla rejilla-3" style="margin-top:.5rem">
+          <div class="campo"><label for="tr-texto">Si el concepto contiene</label><input id="tr-texto" value="${propuesta}" placeholder="p. ej. anillas"></div>
+          <div class="campo"><label for="tr-partida">Va a la partida</label><select id="tr-partida">${parts.map(p => h`<option value="${p.id}">${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="tr-signo">Para</label><select id="tr-signo"><option value="">Ingresos y gastos</option><option value="+">Solo ingresos</option><option value="-">Solo gastos</option></select></div>
+          <div class="fila"><button class="btn btn-primario" type="submit">Añadir regla</button><button class="btn" type="button" id="tr-aplicar">Aplicar a los sin clasificar</button></div>
+        </form>
+      </div>
+      <form class="tarjeta" id="tc-config"><h2>Cuota y cuenta</h2>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="tc-cuota">Importe de la cuota anual (€)</label><input id="tc-cuota" inputmode="decimal" value="${String(conf.cuota).replace('.', ',')}"></div>
+          <div class="campo"><label>Cuenta del Club</label><p style="margin:.4rem 0">${conf.cuenta ? tes.formatearIban(conf.cuenta) : 'Se guarda al importar el primer Excel del banco'}</p></div>
+        </div>
+        <button class="btn" type="submit">Guardar</button>
+      </form>`);
+    if (propuesta) { $('#tr-texto', cuerpo).focus(); $('#tp-reglas', cuerpo).scrollIntoView({ block: 'start' }); reglaPropuesta = ''; }
+    $('#tp-nueva', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarPartida({ nombre: $('#tp-nombre', cuerpo).value, tipo: $('#tp-tipo', cuerpo).value }); aviso('Partida añadida', 'ok'); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); } });
+    cuerpo.querySelectorAll('[data-renombrar]').forEach(b => b.addEventListener('click', async () => {
+      const p = parts.find(x => x.id === b.dataset.renombrar);
+      const ok = await dialogo({ titulo: 'Renombrar partida', cuerpo: h`<label for="dlg-nombre">Nombre</label><input id="dlg-nombre" value="${p.nombre}">`, acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Guardar', primario: true }] });
+      const nombre = document.getElementById('dlg-nombre')?.value;
+      if (ok !== 'si') return;
+      try { await tes.guardarPartida({ ...p, nombre }); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
+    cuerpo.querySelectorAll('[data-borrar-partida]').forEach(b => b.addEventListener('click', async () => {
+      if (!await confirmar('¿Borrar la partida?', 'Se borran también sus reglas.', 'Borrar', true)) return;
+      try { await tes.borrarPartida(b.dataset.borrarPartida); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
+    cuerpo.querySelectorAll('[data-borrar-regla]').forEach(b => b.addEventListener('click', async () => { await tes.borrarRegla(b.dataset.borrarRegla); pintarPartidas(cuerpo); }));
+    $('#tr-nueva', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try { await tes.guardarRegla({ texto: $('#tr-texto', cuerpo).value, partida: $('#tr-partida', cuerpo).value, signo: $('#tr-signo', cuerpo).value }); const n = await tes.aplicarReglas(); aviso(`Regla añadida${n ? `: ${n} movimiento(s) clasificados` : ''}.`, 'ok'); pintarPartidas(cuerpo); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#tr-aplicar', cuerpo).addEventListener('click', async () => { const n = await tes.aplicarReglas(); aviso(n ? `${n} movimiento(s) clasificados.` : 'No había nada nuevo que clasificar.', 'ok'); });
+    $('#tc-config', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarConfiguracion({ cuota: $('#tc-cuota', cuerpo).value }); aviso('Guardado', 'ok'); } catch (e) { aviso(e.message, 'error'); } });
   };
 
   // --- Importar desde Excel -----------------------------------------------
