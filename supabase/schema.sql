@@ -842,6 +842,9 @@ CREATE TABLE IF NOT EXISTS public.tesoreria (
 );
 CREATE INDEX IF NOT EXISTS tesoreria_sync_ts ON public.tesoreria (sync_ts, id);
 CREATE INDEX IF NOT EXISTS tesoreria_clave_sync_ts ON public.tesoreria_clave (sync_ts, id);
+-- Explícito (además del bucle de abajo) para que el aviso de Supabase no salte
+ALTER TABLE public.tesoreria ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tesoreria_clave ENABLE ROW LEVEL SECURITY;
 
 CREATE OR REPLACE FUNCTION public.validar_tesoreria() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
