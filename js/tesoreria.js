@@ -630,3 +630,47 @@ export function enlaceWhatsApp(telefono, texto) {
   if (n.startsWith('00')) n = n.slice(2);
   return `https://wa.me/${n}?text=${encodeURIComponent(texto)}`;
 }
+
+// ===========================================================================
+// Fase 4: cuentas del año para la asamblea
+// ===========================================================================
+const r2 = (n) => Math.round(n * 100) / 100;
+// Saldo del banco al empezar y al acabar el año, según los apuntes del extracto
+function saldosBanco(anio) {
+  const banco = t.movimientos.filter(m => m.origen === 'banco' && m.saldo !== null)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.apunte ?? 0) - (b.apunte ?? 0));
+  const del = banco.filter(m => m.fecha.startsWith(String(anio)));
+  const antes = banco.filter(m => m.fecha < `${anio}-01-01`).at(-1);
+  const inicial = antes ? antes.saldo : del.length ? r2(del[0].saldo - del[0].importe) : null;
+  const final = del.length ? del.at(-1).saldo : antes ? antes.saldo : null;
+  return { inicial, final, desde: del[0]?.fecha || null, hasta: del.at(-1)?.fecha || null, completo: Boolean(antes) || Boolean(del.length) };
+}
+
+export function cuentasAnio(anio) {
+  exigirAbierta();
+  const a = Number(anio);
+  const porPartida = (y) => {
+    const del = t.movimientos.filter(m => m.fecha.startsWith(String(y)));
+    const fila = (p) => { const ms = del.filter(m => m.partida === p); return { ingresos: r2(ms.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ms.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)) }; };
+    return { del, fila };
+  };
+  const act = porPartida(a), ant = porPartida(a - 1);
+  const filas = partidas().map(p => ({ partida: p, ...act.fila(p.id), anterior: ant.fila(p.id) }));
+  const sin = { ingresos: r2(act.del.filter(m => !m.partida && m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(act.del.filter(m => !m.partida && m.importe < 0).reduce((x, m) => x - m.importe, 0)) };
+  const tot = (lista, k) => r2(lista.reduce((x, f) => x + f[k], 0));
+  const ingresos = r2(tot(filas, 'ingresos') + sin.ingresos), gastos = r2(tot(filas, 'gastos') + sin.gastos);
+  const banco = saldosBanco(a);
+  const netoBanco = r2(act.del.filter(m => m.origen === 'banco').reduce((x, m) => x + m.importe, 0));
+  const efectivo = act.del.filter(m => m.origen !== 'banco');
+  const cuotas = cuotasAnio(a);
+  return {
+    anio: a, filas: filas.filter(f => f.ingresos || f.gastos || f.anterior.ingresos || f.anterior.gastos), sinClasificar: sin,
+    ingresos, gastos, resultado: r2(ingresos - gastos),
+    anterior: { ingresos: r2(ant.del.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ant.del.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)), n: ant.del.length },
+    banco: { ...banco, neto: netoBanco, cuadra: banco.inicial === null || banco.final === null ? null : Math.abs(r2(banco.inicial + netoBanco) - banco.final) < 0.005 },
+    efectivo: { n: efectivo.length, neto: r2(efectivo.reduce((x, m) => x + m.importe, 0)) },
+    cuotas: { socios: cuotas.filas.length - cuotas.cuenta.exento, pagadas: cuotas.cuenta.pagado, pendientes: cuotas.cuenta.pendiente + cuotas.cuenta.parcial, recaudado: cuotas.recaudado, pendiente: cuotas.pendiente },
+    huecos: comprobarSaldos().filter(x => x.hasta.fecha.startsWith(String(a)) || x.desde.fecha.startsWith(String(a))),
+    cuenta: configuracion().cuenta
+  };
+}

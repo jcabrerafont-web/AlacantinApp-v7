@@ -15,11 +15,11 @@ function huella(texto) {
   return (x >>> 0).toString(16).toUpperCase().padStart(8, '0');
 }
 
-const cabecera = (titulo, ref) => h`
+const cabecera = (titulo, ref, sub = `${CONFIG.club.nombre} · Libro Genealógico · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision})`) => h`
   <div class="doc-cab">
     <img src="./icons/logo.png" alt="" width="64" height="64">
     <div><h1>${titulo}</h1>
-      <div>${CONFIG.club.nombre} · Libro Genealógico · Estándar ${ESTANDAR.codigo} (rev. ${ESTANDAR.revision})</div>
+      <div>${sub}</div>
       <div>Referencia: <strong>${ref}</strong> · Emitido el ${new Date().toLocaleDateString('es-ES')}</div></div>
   </div>`;
 
@@ -285,3 +285,41 @@ export function plantillaProgramaCria(d) {
     <ul><li>Estándar oficial ${E.codigo} (rev. ${E.revision}).</li><li>Reglamento interno del Libro y baremo de calificación.</li><li>Matriz de pedigrí (CSV) e informes de censo, de la app.</li></ul>`;
 }
 export const programaCria = (d) => imprimir(plantillaProgramaCria(d));
+
+// ---------------------------------------------------------------------------
+// Cuentas del año de la tesorería, para la asamblea. Los datos llegan ya abiertos
+// (descifrados) desde la tesorería; al terminar de imprimir se borran de la página.
+// ---------------------------------------------------------------------------
+export function plantillaCuentas(c) {
+  const e = (n) => (n === null || n === undefined ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`);
+  const ref = `CU-${c.anio}-${huella(JSON.stringify([c.ingresos, c.gastos, c.banco.inicial, c.banco.final]))}`;
+  const conAnterior = c.anterior.n > 0;
+  const ingresos = c.filas.filter(f => f.ingresos || f.anterior.ingresos), gastos = c.filas.filter(f => f.gastos || f.anterior.gastos);
+  const tabla = (titulo, lista, k, total, totalAnt, sinClas) => h`<table><thead><tr><th>${titulo}</th><th class="num">${c.anio}</th>${conAnterior ? h`<th class="num">${c.anio - 1}</th>` : ''}</tr></thead><tbody>
+    ${lista.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${e(f[k])}</td>${conAnterior ? h`<td class="num">${e(f.anterior[k])}</td>` : ''}</tr>`)}
+    ${sinClas ? h`<tr><td><em>Sin clasificar</em></td><td class="num">${e(sinClas)}</td>${conAnterior ? h`<td></td>` : ''}</tr>` : ''}
+    <tr><th>Total</th><th class="num">${e(total)}</th>${conAnterior ? h`<th class="num">${e(totalAnt)}</th>` : ''}</tr></tbody></table>`;
+  return h`
+    ${cabecera(`Cuentas del ejercicio ${c.anio}`, ref, `${CONFIG.club.nombre} · Tesorería`)}
+    <p>${c.cuenta ? `Cuenta ${String(c.cuenta).replace(/(.{4})/g, '$1 ').trim()}. ` : ''}Del 1 de enero al 31 de diciembre de ${c.anio}${c.banco.hasta && c.banco.hasta < `${c.anio}-12-31` ? ` (movimientos hasta el ${fecha(c.banco.hasta)})` : ''}.</p>
+    <h2>Resumen</h2>
+    <table><tbody>
+      <tr><td>Saldo en el banco al empezar el año</td><td class="num">${e(c.banco.inicial)}</td></tr>
+      <tr><td>Ingresos</td><td class="num">${e(c.ingresos)}</td></tr>
+      <tr><td>Gastos</td><td class="num">${e(c.gastos)}</td></tr>
+      <tr><th>Resultado del ejercicio</th><th class="num">${e(c.resultado)}</th></tr>
+      <tr><td>Saldo en el banco al acabar${c.banco.hasta && c.banco.hasta < `${c.anio}-12-31` ? ` (a ${fecha(c.banco.hasta)})` : ' el año'}</td><td class="num">${e(c.banco.final)}</td></tr>
+      ${c.efectivo.n ? h`<tr><td>Cobros y pagos en efectivo del año (no pasan por el banco)</td><td class="num">${e(c.efectivo.neto)}</td></tr>` : ''}
+    </tbody></table>
+    ${c.banco.cuadra === false || c.huecos.length ? h`<p class="doc-aviso"><strong>Atención:</strong> ${c.huecos.length ? c.huecos.map(x => x.texto).join(' ') : 'el saldo final no coincide con el inicial más los movimientos del banco: falta algún movimiento por importar.'}</p>` : ''}
+    <h2>Ingresos</h2>${tabla('Partida', ingresos, 'ingresos', c.ingresos, c.anterior.ingresos, c.sinClasificar.ingresos)}
+    <h2>Gastos</h2>${tabla('Partida', gastos, 'gastos', c.gastos, c.anterior.gastos, c.sinClasificar.gastos)}
+    <h2>Cuotas ${c.anio}</h2>
+    <p>${c.cuotas.socios} socio(s) con cuota: ${c.cuotas.pagadas} pagada(s) y ${c.cuotas.pendientes} pendiente(s). Recaudado ${e(c.cuotas.recaudado)}${c.cuotas.pendiente ? `; por cobrar ${e(c.cuotas.pendiente)}` : ''}.</p>
+    <div class="doc-firmas"><div>Tesorería</div><div>Visto bueno de la Presidencia</div></div>
+    <p class="doc-pie">Documento generado por AlacantinApp a partir del extracto bancario y de los movimientos anotados por la tesorería.</p>`;
+}
+export function cuentas(c) {
+  imprimir(plantillaCuentas(c));
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}

@@ -558,6 +558,21 @@ await ir('#/tesoreria');
   // Exento y cuota especial
   const esp = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.nombre === 'Bernat'); await t.guardarSocio({ ...s, cuota_especial: '0' }); const c = t.cuotasAnio(2026); return [c.cuenta.exento, c.previsto, t.socios().find(x => x.nombre === 'Bernat').cuota_especial]; });
   ok(JSON.stringify(esp) === JSON.stringify([1, 50, 0]), `Cuotas: un socio exento (cuota especial 0) no cuenta en lo previsto (${JSON.stringify(esp)})`);
+  // Fase 4: cuentas del año para la asamblea
+  await page.click('[data-pestana=cuentas]'); await page.waitForSelector('#cc-doc');
+  { const t = await page.innerText('#cc-doc');
+    const cu = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const c = t.cuentasAnio(2026); return [c.banco.inicial, c.banco.final, c.ingresos, c.gastos, c.resultado, c.efectivo.neto, c.banco.cuadra, c.cuotas.pagadas, c.cuotas.recaudado]; });
+    ok(JSON.stringify(cu) === JSON.stringify([1000, 1015, 97, 87, 10, 25, false, 2, 75]), `Cuentas 2026: saldo inicial y final del banco, ingresos, gastos, resultado, efectivo y cuotas (${JSON.stringify(cu)})`);
+    ok(t.includes('Cuentas del ejercicio 2026') && t.includes('1000,00 €') && t.includes('Cuotas de socios') && t.includes('Federación (FESACOCUR)') && t.includes('Faltan los apuntes 15') && t.includes('Visto bueno de la Presidencia'),
+      'Cuentas: documento con resumen, ingresos y gastos por partida, aviso del apunte que falta y firmas'); }
+  { const limpio = await page.evaluate(async () => { const d = await import('./js/documentos.js'); const t = await import('./js/tesoreria.js');
+      window.print = () => {}; d.cuentas(t.cuentasAnio(2026)); await new Promise(r => setTimeout(r, 100));
+      const antes = document.querySelector('#impresion').textContent.includes('Cuentas del ejercicio'); window.dispatchEvent(new Event('afterprint'));
+      return antes && document.querySelector('#impresion').textContent.trim() === ''; });
+    ok(limpio, 'Cuentas: al terminar de imprimir, los datos se borran de la página'); }
+  const [dcc] = await Promise.all([page.waitForEvent('download'), page.click('#cc-csv')]);
+  ok(dcc.suggestedFilename() === 'CGA_cuentas_2026.csv', 'Cuentas: CSV del ejercicio');
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/cuentas.png`, fullPage: true });
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }

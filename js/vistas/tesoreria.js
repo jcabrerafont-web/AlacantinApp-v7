@@ -6,10 +6,11 @@ import * as datos from '../datos.js';
 import * as sync from '../sync.js';
 import * as tes from '../tesoreria.js';
 import { leerXlsx } from '../tesoreria/xlsx.js';
+import * as docs from '../documentos.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
@@ -17,6 +18,7 @@ export default async function (main) {
   const filtro = { anio: new Date().getFullYear(), partida: '', texto: '' };
   let editandoMov = null, reglaPropuesta = '';
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
+  let anioCuentas = null;
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -40,6 +42,7 @@ export default async function (main) {
     const cuerpo = $('#te-cuerpo', main);
     if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
     else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
+    else if (pestana === 'cuentas') await pintarCuentas(cuerpo);
     else if (pestana === 'socios') pintarSocios(cuerpo);
     else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
@@ -306,6 +309,36 @@ export default async function (main) {
       c.filas.forEach(f => filas.push([f.socio.numero || '', tes.nombreCompleto(f.socio), ESTADOS[f.estado][0], f.debe, f.pagado, f.falta, f.pagos.map(m => m.fecha).join(' '), f.socio.telefono || '', f.socio.email || '']));
       descargar(csv(filas), `CGA_cuotas_${fc.anio}_${hoyISO()}.csv`);
       aviso('Ojo: el CSV no va cifrado. Guárdalo en un sitio seguro.', 'info', { ms: 7000 });
+    });
+  };
+
+  // --- Cuentas del año (asamblea) -----------------------------------------------
+  const pintarCuentas = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const anios = tes.aniosMovimientos();
+    if (!anios.length) { pintar(cuerpo, h`<p class="muted tarjeta">Todavía no hay movimientos. Importa el Excel del banco en «Movimientos».</p>`); return; }
+    // Por defecto, el último año cerrado si lo hay (en enero se preparan las cuentas del anterior)
+    if (!anios.includes(anioCuentas)) anioCuentas = anios.find(a => a < new Date().getFullYear()) || anios[0];
+    const c = tes.cuentasAnio(anioCuentas);
+    pintar(cuerpo, h`
+      <div class="tarjeta fila" style="align-items:flex-end">
+        <div class="campo" style="margin:0"><label for="cc-anio">Ejercicio</label><select id="cc-anio">${anios.map(a => h`<option value="${a}" ${a === anioCuentas ? h`selected` : ''}>${a}</option>`)}</select></div>
+        <button class="btn btn-primario" id="cc-imprimir">🖨️ Imprimir o guardar en PDF</button>
+        <button class="btn" id="cc-csv">⬇️ CSV</button>
+      </div>
+      ${c.sinClasificar.ingresos || c.sinClasificar.gastos ? h`<p class="aviso-caja aviso peq">Hay movimientos sin clasificar en ${c.anio}: aparecen como «Sin clasificar». Clasifícalos en «Movimientos» antes de presentar las cuentas.</p>` : ''}
+      <div class="doc-pantalla" id="cc-doc">${docs.plantillaCuentas(c)}</div>`);
+    const t1 = cuerpo.querySelector('#cc-doc h1');
+    if (t1) { const h2 = document.createElement('h2'); h2.innerHTML = t1.innerHTML; t1.replaceWith(h2); }
+    $('#cc-anio', cuerpo).addEventListener('change', (ev) => { anioCuentas = Number(ev.target.value); pintarCuentas(cuerpo); });
+    $('#cc-imprimir', cuerpo).addEventListener('click', () => docs.cuentas(c));
+    $('#cc-csv', cuerpo).addEventListener('click', () => {
+      const filas = [['TIPO', 'PARTIDA', String(c.anio), String(c.anio - 1)]];
+      c.filas.filter(f => f.ingresos || f.anterior.ingresos).forEach(f => filas.push(['Ingreso', f.partida.nombre, f.ingresos, f.anterior.ingresos]));
+      c.filas.filter(f => f.gastos || f.anterior.gastos).forEach(f => filas.push(['Gasto', f.partida.nombre, f.gastos, f.anterior.gastos]));
+      filas.push(['Total', 'Ingresos', c.ingresos, c.anterior.ingresos], ['Total', 'Gastos', c.gastos, c.anterior.gastos], ['Total', 'Resultado', c.resultado, Math.round((c.anterior.ingresos - c.anterior.gastos) * 100) / 100],
+        ['Banco', 'Saldo inicial', c.banco.inicial ?? '', ''], ['Banco', 'Saldo final', c.banco.final ?? '', '']);
+      descargar(csv(filas), `CGA_cuentas_${c.anio}.csv`);
     });
   };
 
