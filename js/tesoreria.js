@@ -50,7 +50,11 @@ export const esTesorero = () => Boolean(datos.estado.tesorero);
 // ---------------------------------------------------------------------------
 // Clave y apertura
 // ---------------------------------------------------------------------------
-const filaClave = async () => (await db.todos('tesoreria_clave')).sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
+// Filas de tesoreria_clave: version 1, la clave envuelta con la contraseña; version 2, con el código de recuperación
+const VERSION_RECUPERACION = 2;
+const filaClave = async () => (await db.todos('tesoreria_clave')).filter(f => f.version !== VERSION_RECUPERACION).sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
+const filaRecuperacion = async () => (await db.todos('tesoreria_clave')).filter(f => f.version === VERSION_RECUPERACION).sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
+export const tieneRecuperacion = async () => Boolean(await filaRecuperacion());
 export const configurada = async () => Boolean(await filaClave());
 export const abierta = () => Boolean(t.clave);
 
@@ -295,8 +299,9 @@ export async function importarSocios(lista) {
 // ---------------------------------------------------------------------------
 export async function copiaCifrada() {
   exigirAbierta();
+  await db.metaSet(`tes-copia:${datos.estado.perfil.id}`, new Date().toISOString());
   return { formato: FORMATO_COPIA, version: 1, creado: new Date().toISOString(),
-    clave: await filaClave(), registros: await db.todos('tesoreria') };
+    clave: await filaClave(), recuperacion: await filaRecuperacion(), registros: await db.todos('tesoreria') };
 }
 
 export async function restaurarCopia(copia, contrasena) {
@@ -308,6 +313,7 @@ export async function restaurarCopia(copia, contrasena) {
   // Comprueba que los registros se pueden abrir antes de guardar nada
   for (const f of copia.registros.slice(0, 3)) await cripto.descifrar(clave, f.id, f.datos);
   if (!local) { await db.guardar('tesoreria_clave', copia.clave); await sync.encolar('tesoreria_clave', 'upsert', copia.clave); }
+  if (copia.recuperacion && !(await filaRecuperacion())) { await db.guardar('tesoreria_clave', copia.recuperacion); await sync.encolar('tesoreria_clave', 'upsert', copia.recuperacion); }
   const actuales = new Map((await db.todos('tesoreria')).map(f => [f.id, f]));
   let restaurados = 0;
   for (const f of copia.registros) {
@@ -861,4 +867,47 @@ export function resumenPorAnios() {
   exigirAbierta();
   return aniosMovimientos().map(anio => { const r = resumen(anio); const b = saldosBanco(anio);
     return { anio, ingresos: r2(r.ingresos), gastos: r2(r.gastos), resultado: r2(r.ingresos - r.gastos), n: r.n, saldoFinal: b.final, hasta: b.hasta }; });
+}
+
+// ===========================================================================
+// Código de recuperación y recordatorio de la copia cifrada
+// ===========================================================================
+// Crea (o cambia) el código: la clave de datos se envuelve también con él. El código
+// solo se muestra esta vez; el anterior deja de valer.
+export async function crearRecuperacion() {
+  exigirAbierta();
+  const codigo = cripto.codigoRecuperacion();
+  const env = await cripto.envolver(t.clave, codigo, 100000); // el código ya es largo y aleatorio
+  for (const f of (await db.todos('tesoreria_clave')).filter(x => x.version === VERSION_RECUPERACION)) {
+    await db.borrar('tesoreria_clave', f.id); await sync.encolar('tesoreria_clave', 'delete', { id: f.id });
+  }
+  const ahora = new Date().toISOString();
+  const fila = { id: uuid(), ...env, version: VERSION_RECUPERACION, usuario_id: datos.estado.perfil.id, created_at: ahora, updated_at: ahora };
+  await db.guardar('tesoreria_clave', fila);
+  await sync.encolar('tesoreria_clave', 'upsert', fila);
+  vigilar();
+  return codigo;
+}
+
+// Contraseña olvidada: el código abre la tesorería y se pone una contraseña nueva
+export async function recuperar(codigo, nueva, repetida) {
+  exigirTesorero();
+  const rec = await filaRecuperacion();
+  if (!rec) throw new Error('Esta tesorería no tiene código de recuperación.');
+  if (nueva !== repetida) throw new Error('Las dos contraseñas nuevas no coinciden.');
+  cripto.comprobarContrasena(nueva);
+  let clave;
+  try { clave = await cripto.abrirClave(rec, cripto.normalizarCodigo(codigo)); } catch { throw new Error('El código de recuperación no es correcto.'); }
+  const fila = await filaClave();
+  const r = { ...fila, ...(await cripto.envolver(clave, nueva)), updated_at: new Date().toISOString() };
+  await db.guardar('tesoreria_clave', r);
+  await sync.encolar('tesoreria_clave', 'upsert', r);
+  t.clave = clave;
+  await recargar();
+}
+
+// Días desde la última copia cifrada descargada en este dispositivo (null: nunca)
+export async function diasDesdeCopia() {
+  const u = await db.metaGet(`tes-copia:${datos.estado.perfil?.id}`, null);
+  return u ? Math.floor((Date.now() - Date.parse(u)) / 86400000) : null;
 }

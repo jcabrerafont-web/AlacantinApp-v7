@@ -98,7 +98,16 @@ export default async function (main) {
         <div class="pestanas" role="tablist">${PESTANAS.map(([k, n]) => h`<button type="button" role="tab" class="btn btn-pequeno ${k === pestana ? 'btn-primario' : ''}" aria-selected="${k === pestana}" data-pestana="${k}">${n}</button>`)}</div>
         <button type="button" class="btn btn-pequeno" id="te-cerrar" style="margin-left:auto">🔒 Cerrar tesorería</button>
       </div>
+      <div id="te-avisos"></div>
       <div id="te-cuerpo"></div>`);
+    Promise.all([tes.tieneRecuperacion(), tes.diasDesdeCopia()]).then(([rec, dias]) => {
+      const caja = $('#te-avisos', main);
+      if (!caja) return;
+      const hayDatos = tes.socios().length || tes.movimientos().length;
+      pintar(caja, h`${!rec ? h`<p class="aviso-caja alerta peq" id="te-aviso-rec">Todavía no hay <strong>código de recuperación</strong>: si se olvida la contraseña, nadie podrá abrir la tesorería. <button type="button" class="enlace" data-ir-seguridad>Crearlo ahora</button></p>` : ''}
+        ${hayDatos && (dias === null || dias > 30) ? h`<p class="aviso-caja aviso peq" id="te-aviso-copia">${dias === null ? 'Aún no has descargado ninguna copia cifrada de la tesorería' : `Tu última copia cifrada es de hace ${dias} días`}. <button type="button" class="enlace" data-ir-seguridad>Descargar copia</button></p>` : ''}`);
+      caja.querySelectorAll('[data-ir-seguridad]').forEach(b => b.addEventListener('click', () => { pestana = 'seguridad'; dibujar(); }));
+    });
     main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; editandoMov = null; dibujar(); }));
     $('#te-cerrar', main).addEventListener('click', () => { tes.cerrar(); });
     const cuerpo = $('#te-cuerpo', main);
@@ -110,7 +119,7 @@ export default async function (main) {
     else if (pestana === 'socios') pintarSocios(cuerpo);
     else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
-    else pintarSeguridad(cuerpo);
+    else await pintarSeguridad(cuerpo);
   };
 
   // --- Primera vez: crear la contraseña -----------------------------------
@@ -138,7 +147,25 @@ export default async function (main) {
         <div class="campo"><label for="te-clave">Contraseña de tesorería</label><input id="te-clave" type="password" autocomplete="current-password" required></div>
         <button class="btn btn-primario" type="submit">Abrir</button>
         <p class="peq muted">Se cierra sola a los 15 minutos sin usarla y al salir de la app.</p>
+        <p class="peq"><button type="button" class="enlace" id="te-olvido">¿Has olvidado la contraseña?</button></p>
+      </form>
+      <form class="tarjeta" id="te-recuperar" hidden><h2>Recuperar con el código</h2>
+        <p class="peq">Escribe el código de recuperación (el del sobre) y una contraseña nueva.</p>
+        <div class="campo"><label for="tr-codigo">Código de recuperación</label><input id="tr-codigo" autocomplete="off" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></div>
+        <div class="campo"><label for="tr-n1">Contraseña nueva (mínimo ${MIN_CONTRASENA} caracteres)</label><input id="tr-n1" type="password" autocomplete="new-password"></div>
+        <div class="campo"><label for="tr-n2">Repítela</label><input id="tr-n2" type="password" autocomplete="new-password"></div>
+        <button class="btn btn-primario" type="submit">Abrir y poner la contraseña nueva</button>
       </form>`);
+    $('#te-olvido', main).addEventListener('click', async () => {
+      if (!(await tes.tieneRecuperacion())) { aviso('Esta tesorería no tiene código de recuperación. Sin la contraseña no se puede abrir: prueba con la copia cifrada y su contraseña, si la recuerdas.', 'error', { ms: 9000 }); return; }
+      $('#te-recuperar', main).hidden = false; $('#tr-codigo', main).focus();
+    });
+    $('#te-recuperar', main).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const b = ev.submitter; b.disabled = true;
+      try { await tes.recuperar($('#tr-codigo', main).value, $('#tr-n1', main).value, $('#tr-n2', main).value); aviso('Tesorería abierta con la contraseña nueva', 'ok'); }
+      catch (e) { aviso(e.message, 'error'); b.disabled = false; }
+    });
     $('#te-clave', main).focus();
     $('#te-abrir', main).addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -702,8 +729,14 @@ export default async function (main) {
   };
 
   // --- Seguridad: contraseña y copia cifrada ------------------------------
-  const pintarSeguridad = (cuerpo) => {
+  const pintarSeguridad = async (cuerpo) => {
+    const rec = await tes.tieneRecuperacion();
     pintar(cuerpo, h`
+      <div class="tarjeta" id="te-rec"><h2>Código de recuperación</h2>
+        <p class="peq">Si se olvida la contraseña de tesorería, este código la abre y permite poner otra. Se muestra una sola vez: imprímelo o cópialo y guárdalo en sobre cerrado con la Presidencia o la Secretaría.</p>
+        <p>${rec ? h`<span class="chip chip-ok">Creado</span>` : h`<span class="chip chip-alerta">Sin crear</span>`}</p>
+        <button type="button" class="btn ${rec ? '' : 'btn-primario'}" id="te-crear-rec">${rec ? 'Crear un código nuevo (el anterior deja de valer)' : 'Crear el código de recuperación'}</button>
+      </div>
       <form class="tarjeta" id="te-cambiar"><h2>Cambiar la contraseña de tesorería</h2>
         <div class="campo"><label for="tc-actual">Contraseña actual</label><input id="tc-actual" type="password" autocomplete="current-password" required></div>
         <div class="campo"><label for="tc-nueva">Nueva (mínimo ${MIN_CONTRASENA} caracteres)</label><input id="tc-nueva" type="password" autocomplete="new-password" required></div>
@@ -725,6 +758,20 @@ export default async function (main) {
       ev.preventDefault();
       try { await tes.cambiarContrasena($('#tc-actual', cuerpo).value, $('#tc-nueva', cuerpo).value, $('#tc-repe', cuerpo).value); aviso('Contraseña de tesorería cambiada', 'ok'); ev.target.reset(); }
       catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#te-crear-rec', cuerpo).addEventListener('click', async () => {
+      if (rec && !await confirmar('¿Crear un código nuevo?', 'El código anterior dejará de valer. Tendrás que guardar el nuevo.', 'Crear código nuevo', true)) return;
+      try {
+        const codigo = await tes.crearRecuperacion();
+        const cerrado = dialogo({ titulo: 'Tu código de recuperación', cuerpo: h`<p>Guárdalo ahora: no se volverá a mostrar.</p>
+          <p id="dlg-codigo" style="font-family:monospace;font-size:1.15rem;font-weight:700;letter-spacing:.05em;text-align:center;padding:.6rem;border:2px dashed var(--borde);user-select:all">${codigo}</p>
+          <p class="fila"><button type="button" class="btn btn-pequeno" id="dlg-imprimir">🖨️ Imprimir</button><button type="button" class="btn btn-pequeno" id="dlg-copiar">📋 Copiar</button></p>`,
+          acciones: [{ valor: 'ok', texto: 'Ya lo he guardado', primario: true }] });
+        document.getElementById('dlg-imprimir')?.addEventListener('click', () => docs.codigoRecuperacionDoc(codigo));
+        document.getElementById('dlg-copiar')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(codigo); aviso('Código copiado', 'ok'); } catch { aviso('No se pudo copiar: anótalo a mano.', 'error'); } });
+        await cerrado;
+        pintarSeguridad(cuerpo);
+      } catch (e) { aviso(e.message, 'error'); }
     });
     $('#te-copia', cuerpo).addEventListener('click', async () => {
       descargar(JSON.stringify(await tes.copiaCifrada()), `CGA_tesoreria_cifrada_${hoyISO()}.json`, 'application/json');

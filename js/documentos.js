@@ -385,3 +385,12 @@ export function presupuestoDoc(x) {
   imprimir(plantillaPresupuesto(x));
   window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
 }
+
+// Hoja con el código de recuperación de la tesorería, para guardarla en sobre cerrado
+export function codigoRecuperacionDoc(codigo) {
+  imprimir(h`${cabecera('Código de recuperación de la tesorería', new Date().toLocaleDateString('es-ES'), `${CONFIG.club.nombre} · Tesorería`)}
+    <p>Este código abre la tesorería de AlacantinApp si se olvida la contraseña de tesorería. Guárdalo en sobre cerrado, en manos de la Presidencia o la Secretaría. Si se crea un código nuevo, este deja de valer.</p>
+    <p style="font-size:20pt;font-family:monospace;letter-spacing:.08em;text-align:center;border:2px solid #000;padding:12pt">${codigo}</p>
+    <p class="doc-pie">Quien tenga este código y una cuenta con el rol de tesorería puede leer todos los datos de la tesorería.</p>`);
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}

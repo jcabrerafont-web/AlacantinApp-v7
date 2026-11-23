@@ -16,6 +16,7 @@ const ok = (cond, txt) => { console.log(`${cond ? '✓' : '✗'} ${txt}`); if (!
 const ir = async (hash) => { await page.evaluate(h => { location.hash = h; }, hash); await page.waitForTimeout(350); };
 const barra = () => page.$$eval('#barra a', as => as.map(a => a.innerText.replace(/\s+/g, ' ').trim()));
 const aviso = () => page.$eval('#aviso', e => e.textContent);
+const tesSocios = () => page.evaluate(async () => (await import('./js/tesoreria.js')).socios().length);
 
 await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#barra a');
@@ -488,6 +489,27 @@ await ir('#/tesoreria');
   const [cop] = await Promise.all([page.waitForEvent('download'), page.click('#te-copia')]);
   const txtCopia = fs.readFileSync(await cop.path(), 'utf8');
   ok(cop.suggestedFilename().startsWith('CGA_tesoreria_cifrada_') && !/Zacar|Bernat|00000000T/.test(txtCopia) && JSON.parse(txtCopia).registros.filter(r => r.tipo === 'socio').length === 3 && !/Cuotas de socios/.test(txtCopia), 'Tesorería: copia cifrada descargable, sin datos legibles');
+  // Código de recuperación: sin él, aviso; se crea, se muestra una vez y abre la tesorería si se olvida la contraseña
+  ok(Boolean(await page.$('#te-aviso-rec')), 'Tesorería: avisa de que falta el código de recuperación');
+  await page.click('#te-crear-rec'); await page.waitForSelector('#dlg-codigo');
+  const codigo = (await page.innerText('#dlg-codigo')).trim();
+  ok(/^[A-Z2-9]{5}(-[A-Z2-9]{5}){5}$/.test(codigo) && !/[01ILO]/.test(codigo), `Código de recuperación: 30 caracteres en grupos de 5, sin letras que se confundan (${codigo.slice(0, 5)}…)`);
+  await page.click('dialog.dialogo button[value="ok"]'); await page.waitForSelector('#te-rec .chip-ok');
+  ok(Boolean(await page.$('#te-rec .chip-ok')), 'Código de recuperación creado');
+  { const enMovil = await page.evaluate(async () => JSON.stringify(await (await import('./js/db.js')).todos('tesoreria_clave')));
+    ok(!enMovil.includes(codigo) && !enMovil.includes(codigo.replace(/-/g, '')), 'Código de recuperación: no se guarda en ningún sitio, solo la clave envuelta con él'); }
+  await page.click('#te-cerrar'); await page.waitForSelector('#te-olvido');
+  await page.click('#te-olvido'); await page.fill('#tr-codigo', 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-FFFFF'); await page.fill('#tr-n1', 'otra frase de tesoreria'); await page.fill('#tr-n2', 'otra frase de tesoreria');
+  await page.click('#te-recuperar button[type=submit]');
+  await page.waitForFunction(() => document.querySelector('#aviso')?.textContent.includes('código de recuperación no es correcto'), null, { timeout: 8000 });
+  ok(true, 'Recuperación: un código equivocado no abre');
+  await page.fill('#tr-codigo', codigo.toLowerCase().replace(/-/g, ' ')); await page.click('#te-recuperar button[type=submit]');
+  await page.waitForSelector('#te-cerrar', { timeout: 8000 });
+  await page.click('#te-cerrar'); await page.waitForSelector('#te-clave');
+  await page.fill('#te-clave', 'otra frase de tesoreria'); await page.click('#te-abrir button[type=submit]');
+  await page.waitForSelector('#te-cerrar', { timeout: 8000 });
+  ok((await tesSocios()) === 3, 'Recuperación: con el código se abre, se pone contraseña nueva y los datos siguen ahí');
+  ok(!(await page.$('#te-aviso-copia')), 'Tesorería: sin aviso de copia, porque se acaba de descargar');
   const unidad = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.ibanValido('ES9121000418450200051332'), t.ibanValido('ES9121000418450200051333'), t.ibanValido('ES91 2100 0418 4502 0005 1332')]; });
   ok(JSON.stringify(unidad) === '[true,false,true]', 'IBAN: comprobación de los dígitos de control');
   // Fase 2: movimientos del banco (Excel con el formato de Caixa Popular, datos ficticios)

@@ -63,3 +63,13 @@ export async function descifrar(clave, id, texto) {
   const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: desdeB64(iv), additionalData: enc.encode(id) }, clave, desdeB64(datos));
   return JSON.parse(dec.decode(plano));
 }
+
+// Código de recuperación: 30 caracteres al azar (unos 150 bits) en grupos de 5,
+// sin letras que se confundan (0/O, 1/I/L). Abre la tesorería si se olvida la contraseña.
+const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export function codigoRecuperacion() {
+  const b = azar(30);
+  const s = Array.from(b, x => ALFABETO[x % ALFABETO.length]).join('');
+  return s.match(/.{5}/g).join('-');
+}
+export const normalizarCodigo = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').match(/.{1,5}/g)?.join('-') || '';
