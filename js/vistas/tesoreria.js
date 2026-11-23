@@ -17,7 +17,7 @@ const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFraction
 
 export default async function (main) {
   let pestana = 'movimientos', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
-  const filtro = { anio: new Date().getFullYear(), partida: '', texto: '' };
+  const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200 }; // anio: número o 'todos' (histórico)
   let editandoMov = null, reglaPropuesta = '';
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
@@ -159,10 +159,13 @@ export default async function (main) {
   const pintarMovimientos = async (cuerpo) => {
     await tes.asegurarPartidas();
     const anios = tes.aniosMovimientos();
-    if (anios.length && !anios.includes(filtro.anio)) filtro.anio = anios[0];
+    if (anios.length && filtro.anio !== 'todos' && !anios.includes(filtro.anio)) filtro.anio = anios[0];
+    const anioSel = filtro.anio === 'todos' ? null : filtro.anio;
+    const etiqueta = anioSel ?? 'desde el principio';
     const parts = tes.partidas();
-    const lista = tes.movimientos({ anio: filtro.anio, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
-    const r = tes.resumen(filtro.anio);
+    const lista = tes.movimientos({ anio: anioSel, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
+    const r = tes.resumen(anioSel);
+    const porAnios = anioSel ? [] : tes.resumenPorAnios();
     const sb = tes.saldoBanco();
     const huecos = tes.comprobarSaldos();
     const socios = tes.socios();
@@ -188,8 +191,8 @@ export default async function (main) {
     pintar(cuerpo, h`
       <div class="kpis">
         <div class="kpi"><b>${sb ? euros(sb.saldo) : '—'}</b><span>Saldo según el banco${sb ? ` (${fecha(sb.fecha)})` : ''}</span></div>
-        <div class="kpi"><b>${euros(r.ingresos)}</b><span>Ingresos ${filtro.anio}</span></div>
-        <div class="kpi"><b>${euros(r.gastos)}</b><span>Gastos ${filtro.anio}</span></div>
+        <div class="kpi"><b>${euros(r.ingresos)}</b><span>Ingresos ${etiqueta}</span></div>
+        <div class="kpi"><b>${euros(r.gastos)}</b><span>Gastos ${etiqueta}</span></div>
         <div class="kpi"><b>${r.sinClasificar}</b><span>Sin clasificar</span></div>
       </div>
       ${huecos.length ? h`<div class="aviso-caja alerta peq" id="te-huecos"><strong>Revisa los movimientos:</strong><ul>${huecos.map(x => h`<li>${x.texto}</li>`)}</ul>Descarga del banco un periodo que los incluya e impórtalo: los que ya están no se duplican.</div>` : ''}
@@ -199,16 +202,21 @@ export default async function (main) {
       </div>
       <div class="tarjeta">
         <div class="rejilla rejilla-3">
-          <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio">${(anios.length ? anios : [filtro.anio]).map(a => h`<option value="${a}" ${a === filtro.anio ? h`selected` : ''}>${a}</option>`)}</select></div>
+          <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio"><option value="todos" ${anioSel ? '' : h`selected`}>Histórico (todos los años)</option>${(anios.length ? anios : [new Date().getFullYear()]).map(a => h`<option value="${a}" ${a === anioSel ? h`selected` : ''}>${a}</option>`)}</select></div>
           <div class="campo"><label for="mf-partida">Partida</label><select id="mf-partida"><option value="">Todas</option><option value="sin" ${filtro.partida === 'sin' ? h`selected` : ''}>Sin clasificar</option>${parts.map(p => h`<option value="${p.id}" ${filtro.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
           <div class="campo"><label for="mf-texto">Buscar</label><input id="mf-texto" type="search" value="${filtro.texto}" placeholder="Concepto, nota…"></div>
         </div>
-        ${r.filas.length ? h`<details><summary><strong>Resumen por partidas ${filtro.anio}</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
+        ${r.filas.length ? h`<details><summary><strong>Resumen por partidas ${etiqueta}</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
           <thead><tr><th>Partida</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Neto</th></tr></thead>
           <tbody>${r.filas.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${euros(f.ingresos)}</td><td class="num">${euros(f.gastos)}</td><td class="num">${euros(f.ingresos - f.gastos)}</td></tr>`)}
             <tr><th>Total</th><th class="num">${euros(r.ingresos)}</th><th class="num">${euros(r.gastos)}</th><th class="num">${euros(r.ingresos - r.gastos)}</th></tr></tbody></table></div></details>` : ''}
       </div>
-      ${lista.length ? h`<ul class="lista tarjeta" id="te-movs">${lista.map(fila)}</ul>` : h`<p class="muted tarjeta">${tes.aniosMovimientos().length ? 'Ningún movimiento con estos filtros.' : 'Todavía no hay movimientos. Importa el Excel del banco.'}</p>`}
+      ${porAnios.length ? h`<div class="tarjeta" id="te-historico"><h2>Año por año</h2><div class="tabla-scroll"><table class="tabla-resumen">
+        <thead><tr><th>Año</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Resultado</th><th class="num">Saldo al acabar</th></tr></thead>
+        <tbody>${porAnios.map(y => h`<tr><td><button type="button" class="enlace" data-ir-anio="${y.anio}">${y.anio}</button></td><td class="num">${euros(y.ingresos)}</td><td class="num">${euros(y.gastos)}</td><td class="num">${euros(y.resultado)}</td><td class="num">${y.saldoFinal === null ? '—' : euros(y.saldoFinal)}</td></tr>`)}
+          <tr><th>Total</th><th class="num">${euros(r.ingresos)}</th><th class="num">${euros(r.gastos)}</th><th class="num">${euros(r.ingresos - r.gastos)}</th><th></th></tr></tbody></table></div>
+        <p class="peq muted">Toca un año para ver solo sus movimientos.</p></div>` : ''}
+      ${lista.length ? h`<ul class="lista tarjeta" id="te-movs">${lista.slice(0, filtro.limite).map(fila)}</ul>${lista.length > filtro.limite ? h`<p class="tarjeta"><button type="button" class="btn" id="te-mas">Ver ${Math.min(200, lista.length - filtro.limite)} más (de ${lista.length})</button></p>` : ''}` : h`<p class="muted tarjeta">${tes.aniosMovimientos().length ? 'Ningún movimiento con estos filtros.' : 'Todavía no hay movimientos. Importa el Excel del banco.'}</p>`}
       <details class="tarjeta"><summary><strong>Añadir un movimiento a mano</strong> <span class="muted peq">(efectivo, por ejemplo)</span></summary>
         <form id="te-manual" class="rejilla rejilla-2" style="margin-top:.5rem">
           <div class="campo"><label for="mm-fecha">Fecha</label><input id="mm-fecha" type="date" value="${hoyISO()}" required></div>
@@ -224,11 +232,13 @@ export default async function (main) {
       try {
         const res = await tes.importarMovimientos(await leerXlsx(f));
         aviso(`Movimientos: ${res.nuevos} nuevos (${res.clasificados} clasificados solos) y ${res.repetidos} que ya estaban.${res.sinClasificar ? ` Quedan ${res.sinClasificar} por clasificar.` : ''}`, 'ok', { ms: 8000 });
-        filtro.anio = tes.aniosMovimientos()[0] || filtro.anio;
+        if (filtro.anio !== 'todos') filtro.anio = tes.aniosMovimientos()[0] || filtro.anio;
       } catch (e) { aviso(e.message || 'No se pudo leer el Excel.', 'error'); }
       dibujar();
     });
-    $('#mf-anio', cuerpo).addEventListener('change', (ev) => { filtro.anio = Number(ev.target.value); pintarMovimientos(cuerpo); });
+    $('#mf-anio', cuerpo).addEventListener('change', (ev) => { filtro.anio = ev.target.value === 'todos' ? 'todos' : Number(ev.target.value); filtro.limite = 200; pintarMovimientos(cuerpo); });
+    cuerpo.querySelectorAll('[data-ir-anio]').forEach(b => b.addEventListener('click', () => { filtro.anio = Number(b.dataset.irAnio); filtro.limite = 200; pintarMovimientos(cuerpo).then(() => window.scrollTo(0, 0)); }));
+    $('#te-mas', cuerpo)?.addEventListener('click', () => { filtro.limite += 200; pintarMovimientos(cuerpo); });
     $('#mf-partida', cuerpo).addEventListener('change', (ev) => { filtro.partida = ev.target.value; pintarMovimientos(cuerpo); });
     $('#mf-texto', cuerpo).addEventListener('input', async (ev) => { filtro.texto = ev.target.value; await pintarMovimientos(cuerpo); const c = $('#mf-texto', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
     cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));

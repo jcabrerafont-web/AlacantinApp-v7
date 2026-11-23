@@ -850,3 +850,10 @@ export function ejecucion(anio) {
   const transcurrido = y < Number(hoy.slice(0, 4)) ? 1 : y > Number(hoy.slice(0, 4)) ? 0 : (Date.parse(`${hoy}T12:00:00Z`) - Date.UTC(y, 0, 1)) / (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1));
   return { anio: y, presupuesto: p, filas, total: tot, transcurrido };
 }
+
+// Histórico: un resumen por año desde el primer movimiento
+export function resumenPorAnios() {
+  exigirAbierta();
+  return aniosMovimientos().map(anio => { const r = resumen(anio); const b = saldosBanco(anio);
+    return { anio, ingresos: r2(r.ingresos), gastos: r2(r.gastos), resultado: r2(r.ingresos - r.gastos), n: r.n, saldoFinal: b.final, hasta: b.hasta }; });
+}

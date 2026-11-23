@@ -633,6 +633,17 @@ await ir('#/tesoreria');
     ok(doc.includes('Presupuesto 2027') && doc.includes('Aprobado en asamblea el 15/12/2026') && doc.includes('Resultado previsto') && doc.includes('Real 2026'), 'Presupuesto: documento para la asamblea, con lo real del año anterior'); }
   await page.click('[data-pestana=cuentas]'); await page.waitForSelector('#cc-doc'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
   ok((await page.innerText('#cc-doc')).includes('Presupuesto') && (await page.innerText('#cc-doc')).includes('80,00 €'), 'Cuentas: columna del presupuesto junto a lo real');
+  // Histórico de movimientos (todos los años) y cada año aparte
+  await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); await t.guardarMovimiento({ fecha: '2025-06-15', importe: '-30', concepto: 'Material del encuentro 2025' }); });
+  await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#mf-anio');
+  ok(await page.$eval('#mf-anio', s => s.options[0].value === 'todos' && s.options[0].textContent.includes('Histórico')), 'Movimientos: el selector empieza por el histórico de todos los años');
+  await page.selectOption('#mf-anio', 'todos'); await page.waitForSelector('#te-historico');
+  { const filas = await page.$$eval('#te-historico tbody tr', trs => trs.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
+    const n = (await page.$$('#te-movs li')).length;
+    ok(filas.length === 3 && filas[0].startsWith('2026') && filas[1].startsWith('2025') && filas[1].includes('30,00 €') && filas[2].startsWith('Total') && n === 9,
+      `Histórico: resumen año por año, total y todos los movimientos (${filas.join(' | ')}; ${n} movimientos)`); }
+  await page.click('[data-ir-anio="2025"]'); await page.waitForTimeout(300);
+  ok(await page.$eval('#mf-anio', s => s.value) === '2025' && (await page.$$('#te-movs li')).length === 1 && !(await page.$('#te-historico')), 'Histórico: al tocar un año se ven solo sus movimientos');
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
