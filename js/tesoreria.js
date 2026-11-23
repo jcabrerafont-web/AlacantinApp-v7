@@ -672,7 +672,7 @@ export async function importarHojaTesoreria(leidas, equivalencias) {
       // y las demás como movimientos de caja) se arregla
       for (const x of delBanco.filter(x => x !== bueno && Math.abs(x.importe - partes[0].importe) < 0.005)) { await borrarRegistro(x.id); t.movimientos = t.movimientos.filter(y => y !== x); reparados++; }
       for (const p of m.partesHoja.slice(1)) {
-        const malo = t.movimientos.find(x => x.origen !== 'banco' && (x.apunte === null || x.apunte === undefined) && x.fecha === m.fecha && Math.abs(x.importe - p.importe) < 0.005 && normalizar(x.concepto) === normalizar(m.concepto));
+        const malo = t.movimientos.find(x => (x.apunte === null || x.apunte === undefined) && !conPartes(x) && x.fecha === m.fecha && Math.abs(x.importe - p.importe) < 0.005 && normalizar(x.concepto) === normalizar(m.concepto));
         if (malo) { await borrarRegistro(malo.id); t.movimientos = t.movimientos.filter(x => x !== malo); reparados++; }
       }
       const { etiqueta, numero_socio, anioHoja, nota, partesHoja, ...banco } = m;

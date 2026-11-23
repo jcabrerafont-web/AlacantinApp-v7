@@ -732,8 +732,8 @@ await ir('#/tesoreria');
   // si fuera el total del banco y la segunda como movimiento de caja
   await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
     const serie = (iso) => (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000 + 1 / 12;
-    await t.importarMovimientos([{ nombre: 'm', filas: [['IBAN', 'ES91 2100 0418 4502 0005 1332'], ['Fecha de la operación', 'Fecha valor', 'Tipo movimiento', 'Importe', 'Saldo', 'Nro. Apunte'], [serie('2026-11-21'), serie('2026-11-21'), 'trf. ana prueba uno', 25, 1092, 19]] }]);
-    await t.guardarMovimiento({ fecha: '2026-11-21', importe: '12', concepto: 'trf. ana prueba uno' }); });
+    // (antes de la 7.46 la hoja entraba por el importador del banco: la fila con «-» quedaba como del banco sin apunte)
+    await t.importarMovimientos([{ nombre: 'm', filas: [['IBAN', 'ES91 2100 0418 4502 0005 1332'], ['Fecha de la operación', 'Fecha valor', 'Tipo movimiento', 'Importe', 'Saldo', 'Nro. Apunte'], [serie('2026-11-21'), serie('2026-11-21'), 'trf. ana prueba uno', 25, 1092, 19], [serie('2026-11-21'), serie('2026-11-21'), 'trf. ana prueba uno', 12, '-', '-']] }]); });
   ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).comprobarSaldos().map(x => x.texto).join(' '))).includes('El saldo no cuadra entre los apuntes 18 y 19'), 'Transferencia partida mal importada: el saldo no cuadra (lo que veía el tesorero)');
   await page.setInputFiles('#te-banco', 'tests/fixtures/hoja_tesoreria_ficticia.xlsx');
   await page.waitForSelector('#te-hoja-tes', { timeout: 8000 });
@@ -752,7 +752,7 @@ await ir('#/tesoreria');
       return { don: t.nombrePartida(de('trf. donante anonimo').partida), anillas: de('trf. ana prueba uno anillas').nota, rifa: [t.nombrePartida(de('Rifa en mano').partida), de('Rifa en mano').nota, de('Rifa en mano').origen],
         huevos: t.partidas().find(p => p.nombre === 'Proyecto huevos gordos')?.tipo, huecos: t.comprobarSaldos().length,
         partida: (() => { const x = ms.filter(m => m.apunte === 19); return [x.length, x[0]?.importe, x[0]?.partes?.map(p => [t.nombrePartida(p.partida), p.importe, p.anio, t.socios().find(s => s.id === p.socio_id)?.nombre])]; })(),
-        caja12: ms.some(m => m.origen !== 'banco' && m.importe === 12 && m.concepto === 'trf. ana prueba uno'),
+        caja12: ms.some(m => m.apunte === null && m.importe === 12 && m.concepto === 'trf. ana prueba uno'),
         cuotaAna: t.pagosDeCuotas().some(m => m.id.endsWith('#0') && m.socio_id && m.importe === 25) }; });
     ok(r.don === 'Subvenciones y donativos' && r.anillas === 'Pedido de 10' && JSON.stringify(r.rifa) === JSON.stringify(['Rifa Enero 2026', 'Nº de socio en la hoja: REVISAR', 'manual']) && r.huevos === 'gasto' && r.huecos === 0
       && JSON.stringify(r.partida) === JSON.stringify([1, 37, [['Cuotas de socios', 25, 2026, 'Ana'], ['Anillas', 12, null, 'Ana']]]) && !r.caja12 && r.cuotaAna,
