@@ -154,8 +154,12 @@ async function enviarFusionando(item, reg) {
 }
 
 /** Drena la cola en orden FIFO. Devuelve { ok, fallidos }. */
+// Si llegan operaciones mientras se drena (una importación de muchos registros, por ejemplo),
+// al terminar se vuelve a drenar: si no, las últimas esperaban a la siguiente sincronización.
+let otraVez = false;
 export function drenar() {
-  if (enCurso) return enCurso;
+  if (enCurso) { otraVez = true; return enCurso; }
+  otraVez = false;
   if (!cliente || !navigator.onLine) return Promise.resolve({ ok: 0, fallidos: 0, omitido: true });
   enCurso = (async () => {
     const { data } = await cliente.auth.getSession();
@@ -181,7 +185,7 @@ export function drenar() {
     await avisar();
     if (nuevosConflictos) oyentesConflicto.forEach(fn => fn(nuevosConflictos));
     return { ok, fallidos, conflictos: nuevosConflictos };
-  })().finally(() => { enCurso = null; });
+  })().finally(() => { enCurso = null; if (otraVez && navigator.onLine) drenar(); });
   return enCurso;
 }
 

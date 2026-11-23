@@ -1259,6 +1259,23 @@ await cambiarRolLocal('inspector');
 await ir('#/censo');
 
 // 7. Sincronización con servidor simulado: un error no borra la operación
+{ // Lo que llega mientras se drena no se queda esperando a la siguiente sincronización
+  const r = await page.evaluate(async () => {
+    const sync = await import('./js/sync.js'); const db = await import('./js/db.js');
+    const lento = { auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
+      from: () => ({ upsert: () => { const p = new Promise(res => setTimeout(() => res({ data: null, error: null }), 30)); p.select = () => ({ maybeSingle: () => p }); return p; }, delete: () => ({ eq: async () => ({ error: null }) }) }) };
+    sync.usarCliente(lento);
+    const a = (await db.todos('animales'))[0];
+    await db.guardar('cola', { tabla: 'animales', op: 'upsert', id: a.id, registro: a, creado: Date.now(), intentos: 0, error: null });
+    const p1 = sync.drenar();
+    await new Promise(r => setTimeout(r, 5));
+    for (let i = 0; i < 3; i++) await db.guardar('cola', { tabla: 'comunicados', op: 'upsert', id: `x${i}`, registro: { id: `x${i}` }, creado: Date.now(), intentos: 0, error: null });
+    sync.drenar(); await p1;
+    for (let i = 0; i < 40 && (await sync.pendientes()); i++) await new Promise(r => setTimeout(r, 50));
+    const n = await sync.pendientes(); sync.usarCliente(null); return n;
+  });
+  ok(r === 0, `Sincronización: lo que se encola mientras se envía también se envía (${r} pendientes)`);
+}
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');
   let llamadas = 0;
