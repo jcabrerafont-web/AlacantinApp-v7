@@ -22,7 +22,65 @@ export default async function (main) {
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
   const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
-  let anioPres = null, borradorPres = null;
+  let anioPres = null, borradorPres = null, partidasAbiertas = false;
+
+  // --- Partidas: crear, editar y borrar (desde Movimientos y desde Partidas) -------
+  const TIPOS = { ingreso: 'Ingresos', gasto: 'Gastos', ambos: 'Ingresos y gastos' };
+  const dialogoPartida = async (p = null) => {
+    const ok = await dialogo({ titulo: p ? 'Editar partida' : 'Nueva partida', cuerpo: h`<label for="dlg-pnombre">Nombre</label><input id="dlg-pnombre" value="${p?.nombre || ''}" placeholder="p. ej. Lotería de Navidad">
+      <label for="dlg-ptipo">Tipo</label><select id="dlg-ptipo">${Object.entries(TIPOS).map(([k, n]) => h`<option value="${k}" ${(p?.tipo || 'ambos') === k ? h`selected` : ''}>${n}</option>`)}</select>`,
+      acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: p ? 'Guardar' : 'Añadir', primario: true }] });
+    const nombre = document.getElementById('dlg-pnombre')?.value, tipo = document.getElementById('dlg-ptipo')?.value;
+    if (ok !== 'si') return null;
+    await tes.guardarPartida({ ...(p || {}), nombre, tipo });
+    return tes.partidas().find(x => tes.normalizar(x.nombre) === tes.normalizar(nombre)) || null;
+  };
+  const borrarPartidaDialogo = async (p) => {
+    const usos = tes.movimientos({ partida: p.id }).length;
+    if (!usos) { if (!await confirmar(`¿Borrar «${p.nombre}»?`, 'Se borran también sus reglas.', 'Borrar', true)) return false; await tes.borrarPartida(p.id); return true; }
+    const otras = tes.partidas().filter(x => x.id !== p.id);
+    const ok = await dialogo({ titulo: `Borrar «${p.nombre}»`, cuerpo: h`<p>Tiene ${usos} movimiento(s). ¿A qué partida pasan?</p>
+      <label for="dlg-mover">Pasan a</label><select id="dlg-mover"><option value="">— Sin clasificar —</option>${otras.map(x => h`<option value="${x.id}">${x.nombre}</option>`)}</select>`,
+      acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Borrar la partida', peligro: true }] });
+    const moverA = document.getElementById('dlg-mover')?.value || null;
+    if (ok !== 'si') return false;
+    await tes.borrarPartida(p.id, { moverA });
+    return true;
+  };
+  const listaPartidas = (parts) => { const usos = (id) => tes.movimientos({ partida: id }).length;
+    return h`<ul class="lista">${parts.map(p => h`<li class="item"><span class="item-principal"><span class="item-titulo">${p.nombre}${p.cuotas ? h` <span class="chip chip-info">Cuotas</span>` : ''}</span>
+      <span class="item-sub">${TIPOS[p.tipo] || ''} · ${usos(p.id)} movimiento(s)</span></span>
+      <span class="fila"><button type="button" class="btn btn-pequeno" data-editar-partida="${p.id}">Editar</button>${p.cuotas ? '' : h`<button type="button" class="btn btn-pequeno" data-borrar-partida="${p.id}">Borrar</button>`}</span></li>`)}</ul>
+      <button type="button" class="btn" data-nueva-partida>+ Nueva partida</button>`; };
+  const conectarPartidas = (cuerpo, repintar) => {
+    cuerpo.querySelectorAll('[data-editar-partida]').forEach(b => b.addEventListener('click', async () => {
+      try { if (await dialogoPartida(tes.partidas().find(x => x.id === b.dataset.editarPartida))) { aviso('Partida guardada', 'ok'); repintar(); } } catch (e) { aviso(e.message, 'error'); }
+    }));
+    cuerpo.querySelectorAll('[data-borrar-partida]').forEach(b => b.addEventListener('click', async () => {
+      try { if (await borrarPartidaDialogo(tes.partidas().find(x => x.id === b.dataset.borrarPartida))) { aviso('Partida borrada', 'ok'); repintar(); } } catch (e) { aviso(e.message, 'error'); }
+    }));
+    cuerpo.querySelectorAll('[data-nueva-partida]').forEach(b => b.addEventListener('click', async () => {
+      try { if (await dialogoPartida()) { aviso('Partida añadida', 'ok'); repintar(); } } catch (e) { aviso(e.message, 'error'); }
+    }));
+  };
+  // En un desplegable de partidas, «Nueva partida…» la crea ahí mismo y la deja elegida
+  const NUEVA = '__nueva';
+  const opcionNueva = h`<option value="${NUEVA}">➕ Nueva partida…</option>`;
+  const conectarSelectPartida = (sel) => {
+    let anterior = sel.value;
+    sel.addEventListener('focus', () => { anterior = sel.value; });
+    sel.addEventListener('change', async () => {
+      if (sel.value !== NUEVA) { anterior = sel.value; return; }
+      try {
+        const p = await dialogoPartida();
+        if (!p) { sel.value = anterior; return; }
+        const o = document.createElement('option'); o.value = p.id; o.textContent = p.nombre;
+        sel.insertBefore(o, sel.querySelector(`option[value="${NUEVA}"]`)); sel.value = p.id; anterior = p.id;
+        aviso(`Partida «${p.nombre}» añadida`, 'ok');
+        sel.dispatchEvent(new Event('change'));
+      } catch (e) { aviso(e.message, 'error'); sel.value = anterior; }
+    });
+  };
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -174,7 +232,7 @@ export default async function (main) {
       if (editandoMov === m.id) return h`<li class="item mov-editar" id="mov-${m.id}"><form class="mov-form" data-mov="${m.id}" style="width:100%">
         <p style="margin:0 0 .5rem"><strong>${fecha(m.fecha)} · ${euros(m.importe)}</strong><br><span class="peq">${m.concepto}</span></p>
         <div class="rejilla rejilla-2">
-          <div class="campo"><label for="me-partida">Partida</label><select id="me-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}" ${m.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="me-partida">Partida</label><select id="me-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}" ${m.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}${opcionNueva}</select></div>
           <div class="campo"><label for="me-socio">Socio</label><select id="me-socio"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${m.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
           <div class="campo"><label for="me-anio">Año de la cuota</label><input id="me-anio" type="number" min="2000" max="2100" value="${m.anio ?? ''}" placeholder="Solo para cuotas"></div>
           <div class="campo"><label for="me-nota">Nota</label><input id="me-nota" value="${m.nota || ''}"></div>
@@ -210,6 +268,8 @@ export default async function (main) {
           <thead><tr><th>Partida</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Neto</th></tr></thead>
           <tbody>${r.filas.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${euros(f.ingresos)}</td><td class="num">${euros(f.gastos)}</td><td class="num">${euros(f.ingresos - f.gastos)}</td></tr>`)}
             <tr><th>Total</th><th class="num">${euros(r.ingresos)}</th><th class="num">${euros(r.gastos)}</th><th class="num">${euros(r.ingresos - r.gastos)}</th></tr></tbody></table></div></details>` : ''}
+        <details id="te-partidas" ${partidasAbiertas ? h`open` : ''}><summary><strong>Partidas: añadir, editar o borrar</strong></summary>${listaPartidas(parts)}
+          <p class="peq muted">Las reglas automáticas, la cuota y el texto del recordatorio están en la pestaña «Partidas».</p></details>
       </div>
       ${porAnios.length ? h`<div class="tarjeta" id="te-historico"><h2>Año por año</h2><div class="tabla-scroll"><table class="tabla-resumen">
         <thead><tr><th>Año</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Resultado</th><th class="num">Saldo al acabar</th></tr></thead>
@@ -222,7 +282,7 @@ export default async function (main) {
           <div class="campo"><label for="mm-fecha">Fecha</label><input id="mm-fecha" type="date" value="${hoyISO()}" required></div>
           <div class="campo"><label for="mm-importe">Importe (negativo si es gasto)</label><input id="mm-importe" inputmode="decimal" required placeholder="25 o -12,50"></div>
           <div class="campo"><label for="mm-concepto">Concepto</label><input id="mm-concepto" required></div>
-          <div class="campo"><label for="mm-partida">Partida</label><select id="mm-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}">${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="mm-partida">Partida</label><select id="mm-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}">${p.nombre}</option>`)}${opcionNueva}</select></div>
           <div><button class="btn btn-primario" type="submit">Añadir</button></div>
         </form></details>`);
 
@@ -242,8 +302,12 @@ export default async function (main) {
     $('#mf-partida', cuerpo).addEventListener('change', (ev) => { filtro.partida = ev.target.value; pintarMovimientos(cuerpo); });
     $('#mf-texto', cuerpo).addEventListener('input', async (ev) => { filtro.texto = ev.target.value; await pintarMovimientos(cuerpo); const c = $('#mf-texto', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
     cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));
+    $('#te-partidas', cuerpo).addEventListener('toggle', (ev) => { partidasAbiertas = ev.target.open; });
+    conectarPartidas(cuerpo, () => pintarMovimientos(cuerpo));
+    conectarSelectPartida($('#mm-partida', cuerpo));
     const form = $('.mov-form', cuerpo);
     if (form) {
+      conectarSelectPartida($('#me-partida', form));
       const m = tes.movimientos().find(x => x.id === form.dataset.mov);
       // Al elegir la partida de cuotas, el año se propone solo
       $('#me-partida', form).addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
@@ -533,19 +597,11 @@ export default async function (main) {
   const pintarPartidas = async (cuerpo) => {
     await tes.asegurarPartidas();
     const parts = tes.partidas(), rs = tes.reglas(), conf = tes.configuracion();
-    const usos = (id) => tes.movimientos({ partida: id }).length;
-    const TIPOS = { ingreso: 'Ingresos', gasto: 'Gastos', ambos: 'Ingresos y gastos' };
     const propuesta = reglaPropuesta ? tes.normalizar(reglaPropuesta).split(' ').filter(w => w.length > 2 && !['trf', 'rcbo'].includes(w)).slice(0, 3).join(' ') : '';
     pintar(cuerpo, h`
       <div class="tarjeta"><h2>Partidas</h2>
         <p class="peq muted">Los grupos en que se reparten ingresos y gastos para las cuentas. «Cuotas de socios» es la que cuenta para saber quién ha pagado.</p>
-        <ul class="lista">${parts.map(p => h`<li class="item"><span class="item-principal"><span class="item-titulo">${p.nombre}${p.cuotas ? h` <span class="chip chip-info">Cuotas</span>` : ''}</span>
-          <span class="item-sub">${TIPOS[p.tipo] || ''} · ${usos(p.id)} movimiento(s)</span></span>
-          <span class="fila"><button class="btn btn-pequeno" data-renombrar="${p.id}">Renombrar</button>${p.cuotas ? '' : h`<button class="btn btn-pequeno" data-borrar-partida="${p.id}">Borrar</button>`}</span></li>`)}</ul>
-        <form class="fila" id="tp-nueva" style="margin-top:.5rem;align-items:flex-end">
-          <div class="campo" style="flex:1;margin:0"><label for="tp-nombre">Nueva partida</label><input id="tp-nombre" placeholder="p. ej. Lotería de Navidad"></div>
-          <div class="campo" style="margin:0"><label for="tp-tipo">Tipo</label><select id="tp-tipo"><option value="ambos">Ingresos y gastos</option><option value="ingreso">Ingresos</option><option value="gasto">Gastos</option></select></div>
-          <button class="btn btn-primario" type="submit">Añadir</button></form>
+        ${listaPartidas(parts)}
       </div>
       <div class="tarjeta" id="tp-reglas"><h2>Reglas automáticas</h2>
         <p class="peq muted">Al importar, si el concepto del banco contiene el texto, el movimiento va a esa partida. Las transferencias de un socio por el importe de la cuota van solas a «Cuotas de socios».</p>
@@ -569,18 +625,7 @@ export default async function (main) {
         <button class="btn" type="submit">Guardar</button>
       </form>`);
     if (propuesta) { $('#tr-texto', cuerpo).focus(); $('#tp-reglas', cuerpo).scrollIntoView({ block: 'start' }); reglaPropuesta = ''; }
-    $('#tp-nueva', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarPartida({ nombre: $('#tp-nombre', cuerpo).value, tipo: $('#tp-tipo', cuerpo).value }); aviso('Partida añadida', 'ok'); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); } });
-    cuerpo.querySelectorAll('[data-renombrar]').forEach(b => b.addEventListener('click', async () => {
-      const p = parts.find(x => x.id === b.dataset.renombrar);
-      const ok = await dialogo({ titulo: 'Renombrar partida', cuerpo: h`<label for="dlg-nombre">Nombre</label><input id="dlg-nombre" value="${p.nombre}">`, acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Guardar', primario: true }] });
-      const nombre = document.getElementById('dlg-nombre')?.value;
-      if (ok !== 'si') return;
-      try { await tes.guardarPartida({ ...p, nombre }); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); }
-    }));
-    cuerpo.querySelectorAll('[data-borrar-partida]').forEach(b => b.addEventListener('click', async () => {
-      if (!await confirmar('¿Borrar la partida?', 'Se borran también sus reglas.', 'Borrar', true)) return;
-      try { await tes.borrarPartida(b.dataset.borrarPartida); pintarPartidas(cuerpo); } catch (e) { aviso(e.message, 'error'); }
-    }));
+    conectarPartidas(cuerpo, () => pintarPartidas(cuerpo));
     cuerpo.querySelectorAll('[data-borrar-regla]').forEach(b => b.addEventListener('click', async () => { await tes.borrarRegla(b.dataset.borrarRegla); pintarPartidas(cuerpo); }));
     $('#tr-nueva', cuerpo).addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -700,7 +745,8 @@ export default async function (main) {
   };
 
   await dibujar();
-  const quitar = tes.alCambiar(() => { if (!editando) dibujar(); else if (!tes.abierta()) { editando = null; dibujar(); } });
+  // No se vuelve a pintar mientras se edita (una ficha, un movimiento o el presupuesto): se perdería lo escrito
+  const quitar = tes.alCambiar(() => { if (!tes.abierta()) { editando = null; editandoMov = null; borradorPres = null; dibujar(); } else if (!editando && !editandoMov && !borradorPres && !document.querySelector('dialog[open]')) dibujar(); });
   const tocar = () => tes.actividad();
   main.addEventListener('input', tocar); main.addEventListener('click', tocar);
   return () => { quitar(); main.removeEventListener('input', tocar); main.removeEventListener('click', tocar); };

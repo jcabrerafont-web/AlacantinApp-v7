@@ -384,11 +384,16 @@ export async function guardarPartida(p) {
   await guardarRegistro('partida', { ...(previa ? quitarInternos(previa) : { orden: t.partidas.length, cuotas: false }), nombre, tipo: p.tipo || previa?.tipo || 'ambos', id: p.id });
   await recargar();
 }
-export async function borrarPartida(id) {
+// moverA: id de otra partida o null (sin clasificar) para sus movimientos; sin indicarlo,
+// una partida con movimientos no se borra
+export async function borrarPartida(id, { moverA } = {}) {
   exigirAbierta();
-  const usos = t.movimientos.filter(m => m.partida === id).length;
-  if (usos) throw new Error(`No se puede borrar: tiene ${usos} movimiento(s). Pásalos antes a otra partida.`);
   if (t.partidas.find(p => p.id === id)?.cuotas) throw new Error('La partida de cuotas no se puede borrar.');
+  const suyos = t.movimientos.filter(m => m.partida === id);
+  if (suyos.length && moverA === undefined) throw new Error(`No se puede borrar: tiene ${suyos.length} movimiento(s). Indica a qué partida pasan.`);
+  if (moverA && (moverA === id || !t.partidas.some(p => p.id === moverA))) throw new Error('Elige otra partida para sus movimientos.');
+  const cuotas = partidaCuotas();
+  for (const m of suyos) await guardarRegistro('movimiento', { ...quitarInternos(m), partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (m.anio || Number(String(m.fecha).slice(0, 4))) : (moverA ? m.anio : null), id: m.id });
   for (const r of t.reglas.filter(r => r.partida === id)) await borrarRegistro(r.id);
   await borrarRegistro(id);
   await recargar();

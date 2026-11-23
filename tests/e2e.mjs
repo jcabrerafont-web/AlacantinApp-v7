@@ -644,6 +644,29 @@ await ir('#/tesoreria');
       `Histórico: resumen año por año, total y todos los movimientos (${filas.join(' | ')}; ${n} movimientos)`); }
   await page.click('[data-ir-anio="2025"]'); await page.waitForTimeout(300);
   ok(await page.$eval('#mf-anio', s => s.value) === '2025' && (await page.$$('#te-movs li')).length === 1 && !(await page.$('#te-historico')), 'Histórico: al tocar un año se ven solo sus movimientos');
+  // Partidas desde Movimientos: añadir, editar, crear al clasificar y borrar pasando sus movimientos a otra
+  await page.click('#te-partidas summary');
+  await page.click('#te-partidas [data-nueva-partida]'); await page.fill('#dlg-pnombre', 'Lotería'); await page.selectOption('#dlg-ptipo', 'ingreso'); await page.click('dialog.dialogo button[value="si"]');
+  await page.waitForTimeout(400);
+  ok((await page.innerText('#te-partidas')).includes('Lotería') && await page.$eval('#te-partidas', d => d.open), 'Movimientos: añadir una partida sin salir de la pestaña');
+  { const lot = await page.evaluate(async () => (await import('./js/tesoreria.js')).partidas().find(p => p.nombre === 'Lotería').id);
+    await page.click(`#te-partidas [data-editar-partida="${lot}"]`); await page.fill('#dlg-pnombre', 'Lotería de Navidad'); await page.click('dialog.dialogo button[value="si"]'); await page.waitForTimeout(400);
+    ok((await page.innerText('#te-partidas')).includes('Lotería de Navidad'), 'Movimientos: editar una partida (nombre y tipo)'); }
+  await page.click('[data-editar-mov]'); await page.waitForSelector('#me-partida');
+  await page.selectOption('#me-partida', '__nueva'); await page.fill('#dlg-pnombre', 'Material'); await page.selectOption('#dlg-ptipo', 'gasto'); await page.click('dialog.dialogo button[value="si"]');
+  await page.waitForTimeout(400);
+  { const sel = await page.$eval('#me-partida', s => s.selectedOptions[0].textContent);
+    await page.fill('#me-nota', 'Mantener la nota'); await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(400);
+    const m = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const x = t.movimientos({ anio: 2025 })[0]; return [t.nombrePartida(x.partida), x.nota]; });
+    ok(sel === 'Material' && JSON.stringify(m) === JSON.stringify(['Material', 'Mantener la nota']), `Movimiento: «Nueva partida…» la crea y la deja elegida sin perder lo escrito (${JSON.stringify(m)})`); }
+  { const mat = await page.evaluate(async () => (await import('./js/tesoreria.js')).partidas().find(p => p.nombre === 'Material').id);
+    await page.click('#te-partidas summary').catch(() => {});
+    if (!(await page.$eval('#te-partidas', d => d.open))) await page.click('#te-partidas summary');
+    await page.click(`#te-partidas [data-borrar-partida="${mat}"]`);
+    ok((await page.innerText('dialog[open]')).includes('Tiene 1 movimiento(s)'), 'Borrar partida con movimientos: pregunta a cuál pasan');
+    await page.selectOption('#dlg-mover', { label: 'Material y difusión' }); await page.click('dialog.dialogo button[value="si"]'); await page.waitForTimeout(400);
+    const m = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.nombrePartida(t.movimientos({ anio: 2025 })[0].partida), t.partidas().some(p => p.nombre === 'Material')]; });
+    ok(JSON.stringify(m) === JSON.stringify(['Material y difusión', false]), `Borrar partida: sus movimientos pasan a la elegida (${JSON.stringify(m)})`); }
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
