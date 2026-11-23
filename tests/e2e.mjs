@@ -727,6 +727,32 @@ await ir('#/tesoreria');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
   ok((await page.innerText('#te-huecos')).includes('entre el 09/10/2026 y el 02/11/2026'), 'Movimientos: el aviso del apunte que falta sigue al volver');
+  // Hoja de tesorería del Club (la del Google Sheets en Excel; datos ficticios): Nº Socio, Concepto y Concepto ampliación
+  await page.setInputFiles('#te-banco', 'tests/fixtures/hoja_tesoreria_ficticia.xlsx');
+  await page.waitForSelector('#te-hoja-tes', { timeout: 8000 });
+  { const txt = await page.innerText('#te-hoja-tes');
+    const eq = await page.$$eval('[data-equiv]', ss => Object.fromEntries(ss.map(x => [x.closest('tr').cells[0].textContent, x.selectedOptions[0].textContent])));
+    ok(txt.includes('MOVIMIENTOS2026 (5)') && !txt.includes('CUOTASOCIOS') && txt.includes('2 ya están en la app') && txt.includes('2 sin nº de apunte') && txt.includes('2 de 3 reconocidos'),
+      `Hoja del Club: lee la hoja de movimientos (sin la fila de totales ni la hoja de cuotas) y dice qué hará (${txt.replace(/\s+/g, ' ').slice(0, 300)})`);
+    ok(eq['Cuota socio'] === 'Cuotas de socios' && eq['Donación'] === 'Subvenciones y donativos' && eq['Anillas'] === 'Anillas' && eq['Rifa Enero 2026'] === 'Nueva partida: «Rifa Enero 2026»',
+      `Hoja del Club: propone la partida de cada concepto (${JSON.stringify(eq)})`); }
+  await page.click('#th-importar');
+  await page.waitForSelector('#te-hoja-tes', { state: 'detached', timeout: 8000 });
+  ok(/1 movimientos nuevos, 1 completados con la hoja y 1 sin cambios; 2 sin nº de apunte/.test(await aviso()) && (await aviso()).includes('2 partida(s) nueva(s)') && (await aviso()).includes('1 con el nº de socio por revisar'),
+    `Hoja del Club: importada (${await aviso()})`);
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const ms = t.movimientos();
+      const de = (c) => ms.find(m => m.concepto === c);
+      return { don: t.nombrePartida(de('trf. donante anonimo').partida), anillas: de('trf. ana prueba uno anillas').nota, rifa: [t.nombrePartida(de('Rifa en mano').partida), de('Rifa en mano').nota, de('Rifa en mano').origen],
+        huevos: t.partidas().find(p => p.nombre === 'Proyecto huevos gordos')?.tipo, huecos: t.comprobarSaldos().length }; });
+    ok(r.don === 'Subvenciones y donativos' && r.anillas === 'Pedido de 10' && JSON.stringify(r.rifa) === JSON.stringify(['Rifa Enero 2026', 'Nº de socio en la hoja: REVISAR', 'manual']) && r.huevos === 'gasto' && r.huecos === 0,
+      `Hoja del Club: el apunte que faltaba llega de la hoja, la nota completa el del banco y lo de efectivo queda a mano en su partida (${JSON.stringify(r)})`); }
+  ok(!(await page.$('#te-huecos')), 'Movimientos: ya no falta ningún apunte');
+  await page.setInputFiles('#te-banco', 'tests/fixtures/hoja_tesoreria_ficticia.xlsx');
+  await page.waitForSelector('#te-hoja-tes', { timeout: 8000 });
+  { const eq = await page.$$eval('[data-equiv]', ss => Object.fromEntries(ss.map(x => [x.closest('tr').cells[0].textContent, x.selectedOptions[0].textContent])));
+    ok(eq['Rifa Enero 2026'] === 'Rifa Enero 2026' && eq['Proyecto huevos gordos'] === 'Proyecto huevos gordos', `Hoja del Club: recuerda las equivalencias de la vez anterior (${JSON.stringify(eq)})`); }
+  await page.click('#th-importar'); await page.waitForSelector('#te-hoja-tes', { state: 'detached', timeout: 8000 });
+  ok((await aviso()).includes('0 movimientos nuevos, 0 completados con la hoja y 5 sin cambios.') && !(await aviso()).includes('por revisar'), `Hoja del Club: importarla otra vez no duplica nada (${await aviso()})`);
   if (process.env.CAPTURAS) { await irTes('movimientos'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
   if (process.env.CAPTURAS) { await irTes('socios'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
 }

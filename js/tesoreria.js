@@ -515,11 +515,144 @@ export function leerMovimientosBanco(hojas) {
       const saldo = col.saldo === undefined ? null : (typeof f[col.saldo] === 'number' ? f[col.saldo] : Number(String(f[col.saldo] ?? '').replace(/\./g, '').replace(',', '.')));
       lista.push({ fecha, fecha_valor: col.fecha_valor === undefined ? null : fechaExcel(f[col.fecha_valor]), concepto: String(f[col.concepto] ?? '').trim(),
         importe: Math.round(importe * 100) / 100, saldo: Number.isFinite(saldo) ? Math.round(saldo * 100) / 100 : null,
-        apunte: col.apunte === undefined || f[col.apunte] === null ? null : Number(f[col.apunte]) });
+        apunte: col.apunte === undefined || !Number.isFinite(Number(f[col.apunte])) || f[col.apunte] === null || f[col.apunte] === '' ? null : Number(f[col.apunte]) });
     }
     return { cuenta, movimientos: lista };
   }
   throw new Error('No se encuentran los movimientos en el Excel (faltan las columnas de fecha, concepto e importe).');
+}
+
+// ---------------------------------------------------------------------------
+// Hoja de tesorería del Club (la del Google Sheets, descargada en Excel): las
+// columnas del banco más «Nº Socio», «Concepto» (la partida) y «Concepto
+// ampliación» (una nota). Puede tener una hoja por año (MOVIMIENTOS2026…).
+// ---------------------------------------------------------------------------
+const COLUMNAS_HOJA = { socio: ['n socio', 'no socio', 'numero socio', 'socio'], etiqueta: ['concepto', 'partida'], nota: ['concepto ampliacion', 'ampliacion', 'nota', 'notas'] };
+const numeroDe = (v) => { const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n !== 0 && v !== '' && v !== null ? n : null; };
+export function leerHojaTesoreria(hojas) {
+  const leidas = [];
+  for (const hoja of hojas) {
+    const i = hoja.filas.findIndex(f => { const n = (f || []).map(normalizar); return n.includes('tipo movimiento') && n.includes('importe') && n.some(x => COLUMNAS_HOJA.etiqueta.includes(x)); });
+    if (i < 0) continue;
+    const tit = hoja.filas[i].map(normalizar);
+    const col = {};
+    for (const [k, alias] of Object.entries({ ...COLUMNAS_BANCO, concepto: ['tipo movimiento'] })) {
+      const j = alias.map(a => tit.indexOf(a)).find(n => n >= 0);
+      if (j !== undefined) col[k] = j;
+    }
+    for (const [k, alias] of Object.entries(COLUMNAS_HOJA)) {
+      const j = alias.map(a => tit.findIndex((x, n) => x === a && !Object.values(col).includes(n))).find(n => n >= 0);
+      if (j !== undefined) col[k] = j;
+    }
+    if (col.fecha === undefined) continue;
+    // La cuenta va en las primeras filas, con o sin el título «IBAN»
+    let cuenta = null;
+    for (const f of hoja.filas.slice(0, i)) for (const v of f || []) { const x = String(v ?? '').replace(/\s+/g, '').toUpperCase(); if (/^ES\d{22}$/.test(x)) cuenta = x; }
+    const anioHoja = Number((String(hoja.nombre).match(/(20\d\d)/) || [])[1]) || null;
+    const lista = [];
+    for (const f of hoja.filas.slice(i + 1)) {
+      if (!f) continue;
+      const importe = numeroDe(f[col.importe]);
+      const fecha = fechaExcel(f[col.fecha]);
+      const concepto = String(f[col.concepto] ?? '').trim();
+      if (importe === null || !fecha || !concepto) continue; // filas de totales o vacías
+      const apunte = col.apunte === undefined ? null : numeroDe(f[col.apunte]);
+      const saldo = col.saldo === undefined ? null : (typeof f[col.saldo] === 'number' ? f[col.saldo] : null);
+      const socio = col.socio === undefined ? null : f[col.socio];
+      lista.push({ fecha, fecha_valor: col.fecha_valor === undefined ? null : fechaExcel(f[col.fecha_valor]), concepto,
+        importe: Math.round(importe * 100) / 100, saldo: saldo === null ? null : Math.round(saldo * 100) / 100, apunte,
+        etiqueta: String(f[col.etiqueta] ?? '').trim(), nota: col.nota === undefined ? '' : String(f[col.nota] ?? '').trim(),
+        numero_socio: socio === null || socio === undefined || socio === '' ? null : (numeroDe(socio) !== null ? String(numeroDe(socio)) : String(socio).trim()) });
+    }
+    if (lista.length) leidas.push({ nombre: hoja.nombre, anio: anioHoja, cuenta, movimientos: lista });
+  }
+  return leidas;
+}
+
+// Qué partida le corresponde a cada «Concepto» de la hoja: la que se eligió la otra vez,
+// una con el mismo nombre, la de cuotas si dice «cuota», la de una regla o, si no, nueva.
+export function propuestaHoja(leidas) {
+  exigirAbierta();
+  const guardadas = configuracion().equivalencias || {};
+  const cuotas = partidaCuotas();
+  const etiquetas = new Map();
+  for (const h of leidas) for (const m of h.movimientos) {
+    const k = normalizar(m.etiqueta);
+    const e = etiquetas.get(k) || { clave: k, texto: m.etiqueta || '(sin concepto)', n: 0, ingresos: 0, gastos: 0 };
+    e.n++; if (m.importe > 0) e.ingresos++; else e.gastos++;
+    etiquetas.set(k, e);
+  }
+  const sinAnio = (x) => normalizar(x).replace(/\b20\d\d\b/g, '').trim();
+  return [...etiquetas.values()].sort((a, b) => b.n - a.n).map(e => {
+    let partida;
+    if (!e.clave) partida = '';
+    else if (guardadas[e.clave] !== undefined && (guardadas[e.clave] === '' || t.partidas.some(p => p.id === guardadas[e.clave]))) partida = guardadas[e.clave];
+    else partida = t.partidas.find(p => sinAnio(p.nombre) === sinAnio(e.texto))?.id
+      || (cuotas && /\bcuota/.test(e.clave) ? cuotas.id : null)
+      || t.reglas.find(r => e.clave.includes(r.texto))?.partida
+      || 'nueva';
+    return { ...e, partida };
+  });
+}
+
+// equivalencias: { claveDelConcepto: idDePartida | 'nueva' | '' (sin clasificar) }
+export async function importarHojaTesoreria(leidas, equivalencias) {
+  exigirAbierta();
+  await asegurarPartidas();
+  const conf = configuracion();
+  const cuentas = [...new Set(leidas.map(h => h.cuenta).filter(Boolean))];
+  const otra = cuentas.find(c => conf.cuenta && c !== conf.cuenta);
+  if (otra) throw new Error(`Esta hoja es de otra cuenta (${formatearIban(otra)}), no de la del Club (${formatearIban(conf.cuenta)}).`);
+  // Partidas nuevas, con el nombre de la hoja
+  const eq = { ...equivalencias };
+  const todos = leidas.flatMap(h => h.movimientos.map(m => ({ ...m, anioHoja: h.anio })));
+  let partidasNuevas = 0;
+  for (const [k, v] of Object.entries(eq)) {
+    if (v !== 'nueva') continue;
+    const suyos = todos.filter(m => normalizar(m.etiqueta) === k);
+    const existente = t.partidas.find(p => normalizar(p.nombre) === k);
+    if (existente) { eq[k] = existente.id; continue; }
+    const tipo = suyos.every(m => m.importe > 0) ? 'ingreso' : suyos.every(m => m.importe < 0) ? 'gasto' : 'ambos';
+    eq[k] = await guardarRegistro('partida', { nombre: suyos[0]?.etiqueta || k, tipo, orden: t.partidas.length + partidasNuevas, cuotas: false });
+    partidasNuevas++;
+  }
+  await guardarConfiguracion({ equivalencias: { ...(conf.equivalencias || {}), ...eq }, ...(cuentas[0] && !conf.cuenta ? { cuenta: cuentas[0] } : {}) });
+  const cuotas = partidaCuotas();
+  const porClave = new Map(t.movimientos.map(m => [claveMovimiento(m), m]));
+  // Sin nº de apunte (efectivo, por ejemplo): se cuentan los que ya hay con la misma fecha, importe y concepto
+  const sinApunte = new Map();
+  for (const m of t.movimientos.filter(x => x.apunte === null || x.apunte === undefined)) { const k = `${m.fecha}|${m.importe.toFixed(2)}|${normalizar(m.concepto)}`; sinApunte.set(k, (sinApunte.get(k) || 0) + 1); }
+  let nuevos = 0, completados = 0, yaEstaban = 0, efectivo = 0, socioRevisar = 0;
+  for (const m of todos) {
+    const partida = eq[normalizar(m.etiqueta)] || null;
+    const anioEtiqueta = Number((m.etiqueta.match(/\b(20\d\d)\b/) || [])[1]) || null;
+    const anio = partida && partida === cuotas?.id ? (anioEtiqueta || m.anioHoja || Number(m.fecha.slice(0, 4))) : null;
+    const socio = m.numero_socio && /^\d+$/.test(m.numero_socio) ? t.socios.find(s => String(Number(s.numero)) === m.numero_socio) : null;
+    const notas = [m.nota, m.numero_socio && !socio ? `Nº de socio en la hoja: ${m.numero_socio}` : ''].filter(Boolean);
+    const datosHoja = { partida, socio_id: m.importe > 0 && socio ? socio.id : null, anio, nota: notas.join(' · ') || null };
+    if (m.apunte !== null) {
+      const previo = porClave.get(claveMovimiento(m));
+      if (previo) {
+        const nuevo = { partida: previo.partida || datosHoja.partida, socio_id: previo.socio_id || previo.remesa_id ? previo.socio_id : datosHoja.socio_id,
+          anio: previo.anio || (previo.partida ? previo.anio : datosHoja.anio), nota: previo.nota || datosHoja.nota };
+        if (nuevo.partida !== previo.partida || nuevo.socio_id !== previo.socio_id || nuevo.anio !== previo.anio || nuevo.nota !== previo.nota) {
+          await guardarRegistro('movimiento', { ...quitarInternos(previo), ...nuevo, id: previo.id }); completados++; if (m.numero_socio && !socio) socioRevisar++;
+        } else yaEstaban++;
+        continue;
+      }
+      const { etiqueta, numero_socio, anioHoja, nota, ...banco } = m;
+      const id = await guardarRegistro('movimiento', { ...banco, ...datosHoja, remesa_id: null, manual: false, origen: 'banco' });
+      porClave.set(claveMovimiento(m), { ...m, id });
+      nuevos++; if (m.numero_socio && !socio) socioRevisar++;
+    } else {
+      const k = `${m.fecha}|${m.importe.toFixed(2)}|${normalizar(m.concepto)}`;
+      if (sinApunte.get(k)) { sinApunte.set(k, sinApunte.get(k) - 1); yaEstaban++; continue; }
+      await guardarRegistro('movimiento', { fecha: m.fecha, fecha_valor: m.fecha_valor, concepto: m.concepto, importe: m.importe, saldo: null, apunte: null, ...datosHoja, remesa_id: null, manual: true, origen: 'manual' });
+      efectivo++; if (m.numero_socio && !socio) socioRevisar++;
+    }
+  }
+  await recargar();
+  return { nuevos, completados, yaEstaban, efectivo, partidasNuevas, socioRevisar, huecos: comprobarSaldos() };
 }
 
 export async function importarMovimientos(hojas) {

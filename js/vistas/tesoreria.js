@@ -27,7 +27,7 @@ const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFraction
 export default async function (main) {
   let pestana = 'inicio', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
   const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200 }; // anio: número o 'todos' (histórico)
-  let editandoMov = null, reglaPropuesta = '';
+  let editandoMov = null, reglaPropuesta = '', hojaTes = null;
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
   const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
@@ -308,6 +308,35 @@ export default async function (main) {
   };
 
   // --- Movimientos del banco -------------------------------------------------
+  const tarjetaHoja = () => {
+    const { leidas, propuesta } = hojaTes;
+    const todos = leidas.flatMap(x => x.movimientos);
+    const fechas = todos.map(m => m.fecha).sort();
+    const ya = new Set(tes.movimientos().map(tes.claveMovimiento));
+    const enApp = todos.filter(m => m.apunte !== null && ya.has(tes.claveMovimiento(m))).length;
+    const sinApunte = todos.filter(m => m.apunte === null).length;
+    const numeros = new Set(tes.socios().map(s => String(Number(s.numero))));
+    const conNumero = todos.filter(m => m.numero_socio);
+    const reconocidos = conNumero.filter(m => numeros.has(m.numero_socio)).length;
+    const parts = tes.partidas();
+    return h`<div class="tarjeta" id="te-hoja-tes">
+      <h2>Hoja de tesorería del Club</h2>
+      <p>${leidas.map(x => `${x.nombre} (${x.movimientos.length})`).join(', ')}: <strong>${todos.length} movimientos</strong>, del ${fecha(fechas[0])} al ${fecha(fechas.at(-1))}.</p>
+      <ul class="peq">
+        <li>${enApp} ya están en la app (del Excel del banco): solo se completa lo que les falte (partida, socio, nota); lo que hayas puesto aquí no se toca.</li>
+        ${sinApunte ? h`<li>${sinApunte} sin nº de apunte del banco: se añaden como movimientos a mano.</li>` : ''}
+        ${conNumero.length ? h`<li>Nº de socio: ${reconocidos} de ${conNumero.length} reconocidos en la lista de socios.${conNumero.length > reconocidos ? ' Los demás («REVISAR» o números que no están) quedan sin socio, con el número en la nota.' : ''}</li>` : ''}
+      </ul>
+      <h3>A qué partida va cada «Concepto» de la hoja</h3>
+      <div class="tabla-scroll"><table class="tabla-resumen" id="th-equiv"><thead><tr><th>Concepto en la hoja</th><th class="num">Movs.</th><th>Partida en la app</th></tr></thead>
+        <tbody>${propuesta.map(e => h`<tr><td>${e.texto}</td><td class="num">${e.n}</td><td><select data-equiv="${e.clave}" aria-label="Partida para ${e.texto}">
+          <option value="" ${e.partida === '' ? h`selected` : ''}>— Sin clasificar —</option>
+          ${e.clave ? h`<option value="nueva" ${e.partida === 'nueva' ? h`selected` : ''}>Nueva partida: «${e.texto}»</option>` : ''}
+          ${parts.map(p => h`<option value="${p.id}" ${e.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></td></tr>`)}</tbody></table></div>
+      <p class="peq muted">Lo que vaya a «${tes.partidaCuotas()?.nombre || 'Cuotas de socios'}» cuenta como cuota del año que diga el concepto o, si no lo dice, del año de la hoja (por ejemplo, una cuota de 2026 pagada en diciembre de 2025). La app recuerda estas equivalencias para la próxima vez.</p>
+      <p><button type="button" class="btn btn-primario" id="th-importar">Importar</button> <button type="button" class="btn" id="th-cancelar">Cancelar</button></p>
+    </div>`;
+  };
   const pintarMovimientos = async (cuerpo) => {
     await tes.asegurarPartidas();
     const anios = tes.aniosMovimientos();
@@ -348,10 +377,10 @@ export default async function (main) {
         <div class="kpi"><b>${r.sinClasificar}</b><span>Sin clasificar</span></div>
       </div>
       ${huecos.length ? h`<div class="aviso-caja alerta peq" id="te-huecos"><strong>Revisa los movimientos:</strong><ul>${huecos.map(x => h`<li>${x.texto}</li>`)}</ul>Descarga del banco un periodo que los incluya e impórtalo: los que ya están no se duplican.</div>` : ''}
-      <div class="tarjeta">
-        <label class="btn btn-primario">⬆️ Importar movimientos del banco (Excel)<input type="file" id="te-banco" accept=".xlsx" hidden></label>
-        <p class="peq muted" style="margin:.4rem 0 0">El Excel que descargas de la banca online. Se puede importar las veces que haga falta: los movimientos que ya están no se repiten.</p>
-      </div>
+      ${hojaTes ? tarjetaHoja() : h`<div class="tarjeta">
+        <label class="btn btn-primario">⬆️ Importar movimientos (Excel)<input type="file" id="te-banco" accept=".xlsx" hidden></label>
+        <p class="peq muted" style="margin:.4rem 0 0">El Excel que descargas de la banca online, o la hoja de tesorería del Club (la del Google Sheets, descargada en Excel), con sus conceptos y nº de socio. Se puede importar las veces que haga falta: los movimientos que ya están no se repiten.</p>
+      </div>`}
       <div class="tarjeta">
         <div class="rejilla rejilla-3">
           <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio"><option value="todos" ${anioSel ? '' : h`selected`}>Histórico (todos los años)</option>${(anios.length ? anios : [new Date().getFullYear()]).map(a => h`<option value="${a}" ${a === anioSel ? h`selected` : ''}>${a}</option>`)}</select></div>
@@ -380,16 +409,32 @@ export default async function (main) {
           <div><button class="btn btn-primario" type="submit">Añadir</button></div>
         </form></details>`);
 
-    $('#te-banco', cuerpo).addEventListener('change', async (ev) => {
+    $('#te-banco', cuerpo)?.addEventListener('change', async (ev) => {
       const f = ev.target.files?.[0]; ev.target.value = '';
       if (!f) return;
       try {
-        const res = await tes.importarMovimientos(await leerXlsx(f));
+        const hojas = await leerXlsx(f);
+        const leidas = tes.leerHojaTesoreria(hojas);
+        if (leidas.length) { await tes.asegurarPartidas(); hojaTes = { leidas, propuesta: tes.propuestaHoja(leidas) }; dibujar(); return; }
+        const res = await tes.importarMovimientos(hojas);
         aviso(`Movimientos: ${res.nuevos} nuevos (${res.clasificados} clasificados solos) y ${res.repetidos} que ya estaban.${res.sinClasificar ? ` Quedan ${res.sinClasificar} por clasificar.` : ''}`, 'ok', { ms: 8000 });
         if (filtro.anio !== 'todos') filtro.anio = tes.aniosMovimientos()[0] || filtro.anio;
       } catch (e) { aviso(e.message || 'No se pudo leer el Excel.', 'error'); }
       dibujar();
     });
+    if (hojaTes) {
+      cuerpo.querySelectorAll('[data-equiv]').forEach(sel => sel.addEventListener('change', () => { hojaTes.propuesta.find(e => e.clave === sel.dataset.equiv).partida = sel.value; }));
+      $('#th-cancelar', cuerpo).addEventListener('click', () => { hojaTes = null; dibujar(); });
+      $('#th-importar', cuerpo).addEventListener('click', async (ev) => {
+        ev.target.disabled = true; ev.target.textContent = 'Importando…';
+        try {
+          const r = await tes.importarHojaTesoreria(hojaTes.leidas, Object.fromEntries(hojaTes.propuesta.map(e => [e.clave, e.partida])));
+          hojaTes = null; filtro.anio = 'todos';
+          aviso(`Hoja importada: ${r.nuevos} movimientos nuevos, ${r.completados} completados con la hoja y ${r.yaEstaban} sin cambios${r.efectivo ? `; ${r.efectivo} sin nº de apunte, añadidos como a mano` : ''}.${r.partidasNuevas ? ` ${r.partidasNuevas} partida(s) nueva(s).` : ''}${r.socioRevisar ? ` ${r.socioRevisar} con el nº de socio por revisar (va en la nota).` : ''}`, 'ok', { ms: 10000 });
+        } catch (e) { aviso(e.message || 'No se pudo importar la hoja.', 'error'); ev.target.disabled = false; ev.target.textContent = 'Importar'; return; }
+        dibujar();
+      });
+    }
     $('#mf-anio', cuerpo).addEventListener('change', (ev) => { filtro.anio = ev.target.value === 'todos' ? 'todos' : Number(ev.target.value); filtro.limite = 200; pintarMovimientos(cuerpo); });
     cuerpo.querySelectorAll('[data-ir-anio]').forEach(b => b.addEventListener('click', () => { filtro.anio = Number(b.dataset.irAnio); filtro.limite = 200; pintarMovimientos(cuerpo).then(() => window.scrollTo(0, 0)); }));
     $('#te-mas', cuerpo)?.addEventListener('click', () => { filtro.limite += 200; pintarMovimientos(cuerpo); });
@@ -874,7 +919,7 @@ export default async function (main) {
 
   await dibujar();
   // No se vuelve a pintar mientras se edita (una ficha, un movimiento o el presupuesto): se perdería lo escrito
-  const quitar = tes.alCambiar(() => { if (!tes.abierta()) { editando = null; editandoMov = null; borradorPres = null; dibujar(); } else if (!editando && !editandoMov && !borradorPres && !document.querySelector('dialog[open]')) dibujar(); });
+  const quitar = tes.alCambiar(() => { if (!tes.abierta()) { editando = null; editandoMov = null; borradorPres = null; dibujar(); } else if (!editando && !editandoMov && !borradorPres && !hojaTes && !document.querySelector('dialog[open]')) dibujar(); });
   const tocar = () => tes.actividad();
   main.addEventListener('input', tocar); main.addEventListener('click', tocar);
   return () => { quitar(); main.removeEventListener('input', tocar); main.removeEventListener('click', tocar); };
