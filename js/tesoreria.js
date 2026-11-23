@@ -401,10 +401,13 @@ export async function borrarPartida(id, { moverA } = {}) {
   if (t.partidas.find(p => p.id === id)?.cuotas) throw new Error('La partida de cuotas no se puede borrar.');
   if (t.partidas.find(p => p.id === id)?.traspaso) throw new Error('La partida de traspasos entre caja y banco no se puede borrar.');
   const suyos = t.movimientos.filter(m => m.partida === id);
+  const divididos = t.movimientos.filter(m => conPartes(m) && m.partes.some(p => p.partida === id));
+  if (divididos.length && moverA === undefined) throw new Error(`No se puede borrar: está en ${divididos.length} movimiento(s) divididos. Indica a qué partida pasan.`);
   if (suyos.length && moverA === undefined) throw new Error(`No se puede borrar: tiene ${suyos.length} movimiento(s). Indica a qué partida pasan.`);
   if (moverA && (moverA === id || !t.partidas.some(p => p.id === moverA))) throw new Error('Elige otra partida para sus movimientos.');
   const cuotas = partidaCuotas();
   for (const m of suyos) await guardarRegistro('movimiento', { ...quitarInternos(m), partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (m.anio || Number(String(m.fecha).slice(0, 4))) : (moverA ? m.anio : null), id: m.id });
+  for (const m of divididos) await guardarRegistro('movimiento', { ...quitarInternos(m), partes: m.partes.map(p => (p.partida === id ? { ...p, partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (p.anio || Number(String(m.fecha).slice(0, 4))) : (moverA ? p.anio : null) } : p)), id: m.id });
   for (const r of t.reglas.filter(r => r.partida === id)) await borrarRegistro(r.id);
   await borrarRegistro(id);
   await recargar();
@@ -465,7 +468,7 @@ export async function aplicarReglas() {
   exigirAbierta();
   let cambiados = 0;
   for (const m of t.movimientos) {
-    if (m.manual) continue;
+    if (m.manual || conPartes(m)) continue;
     const c = clasificar(m);
     const nuevo = { partida: m.partida || c.partida, socio_id: m.socio_id || c.socio_id, anio: m.anio || c.anio, remesa_id: m.remesa_id || c.remesa_id || null };
     if (nuevo.partida !== m.partida || nuevo.socio_id !== m.socio_id || nuevo.anio !== m.anio || nuevo.remesa_id !== (m.remesa_id || null)) {
@@ -477,15 +480,26 @@ export async function aplicarReglas() {
 }
 
 // --- Movimientos ------------------------------------------------------------
+// Un movimiento del banco puede dividirse en partes (una transferencia que paga la cuota
+// y unas anillas, por ejemplo): para resúmenes, cuotas y cuentas cuenta cada parte.
+const conPartes = (m) => Array.isArray(m.partes) && m.partes.length > 1;
+export function lineas(lista = t.movimientos) {
+  const out = [];
+  for (const m of lista) {
+    if (!conPartes(m)) { out.push(m); continue; }
+    m.partes.forEach((p, i) => out.push({ ...m, id: `${m.id}#${i}`, padre: m.id, parte: i, importe: p.importe, partida: p.partida || null, socio_id: p.socio_id || null, anio: p.anio || null, nota: p.nota || m.nota || null, partes: undefined }));
+  }
+  return out;
+}
 export const claveMovimiento = (m) => `${m.fecha}|${m.apunte ?? ''}|${Number(m.importe).toFixed(2)}`;
 export function movimientos({ anio = null, partida = undefined, socio = null, texto = '' } = {}) {
   exigirAbierta();
   vigilar();
   const n = normalizar(texto);
   return t.movimientos.filter(m => (!anio || String(m.fecha).startsWith(String(anio)))
-      && (partida === undefined || (partida === null ? !m.partida : m.partida === partida))
-      && (!socio || m.socio_id === socio)
-      && (!n || normalizar(`${m.concepto} ${m.nota || ''} ${nombrePartida(m.partida) || ''}`).includes(n)))
+      && (partida === undefined || (conPartes(m) ? (partida === null ? m.partes.some(p => !p.partida) : m.partes.some(p => p.partida === partida)) : (partida === null ? !m.partida : m.partida === partida)))
+      && (!socio || m.socio_id === socio || (conPartes(m) && m.partes.some(p => p.socio_id === socio)))
+      && (!n || normalizar(`${m.concepto} ${m.nota || ''} ${nombrePartida(m.partida) || ''} ${conPartes(m) ? m.partes.map(p => `${nombrePartida(p.partida) || ''} ${p.nota || ''}`).join(' ') : ''}`).includes(n)))
     .sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.apunte ?? 0) - (a.apunte ?? 0));
 }
 export const aniosMovimientos = () => [...new Set(t.movimientos.map(m => Number(String(m.fecha).slice(0, 4))))].sort((a, b) => b - a);
@@ -568,7 +582,19 @@ export function leerHojaTesoreria(hojas) {
         etiqueta: String(f[col.etiqueta] ?? '').trim(), nota: col.nota === undefined ? '' : String(f[col.nota] ?? '').trim(),
         numero_socio: socio === null || socio === undefined || socio === '' ? null : (numeroDe(socio) !== null ? String(numeroDe(socio)) : String(socio).trim()) });
     }
-    if (lista.length) leidas.push({ nombre: hoja.nombre, anio: anioHoja, cuenta, movimientos: lista });
+    // Una transferencia partida en la hoja: la fila con el nº de apunte y, justo debajo, otra
+    // con «-» en el apunte, la misma fecha y el mismo concepto del banco. Es un solo movimiento
+    // del banco (por la suma) dividido en partes.
+    const juntos = [];
+    for (const m of lista) {
+      const ant = juntos.at(-1);
+      if (m.apunte === null && ant && ant.apunte !== null && ant.fecha === m.fecha && normalizar(ant.concepto) === normalizar(m.concepto) && Math.sign(ant.importe) === Math.sign(m.importe)) {
+        if (!ant.partesHoja) ant.partesHoja = [{ importe: ant.importe, etiqueta: ant.etiqueta, nota: ant.nota, numero_socio: ant.numero_socio }];
+        ant.partesHoja.push({ importe: m.importe, etiqueta: m.etiqueta, nota: m.nota, numero_socio: m.numero_socio });
+        ant.importe = Math.round((ant.importe + m.importe) * 100) / 100;
+      } else juntos.push(m);
+    }
+    if (juntos.length) leidas.push({ nombre: hoja.nombre, anio: anioHoja, cuenta, movimientos: juntos });
   }
   return leidas;
 }
@@ -580,7 +606,7 @@ export function propuestaHoja(leidas) {
   const guardadas = configuracion().equivalencias || {};
   const cuotas = partidaCuotas();
   const etiquetas = new Map();
-  for (const h of leidas) for (const m of h.movimientos) {
+  for (const h of leidas) for (const m of h.movimientos.flatMap(x => x.partesHoja || [x])) {
     const k = normalizar(m.etiqueta);
     const e = etiquetas.get(k) || { clave: k, texto: m.etiqueta || '(sin concepto)', n: 0, ingresos: 0, gastos: 0 };
     e.n++; if (m.importe > 0) e.ingresos++; else e.gastos++;
@@ -627,7 +653,41 @@ export async function importarHojaTesoreria(leidas, equivalencias) {
   const sinApunte = new Map();
   for (const m of t.movimientos.filter(x => x.apunte === null || x.apunte === undefined)) { const k = `${m.fecha}|${m.importe.toFixed(2)}|${normalizar(m.concepto)}`; sinApunte.set(k, (sinApunte.get(k) || 0) + 1); }
   let nuevos = 0, completados = 0, yaEstaban = 0, efectivo = 0, socioRevisar = 0;
+  const datosDe = (m, fecha, anioHoja) => {
+    const partida = eq[normalizar(m.etiqueta)] || null;
+    const anioEtiqueta = Number((String(m.etiqueta).match(/\b(20\d\d)\b/) || [])[1]) || null;
+    const socio = m.numero_socio && /^\d+$/.test(m.numero_socio) ? t.socios.find(s => String(Number(s.numero)) === m.numero_socio) : null;
+    return { importe: m.importe, partida, socio_id: m.importe > 0 && socio ? socio.id : null, anio: partida && partida === cuotas?.id ? (anioEtiqueta || anioHoja || Number(fecha.slice(0, 4))) : null,
+      nota: [m.nota, m.numero_socio && !socio ? `Nº de socio en la hoja: ${m.numero_socio}` : ''].filter(Boolean).join(' · ') || null, revisar: Boolean(m.numero_socio && !socio) };
+  };
+  let divididos = 0, reparados = 0;
   for (const m of todos) {
+    if (m.partesHoja) {
+      // Movimiento partido: uno del banco con sus partes
+      const partes = m.partesHoja.map(p => datosDe(p, m.fecha, m.anioHoja));
+      const limpias = partes.map(({ revisar, ...p }) => p);
+      const delBanco = t.movimientos.filter(x => x.origen === 'banco' && x.fecha === m.fecha && x.apunte === m.apunte);
+      const bueno = delBanco.find(x => Math.abs(x.importe - m.importe) < 0.005) || delBanco[0] || null;
+      // Lo que entró mal en una importación anterior (la primera parte como si fuera el total
+      // y las demás como movimientos de caja) se arregla
+      for (const x of delBanco.filter(x => x !== bueno && Math.abs(x.importe - partes[0].importe) < 0.005)) { await borrarRegistro(x.id); t.movimientos = t.movimientos.filter(y => y !== x); reparados++; }
+      for (const p of m.partesHoja.slice(1)) {
+        const malo = t.movimientos.find(x => x.origen !== 'banco' && (x.apunte === null || x.apunte === undefined) && x.fecha === m.fecha && Math.abs(x.importe - p.importe) < 0.005 && normalizar(x.concepto) === normalizar(m.concepto));
+        if (malo) { await borrarRegistro(malo.id); t.movimientos = t.movimientos.filter(x => x !== malo); reparados++; }
+      }
+      const { etiqueta, numero_socio, anioHoja, nota, partesHoja, ...banco } = m;
+      if (bueno) {
+        if (conPartes(bueno) && Math.abs(bueno.importe - m.importe) < 0.005) { yaEstaban++; continue; }
+        await guardarRegistro('movimiento', { ...quitarInternos(bueno), importe: m.importe, saldo: m.saldo ?? bueno.saldo, partes: limpias, partida: null, socio_id: null, anio: null, id: bueno.id });
+        if (Math.abs(bueno.importe - m.importe) >= 0.005) reparados++; else completados++;
+      } else {
+        await guardarRegistro('movimiento', { ...banco, partes: limpias, partida: null, socio_id: null, anio: null, nota: null, remesa_id: null, manual: false, origen: 'banco' });
+        nuevos++;
+      }
+      porClave.set(claveMovimiento(m), m);
+      divididos++; socioRevisar += partes.filter(p => p.revisar).length;
+      continue;
+    }
     const partida = eq[normalizar(m.etiqueta)] || null;
     const anioEtiqueta = Number((m.etiqueta.match(/\b(20\d\d)\b/) || [])[1]) || null;
     const anio = partida && partida === cuotas?.id ? (anioEtiqueta || m.anioHoja || Number(m.fecha.slice(0, 4))) : null;
@@ -656,7 +716,7 @@ export async function importarHojaTesoreria(leidas, equivalencias) {
     }
   }
   await recargar();
-  return { nuevos, completados, yaEstaban, efectivo, partidasNuevas, socioRevisar, huecos: comprobarSaldos() };
+  return { nuevos, completados, yaEstaban, efectivo, partidasNuevas, socioRevisar, divididos, reparados, huecos: comprobarSaldos() };
 }
 
 export async function importarMovimientos(hojas) {
@@ -695,8 +755,15 @@ export async function guardarMovimiento(m) {
   if (anio !== null && (!Number.isInteger(anio) || anio < 2000 || anio > 2100)) throw new Error('El año de la cuota no es válido.');
   const base = previo ? quitarInternos(previo) : { fecha: m.fecha, fecha_valor: null, concepto: String(m.concepto).trim(), importe, saldo: null, apunte: null, origen: 'manual' };
   const remesa_id = m.remesa_id !== undefined ? (m.remesa_id || null) : (previo?.remesa_id || null);
+  if (Array.isArray(m.partes) && m.partes.length) {
+    if (!previo) throw new Error('Primero guarda el movimiento; después se puede dividir.');
+    const partes = validarPartes(m.partes, previo.importe, previo.fecha);
+    await guardarRegistro('movimiento', { ...quitarInternos(previo), partes, partida: null, socio_id: null, anio: null, remesa_id: null, nota: String(m.nota ?? previo.nota ?? '').trim() || null, manual: true, id: previo.id });
+    await recargar();
+    return { aprendido: null };
+  }
   if (remesa_id && !t.remesas.some(r => r.id === remesa_id)) throw new Error('Remesa desconocida.');
-  await guardarRegistro('movimiento', { ...base, partida: m.partida || null, socio_id: remesa_id ? null : (m.socio_id || null), anio, remesa_id, nota: String(m.nota || '').trim() || null, manual: true, id: previo?.id });
+  await guardarRegistro('movimiento', { ...base, partes: null, partida: m.partida || null, socio_id: remesa_id ? null : (m.socio_id || null), anio, remesa_id, nota: String(m.nota || '').trim() || null, manual: true, id: previo?.id });
   // Aprender: si se asigna a mano un ingreso a un socio que la app no reconoció, recordar el ordenante
   let aprendido = null;
   if (previo && m.socio_id && !remesa_id && previo.importe > 0 && previo.socio_id !== m.socio_id && socioDelConcepto(previo.concepto)?.id !== m.socio_id) {
@@ -704,6 +771,31 @@ export async function guardarMovimiento(m) {
   }
   await recargar();
   return { aprendido };
+}
+
+// Partes de un movimiento: al menos dos, con importe del mismo signo y que sumen el total
+export function validarPartes(partes, total, fecha) {
+  const cuotas = partidaCuotas();
+  const lista = partes.map(p => ({ importe: Math.round(Number(String(p.importe).replace(',', '.')) * 100) / 100, partida: p.partida || null, socio_id: p.socio_id || null,
+    anio: p.anio ? Number(p.anio) : null, nota: String(p.nota || '').trim() || null })).filter(p => p.importe);
+  if (lista.length < 2) throw new Error('Para dividir hacen falta al menos dos partes con importe.');
+  if (lista.some(p => !Number.isFinite(p.importe) || Math.sign(p.importe) !== Math.sign(total))) throw new Error(total > 0 ? 'Cada parte debe ser un importe positivo.' : 'Cada parte debe ser un importe negativo, como el total.');
+  const suma = Math.round(lista.reduce((x, p) => x + p.importe, 0) * 100) / 100;
+  if (Math.abs(suma - total) >= 0.005) throw new Error(`Las partes suman ${String(suma).replace('.', ',')} € y el movimiento es de ${String(total).replace('.', ',')} €.`);
+  for (const p of lista) {
+    if (p.partida && !t.partidas.some(x => x.id === p.partida)) throw new Error('Partida desconocida.');
+    if (p.socio_id && !t.socios.some(x => x.id === p.socio_id)) throw new Error('Socio desconocido.');
+    if (p.partida && p.partida === cuotas?.id && !p.anio) p.anio = Number(String(fecha).slice(0, 4));
+    if (p.anio !== null && (!Number.isInteger(p.anio) || p.anio < 2000 || p.anio > 2100)) throw new Error('El año de la cuota no es válido.');
+  }
+  return lista;
+}
+export async function quitarPartes(id) {
+  exigirAbierta();
+  const m = t.movimientos.find(x => x.id === id);
+  if (!m) return;
+  await guardarRegistro('movimiento', { ...quitarInternos(m), partes: null, ...(conPartes(m) ? { partida: m.partes[0].partida, socio_id: m.partes[0].socio_id, anio: m.partes[0].anio } : {}), id: m.id });
+  await recargar();
 }
 
 // El ordenante tal como lo escribe el banco (sin «trf.», etc.), hasta 6 palabras
@@ -760,7 +852,7 @@ export function saldoBanco() {
 
 export function resumen(anio) {
   exigirAbierta();
-  const del = movimientos({ anio }).filter(m => !esTraspaso(m));
+  const del = lineas(movimientos({ anio })).filter(m => !esTraspaso(m));
   const filas = partidas({ conTraspasos: false }).map(p => {
     const ms = del.filter(m => m.partida === p.id);
     return { partida: p, ingresos: ms.filter(m => m.importe > 0).reduce((s, m) => s + m.importe, 0), gastos: ms.filter(m => m.importe < 0).reduce((s, m) => s - m.importe, 0), n: ms.length };
@@ -799,7 +891,7 @@ export function cuotasAnio(anio) {
     recaudado: total('pagado'), previsto: total('debe'), pendiente: total('falta') };
 }
 export const aniosCuotas = () => {
-  const a = new Set([new Date().getFullYear(), ...t.movimientos.filter(m => m.anio).map(m => Number(m.anio))]);
+  const a = new Set([new Date().getFullYear(), ...lineas().filter(m => m.anio).map(m => Number(m.anio))]);
   return [...a].sort((x, y) => y - x);
 };
 
@@ -846,7 +938,7 @@ export function cuentasAnio(anio) {
   exigirAbierta();
   const a = Number(anio);
   const porPartida = (y) => {
-    const todos = t.movimientos.filter(m => m.fecha.startsWith(String(y)));
+    const todos = lineas().filter(m => m.fecha.startsWith(String(y)));
     const del = todos.filter(m => !esTraspaso(m));
     const fila = (p) => { const ms = del.filter(m => m.partida === p); return { ingresos: r2(ms.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ms.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)) }; };
     return { del, todos, fila };
@@ -884,7 +976,7 @@ export function cuentasAnio(anio) {
 // cada uno cuente como pagado (las devoluciones se anotan al socio en negativo)
 export function pagosDeCuotas() {
   const lista = [];
-  for (const m of t.movimientos) {
+  for (const m of lineas()) {
     const r = m.remesa_id ? t.remesas.find(x => x.id === m.remesa_id) : null;
     if (!r) { lista.push(m); continue; }
     for (const d of r.detalle) lista.push({ ...m, id: `${m.id}:${d.socio_id}`, socio_id: d.socio_id, importe: d.importe, concepto: `Remesa SEPA ${dma(r.fecha_cobro)}`, remesa: true });
@@ -992,7 +1084,7 @@ export const aniosPresupuesto = () => {
 };
 
 const real = (anio) => {
-  const del = t.movimientos.filter(m => m.fecha.startsWith(String(anio)));
+  const del = lineas().filter(m => m.fecha.startsWith(String(anio)));
   return (id) => { const ms = del.filter(m => m.partida === id);
     return { ingresos: r2(ms.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ms.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)) }; };
 };

@@ -27,7 +27,7 @@ const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFraction
 export default async function (main) {
   let pestana = 'inicio', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
   const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200 }; // anio: número o 'todos' (histórico)
-  let editandoMov = null, reglaPropuesta = '', hojaTes = null;
+  let editandoMov = null, reglaPropuesta = '', hojaTes = null, partesBorrador = null; // partesBorrador: partes que se están editando (dividir un movimiento)
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
   const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
@@ -324,7 +324,8 @@ export default async function (main) {
     const enApp = todos.filter(m => m.apunte !== null && ya.has(tes.claveMovimiento(m))).length;
     const sinApunte = todos.filter(m => m.apunte === null).length;
     const numeros = new Set(tes.socios().map(s => String(Number(s.numero))));
-    const conNumero = todos.filter(m => m.numero_socio);
+    const conNumero = todos.flatMap(m => m.partesHoja || [m]).filter(m => m.numero_socio);
+    const partidos = todos.filter(m => m.partesHoja).length;
     const reconocidos = conNumero.filter(m => numeros.has(m.numero_socio)).length;
     const parts = tes.partidas();
     return h`<div class="tarjeta" id="te-hoja-tes">
@@ -332,6 +333,7 @@ export default async function (main) {
       <p>${leidas.map(x => `${x.nombre} (${x.movimientos.length})`).join(', ')}: <strong>${todos.length} movimientos</strong>, del ${fecha(fechas[0])} al ${fecha(fechas.at(-1))}.</p>
       <ul class="peq">
         <li>${enApp} ya están en la app (del Excel del banco): solo se completa lo que les falte (partida, socio, nota); lo que hayas puesto aquí no se toca.</li>
+        ${partidos ? h`<li>${partidos} transferencia(s) partida(s) en la hoja (fila con apunte y fila con «-» debajo): entran como un solo movimiento del banco dividido en partes.</li>` : ''}
         ${sinApunte ? h`<li>${sinApunte} sin nº de apunte del banco: se añaden como movimientos a mano.</li>` : ''}
         ${conNumero.length ? h`<li>Nº de socio: ${reconocidos} de ${conNumero.length} reconocidos en la lista de socios.${conNumero.length > reconocidos ? ' Los demás («REVISAR» o números que no están) quedan sin socio, con el número en la nota.' : ''}</li>` : ''}
       </ul>
@@ -362,20 +364,33 @@ export default async function (main) {
     const fila = (m) => {
       if (editandoMov === m.id) return h`<li class="item mov-editar" id="mov-${m.id}"><form class="mov-form" data-mov="${m.id}" style="width:100%">
         <p style="margin:0 0 .5rem"><strong>${fecha(m.fecha)} · ${euros(m.importe)}</strong><br><span class="peq">${m.concepto}</span></p>
-        <div class="rejilla rejilla-2">
+        ${partesBorrador ? (() => { const suma = partesBorrador.reduce((x, p) => x + aNum(p.importe), 0); const falta = Math.round((m.importe - suma) * 100) / 100;
+          return h`<div id="me-partes"><p class="peq muted" style="margin:0 0 .4rem">Divide el movimiento en partes (por ejemplo, la cuota y unas anillas pagadas en la misma transferencia). Cada parte lleva su partida y su socio.</p>
+          ${partesBorrador.map((p, i) => h`<fieldset class="parte"><legend>Parte ${i + 1}</legend><div class="rejilla rejilla-2">
+            <div class="campo"><label for="mp-importe-${i}">Importe (€)</label><input id="mp-importe-${i}" data-parte="${i}" data-k="importe" inputmode="decimal" value="${p.importe === '' || p.importe === undefined ? '' : String(p.importe).replace('.', ',')}"></div>
+            <div class="campo"><label for="mp-partida-${i}">Partida</label><select id="mp-partida-${i}" data-parte="${i}" data-k="partida"><option value="">— Sin clasificar —</option>${parts.map(x => h`<option value="${x.id}" ${p.partida === x.id ? h`selected` : ''}>${x.nombre}</option>`)}</select></div>
+            <div class="campo"><label for="mp-socio-${i}">Socio</label><select id="mp-socio-${i}" data-parte="${i}" data-k="socio_id"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${p.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
+            <div class="campo"><label for="mp-anio-${i}">Año de la cuota</label><input id="mp-anio-${i}" data-parte="${i}" data-k="anio" type="number" min="2000" max="2100" value="${p.anio ?? ''}" placeholder="Solo para cuotas"></div>
+            <div class="campo"><label for="mp-nota-${i}">Nota</label><input id="mp-nota-${i}" data-parte="${i}" data-k="nota" value="${p.nota || ''}"></div>
+            ${partesBorrador.length > 2 ? h`<div><button type="button" class="btn btn-pequeno" data-quitar-parte="${i}">Quitar esta parte</button></div>` : ''}</div></fieldset>`)}
+          <p class="peq ${Math.abs(falta) >= 0.005 ? 'texto-alerta' : 'muted'}" id="me-suma">Las partes suman ${euros(suma)} de ${euros(m.importe)}${Math.abs(falta) >= 0.005 ? ` · faltan ${euros(falta)}` : ' ✓'}</p>
+          <p class="fila"><button type="button" class="btn btn-pequeno" data-anadir-parte>Añadir otra parte</button>
+            <button type="button" class="btn btn-pequeno" data-no-dividir>${m.partes?.length ? 'Quitar la división' : 'No dividir'}</button></p></div>`; })()
+        : h`<div class="rejilla rejilla-2">
           <div class="campo"><label for="me-partida">Partida</label><select id="me-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}" ${m.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}${opcionNueva}</select></div>
           <div class="campo"><label for="me-socio">Socio</label><select id="me-socio"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${m.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
           <div class="campo"><label for="me-anio">Año de la cuota</label><input id="me-anio" type="number" min="2000" max="2100" value="${m.anio ?? ''}" placeholder="Solo para cuotas"></div>
           <div class="campo"><label for="me-nota">Nota</label><input id="me-nota" value="${m.nota || ''}"></div>
-        </div>
+        </div>`}
         <div class="fila"><button class="btn btn-primario btn-pequeno" type="submit">Guardar</button><button class="btn btn-pequeno" type="button" data-cancelar>Cancelar</button>
+          ${partesBorrador ? '' : h`<button class="btn btn-pequeno" type="button" data-dividir>Dividir en partes</button>`}
           <button class="btn btn-pequeno" type="button" data-regla="${m.concepto}">Crear regla con este concepto</button>
           ${m.importe < 0 ? h`<button class="btn btn-pequeno" type="button" data-inventario>Añadir al inventario</button>` : ''}
           ${m.origen === 'banco' ? '' : h`<button class="btn btn-peligro btn-pequeno" type="button" data-borrar-mov="${m.id}">Borrar</button>`}</div>
       </form></li>`;
       return h`<li><a class="item mov" href="#/tesoreria" data-editar-mov="${m.id}" id="mov-${m.id}">
         <span class="item-principal"><span class="item-titulo">${m.concepto}</span>
-          <span class="item-sub">${fecha(m.fecha)} · ${m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.remesa_id ? ' · Remesa SEPA' : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
+          <span class="item-sub">${fecha(m.fecha)} · ${m.partes?.length > 1 ? h`<span class="chip">Dividido</span> ${m.partes.map(p => `${tes.nombrePartida(p.partida) || 'Sin clasificar'}${p.anio ? ` ${p.anio}` : ''}${p.socio_id ? ` · ${nombreSocio(p.socio_id)}` : ''} (${euros(p.importe)})`).join(' + ')}` : m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.remesa_id ? ' · Remesa SEPA' : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
         <span class="importe ${m.importe < 0 ? 'negativo' : 'positivo'}">${euros(m.importe)}</span></a></li>`;
     };
     pintar(cuerpo, h`
@@ -439,7 +454,7 @@ export default async function (main) {
         try {
           const r = await tes.importarHojaTesoreria(hojaTes.leidas, Object.fromEntries(hojaTes.propuesta.map(e => [e.clave, e.partida])));
           hojaTes = null; filtro.anio = 'todos';
-          aviso(`Hoja importada: ${r.nuevos} movimientos nuevos, ${r.completados} completados con la hoja y ${r.yaEstaban} sin cambios${r.efectivo ? `; ${r.efectivo} sin nº de apunte, añadidos como a mano` : ''}.${r.partidasNuevas ? ` ${r.partidasNuevas} partida(s) nueva(s).` : ''}${r.socioRevisar ? ` ${r.socioRevisar} con el nº de socio por revisar (va en la nota).` : ''}`, 'ok', { ms: 10000 });
+          aviso(`Hoja importada: ${r.nuevos} movimientos nuevos, ${r.completados} completados con la hoja y ${r.yaEstaban} sin cambios${r.efectivo ? `; ${r.efectivo} sin nº de apunte, añadidos como a mano` : ''}.${r.divididos ? ` ${r.divididos} transferencia(s) partida(s) en la hoja, como un solo movimiento del banco dividido.` : ''}${r.reparados ? ` Corregido lo que entró mal antes (${r.reparados}).` : ''}${r.partidasNuevas ? ` ${r.partidasNuevas} partida(s) nueva(s).` : ''}${r.socioRevisar ? ` ${r.socioRevisar} con el nº de socio por revisar (va en la nota).` : ''}`, 'ok', { ms: 10000 });
         } catch (e) { aviso(e.message || 'No se pudo importar la hoja.', 'error'); ev.target.disabled = false; ev.target.textContent = 'Importar'; return; }
         dibujar();
       });
@@ -449,17 +464,31 @@ export default async function (main) {
     $('#te-mas', cuerpo)?.addEventListener('click', () => { filtro.limite += 200; pintarMovimientos(cuerpo); });
     $('#mf-partida', cuerpo).addEventListener('change', (ev) => { filtro.partida = ev.target.value; pintarMovimientos(cuerpo); });
     $('#mf-texto', cuerpo).addEventListener('input', async (ev) => { filtro.texto = ev.target.value; await pintarMovimientos(cuerpo); const c = $('#mf-texto', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
-    cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));
+    cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; const mm = tes.movimientos().find(x => x.id === editandoMov); partesBorrador = mm?.partes?.length > 1 ? mm.partes.map(p => ({ ...p })) : null; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));
     $('#te-partidas', cuerpo).addEventListener('toggle', (ev) => { partidasAbiertas = ev.target.open; });
     conectarPartidas(cuerpo, () => pintarMovimientos(cuerpo));
     conectarSelectPartida($('#mm-partida', cuerpo));
     const form = $('.mov-form', cuerpo);
     if (form) {
-      conectarSelectPartida($('#me-partida', form));
+      if ($('#me-partida', form)) conectarSelectPartida($('#me-partida', form));
       const m = tes.movimientos().find(x => x.id === form.dataset.mov);
       // Al elegir la partida de cuotas, el año se propone solo
-      $('#me-partida', form).addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
-      form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; pintarMovimientos(cuerpo); });
+      $('#me-partida', form)?.addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
+      form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; partesBorrador = null; pintarMovimientos(cuerpo); });
+      const leerPartes = () => { form.querySelectorAll('[data-parte]').forEach(el => { partesBorrador[Number(el.dataset.parte)][el.dataset.k] = el.value; }); };
+      const sumaPartes = () => { leerPartes(); const suma = partesBorrador.reduce((x, p) => x + aNum(p.importe), 0); const falta = Math.round((m.importe - suma) * 100) / 100;
+        const el = $('#me-suma', form); el.textContent = `Las partes suman ${euros(suma)} de ${euros(m.importe)}${Math.abs(falta) >= 0.005 ? ` · faltan ${euros(falta)}` : ' ✓'}`; el.classList.toggle('texto-alerta', Math.abs(falta) >= 0.005); el.classList.toggle('muted', Math.abs(falta) < 0.005); };
+      form.querySelectorAll('[data-k=importe]').forEach(el => el.addEventListener('input', sumaPartes));
+      form.querySelector('[data-dividir]')?.addEventListener('click', () => {
+        partesBorrador = [{ importe: m.importe, partida: $('#me-partida', form).value || m.partida || '', socio_id: $('#me-socio', form).value || m.socio_id || '', anio: $('#me-anio', form).value || m.anio || '', nota: '' }, { importe: '', partida: '', socio_id: '', anio: '', nota: '' }];
+        pintarMovimientos(cuerpo).then(() => $(`#mp-importe-0`, cuerpo)?.focus());
+      });
+      form.querySelector('[data-anadir-parte]')?.addEventListener('click', () => { leerPartes(); partesBorrador.push({ importe: '', partida: '', socio_id: '', anio: '', nota: '' }); pintarMovimientos(cuerpo); });
+      form.querySelectorAll('[data-quitar-parte]').forEach(b => b.addEventListener('click', () => { leerPartes(); partesBorrador.splice(Number(b.dataset.quitarParte), 1); pintarMovimientos(cuerpo); }));
+      form.querySelector('[data-no-dividir]')?.addEventListener('click', async () => {
+        if (m.partes?.length) { await tes.quitarPartes(m.id); aviso('División quitada: queda la clasificación de la primera parte', 'ok'); }
+        partesBorrador = null; pintarMovimientos(cuerpo);
+      });
       form.querySelector('[data-inventario]')?.addEventListener('click', () => { editandoBien = 'nuevo'; borradorBien = { nombre: m.concepto, valor: -m.importe, fecha_alta: m.fecha, movimiento_id: m.id }; pestana = 'inventario'; editandoMov = null; dibujar(); });
       form.querySelector('[data-regla]').addEventListener('click', (ev) => { reglaPropuesta = ev.target.dataset.regla; pestana = 'partidas'; editandoMov = null; dibujar(); });
       form.querySelector('[data-borrar-mov]')?.addEventListener('click', async () => {
@@ -469,6 +498,11 @@ export default async function (main) {
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         try {
+          if (partesBorrador) {
+            leerPartes();
+            await tes.guardarMovimiento({ id: m.id, partes: partesBorrador.map(p => ({ ...p, importe: aNum(p.importe) })) });
+            editandoMov = null; partesBorrador = null; aviso('Movimiento dividido y guardado', 'ok'); pintarMovimientos(cuerpo); return;
+          }
           const partida = $('#me-partida', form).value;
           const r = await tes.guardarMovimiento({ id: m.id, partida, socio_id: $('#me-socio', form).value, anio: $('#me-anio', form).value, nota: $('#me-nota', form).value });
           editandoMov = null;

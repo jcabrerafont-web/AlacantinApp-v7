@@ -728,23 +728,34 @@ await ir('#/tesoreria');
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
   ok((await page.innerText('#te-huecos')).includes('entre el 09/10/2026 y el 02/11/2026'), 'Movimientos: el aviso del apunte que falta sigue al volver');
   // Hoja de tesorería del Club (la del Google Sheets en Excel; datos ficticios): Nº Socio, Concepto y Concepto ampliación
+  // Lo que dejaba la versión anterior con una transferencia partida en la hoja: la primera parte como
+  // si fuera el total del banco y la segunda como movimiento de caja
+  await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
+    const serie = (iso) => (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000 + 1 / 12;
+    await t.importarMovimientos([{ nombre: 'm', filas: [['IBAN', 'ES91 2100 0418 4502 0005 1332'], ['Fecha de la operación', 'Fecha valor', 'Tipo movimiento', 'Importe', 'Saldo', 'Nro. Apunte'], [serie('2026-11-21'), serie('2026-11-21'), 'trf. ana prueba uno', 25, 1092, 19]] }]);
+    await t.guardarMovimiento({ fecha: '2026-11-21', importe: '12', concepto: 'trf. ana prueba uno' }); });
+  ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).comprobarSaldos().map(x => x.texto).join(' '))).includes('El saldo no cuadra entre los apuntes 18 y 19'), 'Transferencia partida mal importada: el saldo no cuadra (lo que veía el tesorero)');
   await page.setInputFiles('#te-banco', 'tests/fixtures/hoja_tesoreria_ficticia.xlsx');
   await page.waitForSelector('#te-hoja-tes', { timeout: 8000 });
   { const txt = await page.innerText('#te-hoja-tes');
     const eq = await page.$$eval('[data-equiv]', ss => Object.fromEntries(ss.map(x => [x.closest('tr').cells[0].textContent, x.selectedOptions[0].textContent])));
-    ok(txt.includes('MOVIMIENTOS2026 (5)') && !txt.includes('CUOTASOCIOS') && txt.includes('2 ya están en la app') && txt.includes('2 sin nº de apunte') && txt.includes('2 de 3 reconocidos'),
+    ok(txt.includes('MOVIMIENTOS2026 (6)') && !txt.includes('CUOTASOCIOS') && txt.includes('2 ya están en la app') && txt.includes('1 transferencia(s) partida(s)') && txt.includes('2 sin nº de apunte') && txt.includes('4 de 5 reconocidos'),
       `Hoja del Club: lee la hoja de movimientos (sin la fila de totales ni la hoja de cuotas) y dice qué hará (${txt.replace(/\s+/g, ' ').slice(0, 300)})`);
     ok(eq['Cuota socio'] === 'Cuotas de socios' && eq['Donación'] === 'Subvenciones y donativos' && eq['Anillas'] === 'Anillas' && eq['Rifa Enero 2026'] === 'Nueva partida: «Rifa Enero 2026»',
       `Hoja del Club: propone la partida de cada concepto (${JSON.stringify(eq)})`); }
   await page.click('#th-importar');
   await page.waitForSelector('#te-hoja-tes', { state: 'detached', timeout: 8000 });
-  ok(/1 movimientos nuevos, 1 completados con la hoja y 1 sin cambios; 2 sin nº de apunte/.test(await aviso()) && (await aviso()).includes('2 partida(s) nueva(s)') && (await aviso()).includes('1 con el nº de socio por revisar'),
+  ok(/1 movimientos nuevos, 1 completados con la hoja y 1 sin cambios; 2 sin nº de apunte/.test(await aviso()) && (await aviso()).includes('1 transferencia(s) partida(s)') && (await aviso()).includes('Corregido lo que entró mal antes (2)') && (await aviso()).includes('2 partida(s) nueva(s)') && (await aviso()).includes('1 con el nº de socio por revisar'),
     `Hoja del Club: importada (${await aviso()})`);
   { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const ms = t.movimientos();
       const de = (c) => ms.find(m => m.concepto === c);
       return { don: t.nombrePartida(de('trf. donante anonimo').partida), anillas: de('trf. ana prueba uno anillas').nota, rifa: [t.nombrePartida(de('Rifa en mano').partida), de('Rifa en mano').nota, de('Rifa en mano').origen],
-        huevos: t.partidas().find(p => p.nombre === 'Proyecto huevos gordos')?.tipo, huecos: t.comprobarSaldos().length }; });
-    ok(r.don === 'Subvenciones y donativos' && r.anillas === 'Pedido de 10' && JSON.stringify(r.rifa) === JSON.stringify(['Rifa Enero 2026', 'Nº de socio en la hoja: REVISAR', 'manual']) && r.huevos === 'gasto' && r.huecos === 0,
+        huevos: t.partidas().find(p => p.nombre === 'Proyecto huevos gordos')?.tipo, huecos: t.comprobarSaldos().length,
+        partida: (() => { const x = ms.filter(m => m.apunte === 19); return [x.length, x[0]?.importe, x[0]?.partes?.map(p => [t.nombrePartida(p.partida), p.importe, p.anio, t.socios().find(s => s.id === p.socio_id)?.nombre])]; })(),
+        caja12: ms.some(m => m.origen !== 'banco' && m.importe === 12 && m.concepto === 'trf. ana prueba uno'),
+        cuotaAna: t.pagosDeCuotas().some(m => m.id.endsWith('#0') && m.socio_id && m.importe === 25) }; });
+    ok(r.don === 'Subvenciones y donativos' && r.anillas === 'Pedido de 10' && JSON.stringify(r.rifa) === JSON.stringify(['Rifa Enero 2026', 'Nº de socio en la hoja: REVISAR', 'manual']) && r.huevos === 'gasto' && r.huecos === 0
+      && JSON.stringify(r.partida) === JSON.stringify([1, 37, [['Cuotas de socios', 25, 2026, 'Ana'], ['Anillas', 12, null, 'Ana']]]) && !r.caja12 && r.cuotaAna,
       `Hoja del Club: el apunte que faltaba llega de la hoja, la nota completa el del banco y lo de efectivo queda a mano en su partida (${JSON.stringify(r)})`); }
   ok(!(await page.$('#te-huecos')), 'Movimientos: ya no falta ningún apunte');
   await page.setInputFiles('#te-banco', 'tests/fixtures/hoja_tesoreria_ficticia.xlsx');
@@ -752,7 +763,26 @@ await ir('#/tesoreria');
   { const eq = await page.$$eval('[data-equiv]', ss => Object.fromEntries(ss.map(x => [x.closest('tr').cells[0].textContent, x.selectedOptions[0].textContent])));
     ok(eq['Rifa Enero 2026'] === 'Rifa Enero 2026' && eq['Proyecto huevos gordos'] === 'Proyecto huevos gordos', `Hoja del Club: recuerda las equivalencias de la vez anterior (${JSON.stringify(eq)})`); }
   await page.click('#th-importar'); await page.waitForSelector('#te-hoja-tes', { state: 'detached', timeout: 8000 });
-  ok((await aviso()).includes('0 movimientos nuevos, 0 completados con la hoja y 5 sin cambios.') && !(await aviso()).includes('por revisar'), `Hoja del Club: importarla otra vez no duplica nada (${await aviso()})`);
+  ok((await aviso()).includes('0 movimientos nuevos, 0 completados con la hoja y 6 sin cambios.') && !(await aviso()).includes('por revisar'), `Hoja del Club: importarla otra vez no duplica nada (${await aviso()})`);
+  // Dividir a mano un movimiento del banco en partes
+  await page.fill('#mf-texto', 'donante'); await page.waitForTimeout(300); await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);
+  await page.click('[data-editar-mov]'); await page.click('[data-dividir]'); await page.waitForSelector('#me-partes');
+  await page.fill('#mp-importe-0', '20'); await page.fill('#mp-importe-1', '5');
+  ok((await page.innerText('#me-suma')).includes('faltan 5,00 €'), 'Dividir: dice lo que falta por repartir');
+  await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(300);
+  ok((await aviso()).includes('Las partes suman 25 € y el movimiento es de 30 €'), `Dividir: no guarda si las partes no suman el total (${await aviso()})`);
+  await page.fill('#mp-importe-1', '10'); await page.selectOption('#mp-partida-1', { label: 'Otros' }); await page.fill('#mp-nota-1', 'Para la rifa');
+  ok((await page.innerText('#me-suma')).includes('✓'), 'Dividir: las partes cuadran');
+  await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(400);
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const m = t.movimientos({ texto: 'donante' })[0];
+      return { partes: m.partes.map(p => [t.nombrePartida(p.partida), p.importe]), otros: t.movimientos({ partida: t.partidas().find(p => p.nombre === 'Otros').id }).some(x => x.id === m.id) }; });
+    ok(JSON.stringify(r.partes) === JSON.stringify([['Subvenciones y donativos', 20], ['Otros', 10]]) && r.otros && (await page.innerText('#te-movs')).includes('Dividido'),
+      `Dividir: guardado en dos partes; sale al filtrar por cualquiera de sus partidas (${JSON.stringify(r)})`); }
+  await page.click('[data-editar-mov]'); await page.waitForSelector('#me-partes');
+  ok((await page.inputValue('#mp-importe-1')) === '10', 'Dividir: al volver a abrirlo se ven las partes');
+  await page.click('[data-no-dividir]'); await page.waitForTimeout(400);
+  ok(await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const m = t.movimientos({ texto: 'donante' })[0]; return !m.partes && t.nombrePartida(m.partida) === 'Subvenciones y donativos'; }), 'Dividir: se puede quitar la división (queda la partida de la primera parte)');
+  await page.fill('#mf-texto', ''); await page.waitForTimeout(200);
   // Caja de efectivo: saldo inicial, traspaso al banco (no es gasto) y arqueo con ajuste
   ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).bienes().length)) === 0, 'Inventario: vacío al empezar');
   await irTes('inicio');
