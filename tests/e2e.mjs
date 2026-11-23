@@ -689,6 +689,24 @@ await ir('#/tesoreria');
     await page.selectOption('#dlg-mover', { label: 'Material y difusión' }); await page.click('dialog.dialogo button[value="si"]'); await page.waitForTimeout(400);
     const m = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.nombrePartida(t.movimientos({ anio: 2025 })[0].partida), t.partidas().some(p => p.nombre === 'Material')]; });
     ok(JSON.stringify(m) === JSON.stringify(['Material y difusión', false]), `Borrar partida: sus movimientos pasan a la elegida (${JSON.stringify(m)})`); }
+  // Aprender de lo que se clasifica a mano: el ordenante desconocido es de Bernat, y una regla desde un movimiento
+  await page.selectOption('#mf-anio', '2026'); await page.fill('#mf-texto', 'fulano'); await page.waitForTimeout(300);
+  await page.click('[data-editar-mov]'); await page.waitForSelector('#me-socio');
+  await page.selectOption('#me-socio', { label: '2 · Bernat Prueba Dos' }); await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(600);
+  ok((await aviso()).includes('Aprendido: lo que llegue de «fulano desconocido» es de Bernat Prueba Dos'), `Aprender: el ordenante asignado a mano se recuerda (${await aviso()})`);
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
+      const serie = (iso) => (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000 + 1 + 1 / 12;
+      await t.importarMovimientos([{ nombre: 'm', filas: [['IBAN', 'ES91 2100 0418 4502 0005 1332'], ['Fecha de la operación', 'Fecha valor', 'Tipo movimiento', 'Importe', 'Saldo', 'Nro. Apunte'], [serie('2026-11-20'), serie('2026-11-20'), 'trf. fulano desconocido', 25, 1055, 18]] }]);
+      const m = t.movimientos({ texto: 'fulano' }).find(x => x.apunte === 18); return [t.socios().find(s => s.id === m.socio_id)?.nombre, t.nombrePartida(m.partida)]; });
+    ok(JSON.stringify(r) === JSON.stringify(['Bernat', 'Cuotas de socios']), `Aprender: el siguiente pago de ese ordenante se asigna solo (${JSON.stringify(r)})`); }
+  await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); await t.guardarMovimiento({ fecha: '2026-11-21', importe: '-18,40', concepto: 'Compra de pienso' }); });
+  await page.fill('#mf-texto', 'pienso'); await page.waitForTimeout(300);
+  await page.click('[data-editar-mov]'); await page.waitForSelector('#me-partida');
+  await page.selectOption('#me-partida', { label: 'Encuentros y exposiciones' }); await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(500);
+  ok((await aviso()).includes('«compra de pienso»') && (await page.innerText('#aviso')).includes('Sí, siempre'), `Clasificar a mano propone crear la regla (${await aviso()})`);
+  await page.click('#aviso .toast-accion'); await page.waitForTimeout(500);
+  ok(await page.evaluate(async () => (await import('./js/tesoreria.js')).reglas().some(r => r.texto === 'compra de pienso' && r.signo === '-')), 'Con «Sí, siempre» queda la regla para los siguientes');
+  await page.fill('#mf-texto', ''); await page.waitForTimeout(200);
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }

@@ -222,11 +222,15 @@ export default async function (main) {
         ${nuevo ? '' : h`<button class="btn btn-peligro" type="button" id="te-borrar">Borrar</button>`}</div>
       <p class="peq muted">Para un socio que deja el Club, mejor poner la fecha de baja que borrarlo: así se conserva su historial de cuotas.</p>
     </form>
+    ${!nuevo && (s.alias || []).length ? h`<div class="tarjeta" id="te-alias"><h2>Cómo le reconoce la app en el banco</h2>
+      <p class="peq muted">Ordenantes que asignaste a mano a este socio: los siguientes pagos que lleguen así se le asignan solos.</p>
+      <ul class="lista">${s.alias.map(a => h`<li class="item"><span class="item-principal"><span class="item-titulo">«${a}»</span></span><button type="button" class="btn btn-pequeno" data-olvidar="${a}">Olvidar</button></li>`)}</ul></div>` : ''}
     ${nuevo ? '' : (() => { const pagos = tes.movimientosDeSocio(s.id); return h`<div class="tarjeta" id="te-pagos"><h2>Movimientos de este socio</h2>
       ${pagos.length ? h`<ul class="lista">${pagos.map(m => h`<li class="item"><span class="item-principal"><span class="item-titulo">${fecha(m.fecha)} · ${euros(m.importe)}</span>
         <span class="item-sub">${tes.nombrePartida(m.partida) || 'Sin clasificar'}${m.anio ? ` ${m.anio}` : ''} · ${m.concepto}</span></span></li>`)}</ul>`
       : h`<p class="muted peq">Todavía no tiene movimientos asignados.</p>`}</div>`; })()}`);
     $('#te-volver', cuerpo).addEventListener('click', () => { editando = null; pintarSocios(cuerpo); });
+    cuerpo.querySelectorAll('[data-olvidar]').forEach(b => b.addEventListener('click', async () => { await tes.olvidarOrdenante(s.id, b.dataset.olvidar); pintarFicha(cuerpo, tes.socios().find(x => x.id === s.id)); }));
     $('#ts-iban', cuerpo).addEventListener('change', (ev) => { if (ev.target.value && !tes.ibanValido(ev.target.value)) aviso('Ese IBAN no es válido: revisa los dígitos.', 'error'); });
     $('#te-borrar', cuerpo)?.addEventListener('click', async () => {
       if (!await confirmar('¿Borrar este socio?', 'Se borra de la tesorería en todos los dispositivos. Si deja el Club, es mejor poner su fecha de baja.', 'Borrar', true)) return;
@@ -347,8 +351,22 @@ export default async function (main) {
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         try {
-          await tes.guardarMovimiento({ id: m.id, partida: $('#me-partida', form).value, socio_id: $('#me-socio', form).value, anio: $('#me-anio', form).value, nota: $('#me-nota', form).value });
-          editandoMov = null; aviso('Movimiento guardado', 'ok'); pintarMovimientos(cuerpo);
+          const partida = $('#me-partida', form).value;
+          const r = await tes.guardarMovimiento({ id: m.id, partida, socio_id: $('#me-socio', form).value, anio: $('#me-anio', form).value, nota: $('#me-nota', form).value });
+          editandoMov = null;
+          if (r?.aprendido) {
+            // Lo aprendido se aplica ya a los demás movimientos de ese ordenante sin asignar
+            const n = await tes.aplicarReglas();
+            aviso(`Aprendido: lo que llegue de «${r.aprendido.alias}» es de ${tes.nombreCompleto(r.aprendido.socio)}.${n ? ` ${n} movimiento(s) más asignados.` : ''}`, 'ok', { ms: 7000 });
+          } else if (partida && partida !== m.partida && partida !== tes.partidaCuotas()?.id && !tes.existeReglaPara(m.concepto, m.importe) && tes.textoRegla(m.concepto).length >= 3) {
+            const texto = tes.textoRegla(m.concepto);
+            aviso(`Movimiento guardado. ¿Clasificar siempre en «${tes.nombrePartida(partida)}» lo que contenga «${texto}»?`, 'ok', { ms: 9000, accion: { texto: 'Sí, siempre', fn: async () => {
+              await tes.guardarRegla({ texto, partida, signo: m.importe >= 0 ? '+' : '-' });
+              const n = await tes.aplicarReglas();
+              aviso(`Regla creada${n ? `: ${n} movimiento(s) más clasificados` : ''}.`, 'ok'); pintarMovimientos(cuerpo);
+            } } });
+          } else aviso('Movimiento guardado', 'ok');
+          pintarMovimientos(cuerpo);
         } catch (e) { aviso(e.message, 'error'); }
       });
     }

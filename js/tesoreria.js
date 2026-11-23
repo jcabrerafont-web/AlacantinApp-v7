@@ -196,6 +196,7 @@ function limpiarSocio(s) {
   if (r.bic) r.bic = String(r.bic).replace(/\s+/g, '').toUpperCase();
   if (r.email) r.email = r.email.toLowerCase();
   r.perfil_id = s.perfil_id || null;
+  r.alias = Array.isArray(s.alias) ? s.alias : []; // ordenantes aprendidos (ver aprenderOrdenante)
   return r;
 }
 
@@ -424,6 +425,9 @@ const palabras = (s) => normalizar(s).split(' ').filter(w => w.length > 1 && !PR
 export function socioDelConcepto(concepto) {
   const enConcepto = new Set(palabras(concepto));
   if (!enConcepto.size) return null;
+  // Primero lo aprendido: ordenantes que se asignaron a mano a un socio
+  const porAlias = t.socios.filter(s => (s.alias || []).some(a => a.split(' ').every(w => enConcepto.has(w))));
+  if (porAlias.length === 1) return porAlias[0];
   let mejor = null, empate = false;
   for (const s of t.socios) {
     const suyas = [...new Set(palabras(`${s.nombre || ''} ${s.apellidos || ''}`))];
@@ -556,8 +560,41 @@ export async function guardarMovimiento(m) {
   const remesa_id = m.remesa_id !== undefined ? (m.remesa_id || null) : (previo?.remesa_id || null);
   if (remesa_id && !t.remesas.some(r => r.id === remesa_id)) throw new Error('Remesa desconocida.');
   await guardarRegistro('movimiento', { ...base, partida: m.partida || null, socio_id: remesa_id ? null : (m.socio_id || null), anio, remesa_id, nota: String(m.nota || '').trim() || null, manual: true, id: previo?.id });
+  // Aprender: si se asigna a mano un ingreso a un socio que la app no reconoció, recordar el ordenante
+  let aprendido = null;
+  if (previo && m.socio_id && !remesa_id && previo.importe > 0 && previo.socio_id !== m.socio_id && socioDelConcepto(previo.concepto)?.id !== m.socio_id) {
+    aprendido = await aprenderOrdenante(m.socio_id, previo.concepto);
+  }
+  await recargar();
+  return { aprendido };
+}
+
+// El ordenante tal como lo escribe el banco (sin «trf.», etc.), hasta 6 palabras
+export const ordenanteDe = (concepto) => palabras(concepto).slice(0, 6).join(' ');
+async function aprenderOrdenante(socioId, concepto) {
+  const s = t.socios.find(x => x.id === socioId);
+  const alias = ordenanteDe(concepto);
+  if (!s || alias.split(' ').length < 2 || (s.alias || []).includes(alias)) return null;
+  const nuevo = { ...s, alias: [...(s.alias || []), alias].slice(-10) };
+  await guardarCifrado('socio', s.id, { ...quitarInternos(nuevo), creado: s.creado || new Date().toISOString() });
+  return { socio: s, alias };
+}
+export async function olvidarOrdenante(socioId, alias) {
+  exigirAbierta();
+  const s = t.socios.find(x => x.id === socioId);
+  if (!s) return;
+  await guardarCifrado('socio', s.id, { ...quitarInternos({ ...s, alias: (s.alias || []).filter(a => a !== alias) }), creado: s.creado || new Date().toISOString() });
   await recargar();
 }
+
+// Texto que se propone para una regla a partir de un concepto del banco
+export function textoRegla(concepto) {
+  // Palabras seguidas tal como salen en el concepto (la regla busca ese texto exacto), sin «trf.», «rcbo.»…
+  const w = normalizar(concepto).split(' ');
+  while (w.length && (PREFIJOS.has(w[0]) || /^\d+$/.test(w[0]))) w.shift();
+  return w.slice(0, 3).join(' ');
+}
+export const existeReglaPara = (concepto, importe) => { const n = normalizar(concepto); const sg = importe >= 0 ? '+' : '-'; return t.reglas.some(r => n.includes(r.texto) && (!r.signo || r.signo === sg)); };
 export async function borrarMovimiento(id) {
   exigirAbierta();
   const m = t.movimientos.find(x => x.id === id);
