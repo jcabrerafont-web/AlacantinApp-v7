@@ -555,3 +555,8 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .doc-hueco { display: inline-block; min-width: 12em; border-bottom: 1px solid #94a3b8; }
 .doc-legal { font-size: .78rem; text-align: justify; }
 .texto-alerta { color: var(--rojo-t); font-weight: 600; }
+/* Tesorería: grupos y subpestanas */
+.te-nav .subpestanas { display: flex; gap: .25rem; margin-top: .6rem; border-top: 1px solid var(--borde); padding-top: .5rem; flex-wrap: wrap; }
+.subpestana { background: none; border: 0; border-bottom: 3px solid transparent; padding: .4rem .7rem; font: inherit; font-weight: 600; color: var(--texto-2); cursor: pointer; min-height: 40px; }
+.subpestana.activa { color: var(--azul-t); border-bottom-color: var(--azul-2); }
+.subpestana:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }

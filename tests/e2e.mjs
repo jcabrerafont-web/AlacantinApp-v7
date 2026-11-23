@@ -16,6 +16,14 @@ const ok = (cond, txt) => { console.log(`${cond ? '✓' : '✗'} ${txt}`); if (!
 const ir = async (hash) => { await page.evaluate(h => { location.hash = h; }, hash); await page.waitForTimeout(350); };
 const barra = () => page.$$eval('#barra a', as => as.map(a => a.innerText.replace(/\s+/g, ' ').trim()));
 const aviso = () => page.$eval('#aviso', e => e.textContent);
+const GRUPO_TES = { inicio: 'inicio', movimientos: 'dia', cuotas: 'dia', socios: 'socios', importar: 'socios', cuentas: 'informes', presupuesto: 'informes', partidas: 'ajustes', sepa: 'ajustes', seguridad: 'ajustes' };
+const irTes = async (p) => {
+  await page.click(`[data-grupo=${GRUPO_TES[p]}]`);
+  await page.waitForSelector(`[data-grupo=${GRUPO_TES[p]}][aria-selected=true]`);
+  if (p !== GRUPO_TES[p] || p === 'socios') { await page.waitForSelector(`[data-pestana=${p}]`).catch(() => {}); if (!(await page.$(`[data-pestana=${p}][aria-selected=true]`))) await page.click(`[data-pestana=${p}]`); }
+  await page.waitForSelector(`[data-pestana=${p}][aria-selected=true], [data-grupo=inicio][aria-selected=true]`);
+  await page.waitForTimeout(150);
+};
 const tesSocios = () => page.evaluate(async () => (await import('./js/tesoreria.js')).socios().length);
 
 await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
@@ -448,9 +456,17 @@ await ir('#/tesoreria');
 { await page.fill('#te-c1', 'corta'); await page.fill('#te-c2', 'corta'); await page.click('#te-crear button[type=submit]'); await page.waitForTimeout(200);
   ok((await aviso()).includes('al menos 12 caracteres'), 'Tesorería: la contraseña tiene que ser larga');
   await page.fill('#te-c1', 'gallinas del club 2026'); await page.fill('#te-c2', 'gallinas del club 2026'); await page.click('#te-crear button[type=submit]');
-  await page.waitForSelector('[data-pestana=socios]', { timeout: 8000 });
-  ok(await page.$eval('[data-pestana=movimientos]', b => b.getAttribute('aria-selected') === 'true'), 'Tesorería: se abre en Movimientos');
-  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-nuevo');
+  await page.waitForSelector('[data-grupo=inicio]', { timeout: 8000 });
+  ok(await page.$eval('[data-grupo=inicio]', b => b.getAttribute('aria-selected') === 'true') && (await page.innerText('#te-tareas')).includes('Importa el primer extracto del banco') && (await page.innerText('#te-tareas')).includes('Crea el código de recuperación'),
+    'Tesorería: se abre en Inicio, con lo que hay que hacer');
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1) && (await page.$$('[data-grupo]')).length === 5,
+    'Tesorería: Inicio y 4 grupos caben en el móvil sin desplazamiento lateral');
+  await page.click('[data-tarea]:has-text("código de recuperación")');
+  await page.waitForSelector('[data-pestana=seguridad][aria-selected=true]');
+  ok(await page.$eval('[data-grupo=ajustes]', b => b.getAttribute('aria-selected') === 'true'), 'Tesorería: una tarea de Inicio lleva a su sitio (Ajustes › Seguridad)');
+  await irTes('inicio'); await page.click('[data-ir=cuotas]'); await page.waitForSelector('[data-pestana=cuotas][aria-selected=true]');
+  ok(await page.$eval('[data-grupo=dia]', b => b.getAttribute('aria-selected') === 'true'), 'Tesorería: accesos rápidos de Inicio (Cuotas, en «Día a día»)');
+  await irTes('socios'); await page.waitForSelector('#te-nuevo');
   await page.click('#te-nuevo');
   await page.fill('#ts-numero', '7'); await page.fill('#ts-nombre', 'Zacarías'); await page.fill('#ts-apellidos', 'Secretísimo'); await page.fill('#ts-dni', '12345678Z');
   await page.fill('#ts-iban', 'ES91 2100 0418 4502 0005 1332');
@@ -468,7 +484,7 @@ await ir('#/tesoreria');
   await page.waitForSelector('#te-lista', { timeout: 8000 });
   ok((await page.innerText('#te-lista')).includes('Zacarías'), 'Tesorería: con su contraseña se abre y los datos están');
   // Importar el Excel de socios (datos ficticios): hoja «SOCIOS», títulos en la fila 3
-  await page.click('[data-pestana=importar]');
+  await irTes('importar');
   await page.setInputFiles('#te-archivo', 'tests/fixtures/socios_ficticios.xlsx');
   await page.waitForSelector('#te-importar', { timeout: 5000 });
   const imp = await page.evaluate(() => ({ hoja: document.querySelector('#te-hoja').selectedOptions[0].textContent, fila: document.querySelector('#te-fila').value,
@@ -481,11 +497,11 @@ await ir('#/tesoreria');
   await page.waitForTimeout(1500);
   ok((await aviso()).includes('2 nuevos') && (await aviso()).includes('1 con errores') && (await page.innerText('main')).includes('IBAN no es válido'),
     `Importar: 2 socios nuevos y el del IBAN erróneo se señala sin importar (${await aviso()})`);
-  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-lista');
+  await irTes('socios'); await page.waitForSelector('#te-lista');
   { const n = await page.$$eval('#te-lista [data-socio]', l => l.map(x => x.textContent.trim().slice(0, 30))); ok(n.length === 3, `Tesorería: 3 socios en la lista (${n.join(' | ')})`); }
   await page.fill('#te-buscar', 'denia');
   ok((await page.$$('#te-lista [data-socio]')).length === 1, 'Tesorería: búsqueda sin acentos (Dénia)');
-  await page.click('[data-pestana=seguridad]');
+  await irTes('seguridad');
   const [cop] = await Promise.all([page.waitForEvent('download'), page.click('#te-copia')]);
   const txtCopia = fs.readFileSync(await cop.path(), 'utf8');
   ok(cop.suggestedFilename().startsWith('CGA_tesoreria_cifrada_') && !/Zacar|Bernat|00000000T/.test(txtCopia) && JSON.parse(txtCopia).registros.filter(r => r.tipo === 'socio').length === 3 && !/Cuotas de socios/.test(txtCopia), 'Tesorería: copia cifrada descargable, sin datos legibles');
@@ -513,7 +529,7 @@ await ir('#/tesoreria');
   const unidad = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [t.ibanValido('ES9121000418450200051332'), t.ibanValido('ES9121000418450200051333'), t.ibanValido('ES91 2100 0418 4502 0005 1332')]; });
   ok(JSON.stringify(unidad) === '[true,false,true]', 'IBAN: comprobación de los dígitos de control');
   // Fase 2: movimientos del banco (Excel con el formato de Caixa Popular, datos ficticios)
-  await page.click('[data-pestana=movimientos]');
+  await irTes('movimientos');
   await page.waitForSelector('#te-banco', { state: 'attached' });
   ok((await page.innerText('#te-cuerpo')).includes('Todavía no hay movimientos'), 'Movimientos: vacío, con el botón para importar el Excel del banco');
   await page.setInputFiles('#te-banco', 'tests/fixtures/banco_ficticio_1.xlsx');
@@ -544,27 +560,27 @@ await ir('#/tesoreria');
   ok((await page.innerText('#te-cuerpo')).includes('Resumen por partidas 2026'), 'Movimientos: resumen por partidas del año');
   const tot = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const r = t.resumen(2026); return [r.ingresos, r.gastos, r.filas.find(f => f.partida.nombre === 'Anillas')?.ingresos]; });
   ok(JSON.stringify(tot) === JSON.stringify([72, 87, 12]), `Resumen 2026: 72 € de ingresos, 87 € de gastos, anillas 12 € (${JSON.stringify(tot)})`);
-  await page.click('[data-pestana=partidas]');
+  await irTes('partidas');
   await page.waitForSelector('#tr-nueva');
   await page.fill('#tr-texto', 'loteria'); await page.selectOption('#tr-partida', { label: 'Otros' }); await page.click('#tr-nueva button[type=submit]'); await page.waitForTimeout(300);
   ok((await page.innerText('#tp-reglas')).includes('«loteria» → Otros'), 'Partidas: regla nueva');
-  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar');
+  await irTes('socios'); await page.waitForSelector('#te-buscar');
   await page.fill('#te-buscar', ''); await page.waitForSelector('#te-lista');
   await page.click('#te-lista [data-socio]');
   await page.waitForSelector('#te-pagos');
   ok((await page.$$('#te-pagos li')).length === 2 && (await page.innerText('#te-pagos')).includes('Cuotas de socios 2026'), 'Ficha del socio: sus movimientos (cuota 2026 y anillas)');
   await page.click('#te-volver');
   // Fase 3: cuotas por año
-  await page.click('[data-pestana=cuotas]'); await page.waitForSelector('#cu-anio');
+  await irTes('cuotas'); await page.waitForSelector('#cu-anio');
   { const t = await page.innerText('#te-cuerpo');
     ok(t.includes('2 / 3') && t.includes('50,00 €') && t.includes('Recaudado de 75,00 €') && (await page.$$('#cu-lista .cuota')).length === 1 && (await page.innerText('#cu-lista')).includes('Zacarías Secretísimo'),
       'Cuotas 2026: han pagado 2 de 3, 50 € de 75 €, y falta Zacarías'); }
   // Le ponemos teléfono: sale el recordatorio por WhatsApp con la cuenta del Club
-  await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', 'zacar');
+  await irTes('socios'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', 'zacar');
   await page.click('#te-lista [data-socio]'); await page.waitForSelector('#ts-telefono');
   await page.fill('#ts-telefono', '600 111 222'); await page.click('#te-ficha button[type=submit]'); await page.waitForSelector('#te-lista');
   await page.fill('#te-buscar', '');
-  await page.click('[data-pestana=cuotas]'); await page.waitForSelector('#cu-lista');
+  await irTes('cuotas'); await page.waitForSelector('#cu-lista');
   { const wa = await page.getAttribute('#cu-lista a[href^="https://wa.me/"]', 'href');
     const txt = decodeURIComponent(wa.split('text=')[1]);
     ok(wa.startsWith('https://wa.me/34600111222?') && txt.includes('Hola, Zacarías') && txt.includes('cuota 2026') && txt.includes('25,00 €') && txt.includes('ES91 2100 0418 4502 0005 1332'),
@@ -581,7 +597,7 @@ await ir('#/tesoreria');
   const esp = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.nombre === 'Bernat'); await t.guardarSocio({ ...s, cuota_especial: '0' }); const c = t.cuotasAnio(2026); return [c.cuenta.exento, c.previsto, t.socios().find(x => x.nombre === 'Bernat').cuota_especial]; });
   ok(JSON.stringify(esp) === JSON.stringify([1, 50, 0]), `Cuotas: un socio exento (cuota especial 0) no cuenta en lo previsto (${JSON.stringify(esp)})`);
   // Fase 4: cuentas del año para la asamblea
-  await page.click('[data-pestana=cuentas]'); await page.waitForSelector('#cc-doc');
+  await irTes('cuentas'); await page.waitForSelector('#cc-doc');
   { const t = await page.innerText('#cc-doc');
     const cu = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const c = t.cuentasAnio(2026); return [c.banco.inicial, c.banco.final, c.ingresos, c.gastos, c.resultado, c.efectivo.neto, c.banco.cuadra, c.cuotas.pagadas, c.cuotas.recaudado]; });
     ok(JSON.stringify(cu) === JSON.stringify([1000, 1015, 97, 87, 10, 25, false, 2, 75]), `Cuentas 2026: saldo inicial y final del banco, ingresos, gastos, resultado, efectivo y cuotas (${JSON.stringify(cu)})`);
@@ -597,7 +613,7 @@ await ir('#/tesoreria');
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/cuentas.png`, fullPage: true });
   // Fase 5: SEPA. Ana pasa a tener una cuota especial de 40 €: le faltan 15 € de 2026
   await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.nombre === 'Ana'); await t.guardarSocio({ ...s, cuota_especial: '40' }); });
-  await page.click('[data-pestana=sepa]'); await page.waitForSelector('#se-acreedor');
+  await irTes('sepa'); await page.waitForSelector('#se-acreedor');
   ok((await page.innerText('#se-id')) === 'ES98000G21807508', 'SEPA: identificador de acreedor calculado del NIF del Club (ES98000G21807508)');
   ok(await page.evaluate(async () => { const s = await import('./js/tesoreria/sepa.js'); return s.idAcreedorValido('ES98000G21807508') && !s.idAcreedorValido('ES97000G21807508') && s.idAcreedor('B12345678') === 'ES97000B12345678'; }), 'SEPA: dígitos de control del identificador (módulo 97)');
   ok((await page.innerText('#se-remesa')).includes('No se puede: falta orden de domiciliación') && await page.$eval('#se-remesa input[type=checkbox]', c => c.disabled), 'Remesa: sin orden firmada no se puede cobrar');
@@ -628,11 +644,11 @@ await ir('#/tesoreria');
     const ana = t.cuotasAnio(2026).filas.find(f => f.socio.nombre === 'Ana');
     return { nuevos: res.nuevos, estado: ana.estado, pagado: ana.pagado, cobrada: Boolean(t.abonoDeRemesa(r.id)), pagos: t.movimientosDeSocio(ana.socio.id).length }; });
   ok(tras.nuevos === 1 && tras.estado === 'pagado' && tras.pagado === 40 && tras.cobrada && tras.pagos === 3, `Remesa: el abono del banco se reparte y la cuota de Ana queda pagada (${JSON.stringify(tras)})`);
-  await page.click('[data-pestana=cuotas]'); await page.click('[data-pestana=sepa]'); await page.waitForSelector('#se-emitidas');
+  await irTes('cuotas'); await irTes('sepa'); await page.waitForSelector('#se-emitidas');
   ok((await page.innerText('#se-emitidas')).includes('Cobrada'), 'Remesa: marcada como cobrada');
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/sepa.png`, fullPage: true });
   // Presupuesto anual por partidas
-  await page.click('[data-pestana=presupuesto]'); await page.waitForSelector('#pp-form');
+  await irTes('presupuesto'); await page.waitForSelector('#pp-form');
   const anioP = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
   ok(await page.$eval('#pp-anio', s => s.value) === String(anioP), `Presupuesto: propone el año que toca preparar (${anioP})`);
   await page.selectOption('#pp-anio', '2027'); await page.waitForSelector('#pp-rellenar');
@@ -653,11 +669,11 @@ await ir('#/tesoreria');
   { const doc = await page.evaluate(async () => { const d = await import('./js/documentos.js'); const t = await import('./js/tesoreria.js'); window.print = () => {};
       d.presupuestoDoc(t.ejecucion(2027)); await new Promise(r => setTimeout(r, 100)); const txt = document.querySelector('#impresion').textContent; window.dispatchEvent(new Event('afterprint')); return txt; });
     ok(doc.includes('Presupuesto 2027') && doc.includes('Aprobado en asamblea el 15/12/2026') && doc.includes('Resultado previsto') && doc.includes('Real 2026'), 'Presupuesto: documento para la asamblea, con lo real del año anterior'); }
-  await page.click('[data-pestana=cuentas]'); await page.waitForSelector('#cc-doc'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
+  await irTes('cuentas'); await page.waitForSelector('#cc-doc'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
   ok((await page.innerText('#cc-doc')).includes('Presupuesto') && (await page.innerText('#cc-doc')).includes('80,00 €'), 'Cuentas: columna del presupuesto junto a lo real');
   // Histórico de movimientos (todos los años) y cada año aparte
   await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); await t.guardarMovimiento({ fecha: '2025-06-15', importe: '-30', concepto: 'Material del encuentro 2025' }); });
-  await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#mf-anio');
+  await irTes('movimientos'); await page.waitForSelector('#mf-anio');
   ok(await page.$eval('#mf-anio', s => s.options[0].value === 'todos' && s.options[0].textContent.includes('Histórico')), 'Movimientos: el selector empieza por el histórico de todos los años');
   await page.selectOption('#mf-anio', 'todos'); await page.waitForSelector('#te-historico');
   { const filas = await page.$$eval('#te-historico tbody tr', trs => trs.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
@@ -707,12 +723,12 @@ await ir('#/tesoreria');
   await page.click('#aviso .toast-accion'); await page.waitForTimeout(500);
   ok(await page.evaluate(async () => (await import('./js/tesoreria.js')).reglas().some(r => r.texto === 'compra de pienso' && r.signo === '-')), 'Con «Sí, siempre» queda la regla para los siguientes');
   await page.fill('#mf-texto', ''); await page.waitForTimeout(200);
-  await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
+  await irTes('movimientos'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }
   ok((await page.innerText('#te-huecos')).includes('entre el 09/10/2026 y el 02/11/2026'), 'Movimientos: el aviso del apunte que falta sigue al volver');
-  if (process.env.CAPTURAS) { await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
-  if (process.env.CAPTURAS) { await page.click('[data-pestana=socios]'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
+  if (process.env.CAPTURAS) { await irTes('movimientos'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
+  if (process.env.CAPTURAS) { await irTes('socios'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
 }
 await cambiarRolLocal('criador');
 await ir('#/herramientas');

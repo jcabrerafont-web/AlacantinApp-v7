@@ -8,15 +8,24 @@ import * as tes from '../tesoreria.js';
 import { leerXlsx } from '../tesoreria/xlsx.js';
 import * as docs from '../documentos.js';
 import * as sepa from '../tesoreria/sepa.js';
+import { desdeEmoji } from '../iconos.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['presupuesto', 'Presupuesto'], ['sepa', 'SEPA'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+// Cinco grupos; dentro de cada uno, sus pestañas
+export const GRUPOS = [
+  ['inicio', 'Inicio', [['inicio', 'Inicio']]],
+  ['dia', 'Día a día', [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas']]],
+  ['socios', 'Socios', [['socios', 'Lista'], ['importar', 'Importar']]],
+  ['informes', 'Informes', [['cuentas', 'Cuentas'], ['presupuesto', 'Presupuesto']]],
+  ['ajustes', 'Ajustes', [['partidas', 'Partidas'], ['sepa', 'SEPA'], ['seguridad', 'Seguridad']]]
+];
+export const grupoDe = (p) => GRUPOS.find(([, , ps]) => ps.some(([k]) => k === p))?.[0] || 'inicio';
 const aNum = (v) => { const t = String(v ?? '').trim(); const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); return Number.isFinite(n) ? n : 0; };
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
-  let pestana = 'movimientos', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
+  let pestana = 'inicio', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
   const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200 }; // anio: número o 'todos' (histórico)
   let editandoMov = null, reglaPropuesta = '';
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
@@ -94,13 +103,17 @@ export default async function (main) {
     if (!tes.abierta()) return pintarAbrir();
     tes.actividad();
     pintar(main, h`${cabecera()}
-      <div class="fila entre tarjeta" style="align-items:center">
-        <div class="pestanas" role="tablist">${PESTANAS.map(([k, n]) => h`<button type="button" role="tab" class="btn btn-pequeno ${k === pestana ? 'btn-primario' : ''}" aria-selected="${k === pestana}" data-pestana="${k}">${n}</button>`)}</div>
-        <button type="button" class="btn btn-pequeno" id="te-cerrar" style="margin-left:auto">🔒 Cerrar tesorería</button>
+      <div class="tarjeta te-nav">
+        <div class="fila entre" style="align-items:center">
+          <div class="pestanas" role="tablist" aria-label="Secciones de la tesorería">${GRUPOS.map(([g, n, ps]) => h`<button type="button" role="tab" class="btn btn-pequeno ${g === grupoDe(pestana) ? 'btn-primario' : ''}" aria-selected="${g === grupoDe(pestana)}" data-grupo="${g}" data-primera="${ps[0][0]}">${n}</button>`)}</div>
+          <button type="button" class="btn btn-pequeno" id="te-cerrar" style="margin-left:auto">🔒 Cerrar</button>
+        </div>
+        ${(() => { const ps = GRUPOS.find(([g]) => g === grupoDe(pestana))[2]; return ps.length > 1 ? h`<div class="subpestanas" role="tablist">${ps.map(([k, n]) => h`<button type="button" role="tab" class="subpestana ${k === pestana ? 'activa' : ''}" aria-selected="${k === pestana}" data-pestana="${k}">${n}</button>`)}</div>` : ''; })()}
       </div>
       <div id="te-avisos"></div>
       <div id="te-cuerpo"></div>`);
-    Promise.all([tes.tieneRecuperacion(), tes.diasDesdeCopia()]).then(([rec, dias]) => {
+    // En Inicio ya salen como tareas; en el resto, como avisos arriba
+    if (pestana !== 'inicio') Promise.all([tes.tieneRecuperacion(), tes.diasDesdeCopia()]).then(([rec, dias]) => {
       const caja = $('#te-avisos', main);
       if (!caja) return;
       const hayDatos = tes.socios().length || tes.movimientos().length;
@@ -109,9 +122,11 @@ export default async function (main) {
       caja.querySelectorAll('[data-ir-seguridad]').forEach(b => b.addEventListener('click', () => { pestana = 'seguridad'; dibujar(); }));
     });
     main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; editandoMov = null; dibujar(); }));
+    main.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { if (grupoDe(pestana) !== b.dataset.grupo) pestana = b.dataset.primera; editando = null; editandoMov = null; dibujar(); }));
     $('#te-cerrar', main).addEventListener('click', () => { tes.cerrar(); });
     const cuerpo = $('#te-cuerpo', main);
-    if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
+    if (pestana === 'inicio') await pintarInicio(cuerpo);
+    else if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
     else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
     else if (pestana === 'cuentas') await pintarCuentas(cuerpo);
     else if (pestana === 'sepa') await pintarSepa(cuerpo);
@@ -242,6 +257,54 @@ export default async function (main) {
       try { await tes.guardarSocio({ ...s, ...d, id: s.id }); aviso(nuevo ? 'Socio añadido' : 'Cambios guardados', 'ok'); editando = null; pintarSocios(cuerpo); }
       catch (e) { aviso(e.message, 'error'); }
     });
+  };
+
+  // --- Inicio: lo importante de un vistazo y lo que hay que hacer -------------------
+  const ir = (p, extra) => { pestana = p; if (extra) extra(); editando = null; editandoMov = null; dibujar(); };
+  const pintarInicio = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const y = new Date().getFullYear();
+    const sb = tes.saldoBanco();
+    const c = tes.cuotasAnio(y);
+    const sin = tes.movimientos({ partida: null }).length;
+    const huecos = tes.comprobarSaldos();
+    const remPend = tes.remesas().filter(r => !tes.abonoDeRemesa(r.id));
+    const ej = tes.presupuesto(y) ? tes.ejecucion(y) : null;
+    const [rec, dias] = await Promise.all([tes.tieneRecuperacion(), tes.diasDesdeCopia()]);
+    const diasExtracto = sb ? Math.floor((Date.now() - Date.parse(`${sb.fecha}T12:00:00`)) / 86400000) : null;
+    const faltan = c.cuenta.pendiente + c.cuenta.parcial;
+    const tareas = [
+      !tes.aniosMovimientos().length && ['⬆️', 'Importa el primer extracto del banco', 'En Día a día › Movimientos, con el Excel de la banca online', 'movimientos', 'hoy'],
+      !tes.socios().length && ['👥', 'Añade o importa los socios', 'Desde el Excel del Club, en Socios › Importar', 'importar', 'hoy'],
+      huecos.length && ['⚠️', `Faltan movimientos del banco (${huecos.length})`, huecos[0].texto, 'movimientos', 'hoy'],
+      sin && ['🏷️', `${sin} movimiento(s) sin clasificar`, 'Ponles partida para que las cuentas salgan completas', 'movimientos', 'pronto', () => { filtro.partida = 'sin'; filtro.anio = 'todos'; }],
+      diasExtracto !== null && diasExtracto > 30 && ['📥', 'Importa el extracto reciente', `El último movimiento del banco es del ${fecha(sb.fecha)}`, 'movimientos', 'pronto'],
+      faltan && ['💶', `Cuotas ${y}: faltan ${faltan}`, `Por cobrar ${euros(c.pendiente)}. Recordatorio por WhatsApp o correo`, 'cuotas', 'pronto'],
+      remPend.length && ['🏦', `${remPend.length} remesa(s) sin ver en el banco`, 'Cuando llegue el abono, importa el extracto', 'sepa', 'info'],
+      new Date().getMonth() >= 9 && !tes.presupuesto(y + 1) && ['📝', `Prepara el presupuesto ${y + 1}`, 'Para aprobarlo en la asamblea', 'presupuesto', 'info', () => { anioPres = y + 1; }],
+      new Date().getMonth() <= 2 && tes.aniosMovimientos().includes(y - 1) && ['📊', `Cuentas del ejercicio ${y - 1}`, 'Listas para imprimir y presentar en la asamblea', 'cuentas', 'info', () => { anioCuentas = y - 1; }],
+      !rec && ['🔑', 'Crea el código de recuperación', 'Sin él, si se olvida la contraseña, nadie podrá abrir la tesorería', 'seguridad', 'hoy'],
+      (tes.socios().length || tes.movimientos().length) && (dias === null || dias > 30) && ['💾', 'Descarga la copia cifrada', dias === null ? 'Aún no has descargado ninguna' : `La última es de hace ${dias} días`, 'seguridad', 'pronto']
+    ].filter(Boolean);
+    pintar(cuerpo, h`
+      <div class="kpis">
+        <div class="kpi"><b>${sb ? euros(sb.saldo) : '—'}</b><span>Saldo en el banco${sb ? ` (${fecha(sb.fecha)})` : ''}</span></div>
+        <div class="kpi"><b>${c.cuenta.pagado} / ${c.filas.length - c.cuenta.exento}</b><span>Cuotas ${y} pagadas</span></div>
+        <div class="kpi"><b>${euros(c.pendiente)}</b><span>Por cobrar ${y}</span></div>
+        <div class="kpi"><b>${ej ? `${ej.total.previsto.gastos ? Math.round(100 * ej.total.real.gastos / ej.total.previsto.gastos) : 0} %` : '—'}</b><span>${ej ? `Gasto del presupuesto ${y}` : `Sin presupuesto ${y}`}</span></div>
+      </div>
+      <div class="tarjeta" id="te-tareas"><h2>Qué hay que hacer</h2>
+        ${tareas.length ? h`<ul class="lista">${tareas.map(([ico, t, sub, dest, nivel], i) => h`<li><a class="item tarea tarea-${nivel}" href="#/tesoreria" data-tarea="${i}">
+          <span class="tarea-ico" aria-hidden="true">${desdeEmoji(ico)}</span><span class="item-principal"><span class="item-titulo">${t}</span><span class="item-sub">${sub}</span></span><span aria-hidden="true">›</span></a></li>`)}</ul>`
+        : h`<p class="muted">Todo al día. 👌</p>`}
+      </div>
+      <div class="tarjeta fila">
+        <button type="button" class="btn" data-ir="movimientos">Movimientos</button>
+        <button type="button" class="btn" data-ir="cuotas">Cuotas ${y}</button>
+        <button type="button" class="btn" data-ir="cuentas">Cuentas</button>
+      </div>`);
+    cuerpo.querySelectorAll('[data-tarea]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); const t = tareas[Number(a.dataset.tarea)]; ir(t[3], t[5]); }));
+    cuerpo.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => ir(b.dataset.ir)));
   };
 
   // --- Movimientos del banco -------------------------------------------------
