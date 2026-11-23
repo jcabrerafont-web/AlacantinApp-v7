@@ -7,10 +7,11 @@ import * as sync from '../sync.js';
 import * as tes from '../tesoreria.js';
 import { leerXlsx } from '../tesoreria/xlsx.js';
 import * as docs from '../documentos.js';
+import * as sepa from '../tesoreria/sepa.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['sepa', 'SEPA'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
@@ -19,6 +20,7 @@ export default async function (main) {
   let editandoMov = null, reglaPropuesta = '';
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
+  const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -43,6 +45,7 @@ export default async function (main) {
     if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
     else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
     else if (pestana === 'cuentas') await pintarCuentas(cuerpo);
+    else if (pestana === 'sepa') await pintarSepa(cuerpo);
     else if (pestana === 'socios') pintarSocios(cuerpo);
     else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
@@ -176,7 +179,7 @@ export default async function (main) {
       </form></li>`;
       return h`<li><a class="item mov" href="#/tesoreria" data-editar-mov="${m.id}" id="mov-${m.id}">
         <span class="item-principal"><span class="item-titulo">${m.concepto}</span>
-          <span class="item-sub">${fecha(m.fecha)} · ${m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
+          <span class="item-sub">${fecha(m.fecha)} · ${m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.remesa_id ? ' · Remesa SEPA' : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
         <span class="importe ${m.importe < 0 ? 'negativo' : 'positivo'}">${euros(m.importe)}</span></a></li>`;
     };
     pintar(cuerpo, h`
@@ -340,6 +343,105 @@ export default async function (main) {
         ['Banco', 'Saldo inicial', c.banco.inicial ?? '', ''], ['Banco', 'Saldo final', c.banco.final ?? '', '']);
       descargar(csv(filas), `CGA_cuentas_${c.anio}.csv`);
     });
+  };
+
+  // --- SEPA: acreedor, mandatos y remesas ----------------------------------------
+  const pintarSepa = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const a = tes.acreedor();
+    const socios = tes.socios().filter(s => !tes.estaDeBaja(s));
+    const conCuenta = socios.filter(s => s.iban || s.mandato_ref);
+    const anios = tes.aniosCuotas();
+    if (!anios.includes(fr.anio)) fr.anio = anios[0];
+    if (!fr.fecha || fr.fecha < tes.fechaCobroMinima()) fr.fecha = tes.fechaCobroMinima();
+    const cand = tes.candidatosRemesa(fr.anio);
+    const elegidos = cand.filter(f => f.mandato.ok && !fr.quitados.has(f.socio.id));
+    const total = elegidos.reduce((x, f) => x + f.falta, 0);
+    const rem = tes.remesas();
+    pintar(cuerpo, h`
+      <form class="tarjeta" id="se-acreedor"><h2>El Club como acreedor</h2>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="se-nif">NIF del Club</label><input id="se-nif" value="${a.nif || ''}"></div>
+          <div class="campo"><label for="se-sufijo">Sufijo (lo da el banco; normalmente 000)</label><input id="se-sufijo" value="${a.sufijo || '000'}" maxlength="3"></div>
+          <div class="campo"><label>Identificador de acreedor</label><p style="margin:.4rem 0"><strong id="se-id">${a.id || '—'}</strong></p></div>
+          <div class="campo"><label for="se-bic">BIC de la cuenta del Club (opcional)</label><input id="se-bic" value="${a.bic || ''}" placeholder="Lo indica el banco"></div>
+          <div class="campo"><label for="se-nombre">Nombre</label><input id="se-nombre" value="${a.nombre || ''}"></div>
+          <div class="campo"><label>Cuenta del Club</label><p style="margin:.4rem 0">${a.cuenta ? tes.formatearIban(a.cuenta) : 'Se guarda al importar el primer Excel del banco'}</p></div>
+          <div class="campo"><label for="se-dir">Dirección</label><input id="se-dir" value="${a.direccion || ''}"></div>
+          <div class="campo"><label for="se-pob">Código postal, población y provincia</label><input id="se-pob" value="${a.poblacion || ''}"></div>
+        </div>
+        <p class="peq muted">El identificador sale del NIF con la fórmula oficial (ES + dígitos de control + sufijo + NIF). Confirmad con Caixa Popular el sufijo y el identificador al dar de alta el servicio de adeudos.</p>
+        <button class="btn" type="submit">Guardar</button>
+      </form>
+
+      <div class="tarjeta" id="se-mandatos"><h2>Órdenes de domiciliación (mandatos)</h2>
+        <p class="peq">Para cobrar a un socio por el banco hace falta su orden firmada: imprímela con sus datos ya puestos, que la firme, guárdala y anota la fecha de firma. Guárdala firmada mientras se le sigan pasando cobros; si pasan 36 meses sin cobrarle nada, la orden caduca y tendría que firmar otra.</p>
+        ${conCuenta.length ? h`<ul class="lista">${conCuenta.map(s => { const e = tes.estadoMandato(s); return h`<li class="item"><div class="item-principal">
+          <div class="item-titulo">${s.numero ? `${s.numero} · ` : ''}${tes.nombreCompleto(s)} ${e.ok ? h`<span class="chip chip-ok">Firmada ${fecha(s.mandato_fecha)}</span>` : h`<span class="chip chip-aviso">Falta ${e.falta}</span>`}</div>
+          <div class="item-sub">${s.iban ? tes.formatearIban(s.iban) : 'Sin IBAN'}${s.mandato_ref ? ` · ref. ${s.mandato_ref}` : ''}</div>
+          <div class="fila" style="margin-top:.35rem">${s.iban && tes.ibanValido(s.iban) ? h`<button type="button" class="btn btn-pequeno" data-mandato="${s.id}">🖨️ Orden para firmar</button>` : ''}
+            ${s.mandato_ref && !s.mandato_fecha ? h`<button type="button" class="btn btn-pequeno" data-firmada="${s.id}">Anotar la firma</button>` : ''}</div>
+        </div></li>`; })}</ul>` : h`<p class="muted peq">Ningún socio tiene todavía IBAN. Pónselo en su ficha (pestaña Socios) a quien quiera domiciliar la cuota.</p>`}
+      </div>
+
+      <div class="tarjeta" id="se-remesa"><h2>Nueva remesa de cuotas</h2>
+        <div class="rejilla rejilla-3">
+          <div class="campo"><label for="sr-anio">Cuota del año</label><select id="sr-anio">${anios.map(x => h`<option value="${x}" ${x === fr.anio ? h`selected` : ''}>${x}</option>`)}</select></div>
+          <div class="campo"><label for="sr-fecha">Fecha de cobro</label><input id="sr-fecha" type="date" min="${tes.fechaCobroMinima()}" value="${fr.fecha}"></div>
+          <div class="campo"><label for="sr-concepto">Concepto (lo verá el socio en su banco)</label><input id="sr-concepto" maxlength="140" value="Cuota ${fr.anio} Club Gallina Alacantina"></div>
+        </div>
+        ${cand.length ? h`<ul class="lista">${cand.map(f => h`<li class="item"><label class="fila" style="width:100%;margin:0">
+          <input type="checkbox" data-incluir="${f.socio.id}" ${f.mandato.ok && !fr.quitados.has(f.socio.id) ? h`checked` : ''} ${f.mandato.ok ? '' : h`disabled`}>
+          <span class="item-principal"><span class="item-titulo">${tes.nombreCompleto(f.socio)} · ${euros(f.falta)}</span>
+          <span class="item-sub">${f.mandato.ok ? `Mandato ${f.socio.mandato_ref}` : `No se puede: falta ${f.mandato.falta}`}</span></span></label></li>`)}</ul>`
+        : h`<p class="muted peq">No hay cuotas pendientes de ${fr.anio}.</p>`}
+        <p><strong>${elegidos.length} cobro(s) · ${euros(total)}</strong></p>
+        <button class="btn btn-primario" id="sr-generar" ${elegidos.length ? '' : h`disabled`}>Generar el fichero de la remesa</button>
+        <p class="peq muted">Se descarga un fichero XML (SEPA, «Cuaderno 19.14»). Súbelo en la banca online de Caixa Popular, en el apartado de remesas de adeudos o envío de ficheros. Cuando el abono aparezca en el extracto, al importarlo se reparte solo entre estos socios como cuotas pagadas.</p>
+      </div>
+
+      ${rem.length ? h`<div class="tarjeta" id="se-emitidas"><h2>Remesas generadas</h2><ul class="lista">${rem.map(r => { const ab = tes.abonoDeRemesa(r.id); return h`<li class="item"><div class="item-principal">
+        <div class="item-titulo">Cobro ${fecha(r.fecha_cobro)} · ${r.detalle.length} socio(s) · ${euros(r.total)} ${ab ? h`<span class="chip chip-ok">Cobrada</span>` : h`<span class="chip chip-aviso">Pendiente de ver en el banco</span>`}</div>
+        <div class="item-sub">Cuota ${r.anio} · ${r.msg_id}${ab ? ` · abono del ${fecha(ab.fecha)}` : ''}</div>
+        ${ab ? '' : h`<button type="button" class="btn btn-pequeno" data-borrar-remesa="${r.id}" style="margin-top:.35rem">Borrar (no se presentó)</button>`}</div></li>`; })}</ul>
+        <p class="peq muted">Si el banco devuelve algún recibo, la devolución sale en el extracto en negativo: asígnala al socio y a «Cuotas de socios» y su cuota volverá a quedar pendiente.</p></div>` : ''}`);
+
+    $('#se-acreedor', cuerpo).addEventListener('input', () => {
+      try { $('#se-id', cuerpo).textContent = sepa.idAcreedor($('#se-nif', cuerpo).value, $('#se-sufijo', cuerpo).value); } catch { $('#se-id', cuerpo).textContent = '—'; }
+    });
+    $('#se-acreedor', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try { await tes.guardarAcreedor({ nif: $('#se-nif', cuerpo).value, sufijo: $('#se-sufijo', cuerpo).value, nombre: $('#se-nombre', cuerpo).value, direccion: $('#se-dir', cuerpo).value, poblacion: $('#se-pob', cuerpo).value, bic: $('#se-bic', cuerpo).value }); aviso('Datos del acreedor guardados', 'ok'); pintarSepa(cuerpo); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
+    cuerpo.querySelectorAll('[data-mandato]').forEach(b => b.addEventListener('click', async () => {
+      try { docs.mandato(await tes.prepararMandato(b.dataset.mandato)); pintarSepa(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
+    cuerpo.querySelectorAll('[data-firmada]').forEach(b => b.addEventListener('click', async () => {
+      const s = tes.socios().find(x => x.id === b.dataset.firmada);
+      const ok = await dialogo({ titulo: `Orden firmada · ${tes.nombreCompleto(s)}`, cuerpo: h`<label for="dlg-firma">Fecha de la firma</label><input id="dlg-firma" type="date" max="${hoyISO()}" value="${hoyISO()}">`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Guardar', primario: true }] });
+      const f = document.getElementById('dlg-firma')?.value;
+      if (ok !== 'si' || !f) return;
+      try { await tes.guardarSocio({ ...s, mandato_fecha: f }); aviso('Firma anotada', 'ok'); pintarSepa(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
+    $('#sr-anio', cuerpo).addEventListener('change', (ev) => { fr.anio = Number(ev.target.value); fr.quitados.clear(); pintarSepa(cuerpo); });
+    $('#sr-fecha', cuerpo).addEventListener('change', (ev) => { fr.fecha = ev.target.value; });
+    cuerpo.querySelectorAll('[data-incluir]').forEach(c => c.addEventListener('change', () => { if (c.checked) fr.quitados.delete(c.dataset.incluir); else fr.quitados.add(c.dataset.incluir); pintarSepa(cuerpo); }));
+    $('#sr-generar', cuerpo)?.addEventListener('click', async () => {
+      const fechaCobro = $('#sr-fecha', cuerpo).value;
+      if (!await confirmar('¿Generar la remesa?', `${elegidos.length} cobro(s) por ${euros(total)}, con fecha de cobro ${fecha(fechaCobro)}. Después súbela a la banca online.`, 'Generar')) return;
+      try {
+        const r = await tes.generarRemesa({ anio: fr.anio, fechaCobro, socioIds: elegidos.map(f => f.socio.id), concepto: $('#sr-concepto', cuerpo).value });
+        descargar(r.xml, r.nombre, 'application/xml');
+        aviso(`Remesa generada: ${r.n} cobro(s) por ${euros(r.total)}. Súbela a la banca online.`, 'ok', { ms: 8000 });
+        fr.quitados.clear(); pintarSepa(cuerpo);
+      } catch (e) { aviso(e.message, 'error'); }
+    });
+    cuerpo.querySelectorAll('[data-borrar-remesa]').forEach(b => b.addEventListener('click', async () => {
+      if (!await confirmar('¿Borrar la remesa?', 'Solo si no llegaste a presentarla en el banco.', 'Borrar', true)) return;
+      try { await tes.borrarRemesa(b.dataset.borrarRemesa); pintarSepa(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    }));
   };
 
   // --- Partidas, reglas y cuota --------------------------------------------------

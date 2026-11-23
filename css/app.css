@@ -551,3 +551,6 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .mov-editar { display: block; background: var(--fondo-2, transparent); }
 .tabla-resumen td.num, .tabla-resumen th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pestanas { display: flex; flex-wrap: wrap; gap: .35rem; flex: 1 1 100%; }
+.doc-mandato th { width: 42%; font-weight: 600; font-size: .85em; vertical-align: top; }
+.doc-hueco { display: inline-block; min-width: 12em; border-bottom: 1px solid #94a3b8; }
+.doc-legal { font-size: .78rem; text-align: justify; }

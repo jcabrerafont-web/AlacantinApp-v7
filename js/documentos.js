@@ -323,3 +323,40 @@ export function cuentas(c) {
   imprimir(plantillaCuentas(c));
   window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
 }
+
+// ---------------------------------------------------------------------------
+// Orden de domiciliación de adeudo directo SEPA (mandato), con los datos del Club
+// y del socio ya puestos, para que la firme. El texto es el que fija el esquema SEPA.
+// ---------------------------------------------------------------------------
+export function plantillaMandato({ socio, acreedor }) {
+  const linea = (et, v) => h`<tr><th>${et}</th><td>${v || h`<span class="doc-hueco">&nbsp;</span>`}</td></tr>`;
+  const iban = String(socio.iban || '').replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+  return h`
+    ${cabecera('Orden de domiciliación de adeudo directo SEPA', socio.mandato_ref || '', 'SEPA Direct Debit Mandate')}
+    <table class="doc-mandato"><tbody>
+      ${linea('Referencia de la orden / Mandate reference', socio.mandato_ref)}
+      ${linea('Identificador del acreedor / Creditor Identifier', acreedor.id)}
+      ${linea('Nombre del acreedor / Creditor’s name', acreedor.nombre)}
+      ${linea('Dirección / Address', acreedor.direccion)}
+      ${linea('Código postal - Población - Provincia', acreedor.poblacion)}
+      ${linea('País / Country', 'España')}
+    </tbody></table>
+    <p class="doc-legal">Mediante la firma de esta orden de domiciliación, el deudor autoriza (A) al acreedor a enviar instrucciones a la entidad del deudor para adeudar su cuenta y (B) a la entidad para efectuar los adeudos en su cuenta siguiendo las instrucciones del acreedor. Como parte de sus derechos, el deudor está legitimado al reembolso por su entidad en los términos y condiciones del contrato suscrito con la misma. La solicitud de reembolso deberá efectuarse dentro de las ocho semanas que siguen a la fecha de adeudo en cuenta. Puede obtener información adicional sobre sus derechos en su entidad financiera.</p>
+    <p class="doc-legal"><em>By signing this mandate form, you authorise (A) the Creditor to send instructions to your bank to debit your account and (B) your bank to debit your account in accordance with the instructions from the Creditor. As part of your rights, you are entitled to a refund from your bank under the terms and conditions of your agreement with your bank. A refund must be claimed within eight weeks starting from the date on which your account was debited. Your rights are explained in a statement that you can obtain from your bank.</em></p>
+    <table class="doc-mandato"><tbody>
+      ${linea('Nombre del deudor (titular de la cuenta) / Debtor', [socio.nombre, socio.apellidos].filter(Boolean).join(' '))}
+      ${linea('Dirección del deudor / Address', socio.direccion)}
+      ${linea('Código postal - Población - Provincia', [socio.cp, socio.municipio, socio.provincia].filter(Boolean).join(' '))}
+      ${linea('País del deudor / Country', 'España')}
+      ${linea('Swift BIC (8 u 11 posiciones)', socio.bic)}
+      ${linea('Número de cuenta - IBAN / Account number', iban)}
+      ${linea('Tipo de pago / Type of payment', 'Pago recurrente / Recurrent payment (cuota anual del Club)')}
+      ${linea('Fecha - Localidad / Date - location', '')}
+    </tbody></table>
+    <div class="doc-firmas"><div>Firma del deudor / Signature of the debtor</div><div></div></div>
+    <p class="doc-pie">Todos los campos han de ser cumplimentados obligatoriamente. Una vez firmada, esta orden de domiciliación debe ser enviada al acreedor para su custodia. / All gaps are mandatory. Once this mandate has been signed must be sent to creditor for storage.</p>`;
+}
+export function mandato(d) {
+  imprimir(plantillaMandato(d));
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}

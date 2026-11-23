@@ -573,6 +573,42 @@ await ir('#/tesoreria');
   const [dcc] = await Promise.all([page.waitForEvent('download'), page.click('#cc-csv')]);
   ok(dcc.suggestedFilename() === 'CGA_cuentas_2026.csv', 'Cuentas: CSV del ejercicio');
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/cuentas.png`, fullPage: true });
+  // Fase 5: SEPA. Ana pasa a tener una cuota especial de 40 €: le faltan 15 € de 2026
+  await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.nombre === 'Ana'); await t.guardarSocio({ ...s, cuota_especial: '40' }); });
+  await page.click('[data-pestana=sepa]'); await page.waitForSelector('#se-acreedor');
+  ok((await page.innerText('#se-id')) === 'ES98000G21807508', 'SEPA: identificador de acreedor calculado del NIF del Club (ES98000G21807508)');
+  ok(await page.evaluate(async () => { const s = await import('./js/tesoreria/sepa.js'); return s.idAcreedorValido('ES98000G21807508') && !s.idAcreedorValido('ES97000G21807508') && s.idAcreedor('B12345678') === 'ES97000B12345678'; }), 'SEPA: dígitos de control del identificador (módulo 97)');
+  ok((await page.innerText('#se-remesa')).includes('No se puede: falta orden de domiciliación') && await page.$eval('#se-remesa input[type=checkbox]', c => c.disabled), 'Remesa: sin orden firmada no se puede cobrar');
+  { const ana = await page.evaluate(async () => (await import('./js/tesoreria.js')).socios().find(x => x.nombre === 'Ana').id);
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.click(`[data-mandato="${ana}"]`); await page.waitForTimeout(300);
+    const imp = await page.$eval('#impresion', e => e.textContent);
+    ok(imp.includes('Orden de domiciliación de adeudo directo SEPA') && imp.includes('ES98000G21807508') && imp.includes('Ana Prueba Uno') && imp.includes('ES91 2100 0418 4502 0005 1332') && imp.includes('CGA-1') && imp.includes('ocho semanas'),
+      'Mandato: orden para firmar con los datos del Club y del socio y su referencia (CGA-1)');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await page.waitForSelector(`[data-firmada="${ana}"]`);
+    await page.click(`[data-firmada="${ana}"]`); await page.click('dialog.dialogo button[value="si"]'); await page.waitForTimeout(400); }
+  ok(await page.$eval('#se-remesa input[type=checkbox]', c => !c.disabled && c.checked) && (await page.innerText('#se-remesa')).includes('1 cobro(s) · 15,00 €'), 'Remesa: con la orden firmada, Ana entra por los 15 € que le faltan');
+  const [rx] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('#sr-generar'); await page.click('dialog.dialogo button[value="si"]'); })()]);
+  const xml = fs.readFileSync(await rx.path(), 'utf8');
+  const xv = await page.evaluate((x) => { const d = new DOMParser().parseFromString(x, 'application/xml'); const q = (s) => d.getElementsByTagName(s)[0]?.textContent;
+    return { error: Boolean(d.getElementsByTagName('parsererror').length), ns: d.documentElement.namespaceURI, n: q('NbOfTxs'), suma: q('CtrlSum'), mandato: q('MndtId'), firma: q('DtOfSgntr'), seq: q('SeqTp'), lcl: q('LclInstrm'), iban: [...d.getElementsByTagName('IBAN')].map(e => e.textContent), id: q('CdtrSchmeId'), nombre: d.getElementsByTagName('Dbtr')[0]?.textContent }; }, xml);
+  ok(rx.suggestedFilename().startsWith('remesa_CGA-') && !xv.error && xv.ns === 'urn:iso:std:iso:20022:tech:xsd:pain.008.001.02' && xv.n === '1' && xv.suma === '15.00' && xv.mandato === 'CGA-1' && /^\d{4}-\d{2}-\d{2}$/.test(xv.firma)
+    && xv.seq === 'RCUR' && xv.lcl === 'CORE' && xv.iban.includes('ES9121000418450200051332') && xv.id.includes('ES98000G21807508') && xv.nombre === 'Ana Prueba Uno',
+    `Remesa: fichero SEPA pain.008.001.02 válido (1 cobro de 15,00 €, mandato CGA-1, RCUR, CORE) (${JSON.stringify(xv)})`);
+  ok((await page.innerText('#se-emitidas')).includes('Pendiente de ver en el banco'), 'Remesa: queda pendiente de ver en el banco');
+  // El banco abona la remesa (15 €, un día después): al importarlo se reparte como cuota de Ana
+  const tras = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const r = t.remesas()[0];
+    const serie = (iso) => (Date.parse(`${iso}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000 + 1 + 1 / 12;
+    const hojas = [{ nombre: 'movimientos', filas: [['Nombre', 'X'], ['IBAN', 'ES91 2100 0418 4502 0005 1332'], [], ['Fecha de la operación', 'Fecha valor', 'Tipo movimiento', 'Importe', 'Saldo', 'Nro. Apunte'],
+      [serie(r.fecha_cobro), serie(r.fecha_cobro), 'abono remesa adeudos', 15, 1030, 17]] }];
+    const res = await t.importarMovimientos(hojas);
+    const ana = t.cuotasAnio(2026).filas.find(f => f.socio.nombre === 'Ana');
+    return { nuevos: res.nuevos, estado: ana.estado, pagado: ana.pagado, cobrada: Boolean(t.abonoDeRemesa(r.id)), pagos: t.movimientosDeSocio(ana.socio.id).length }; });
+  ok(tras.nuevos === 1 && tras.estado === 'pagado' && tras.pagado === 40 && tras.cobrada && tras.pagos === 3, `Remesa: el abono del banco se reparte y la cuota de Ana queda pagada (${JSON.stringify(tras)})`);
+  await page.click('[data-pestana=cuotas]'); await page.click('[data-pestana=sepa]'); await page.waitForSelector('#se-emitidas');
+  ok((await page.innerText('#se-emitidas')).includes('Cobrada'), 'Remesa: marcada como cobrada');
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/sepa.png`, fullPage: true });
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }

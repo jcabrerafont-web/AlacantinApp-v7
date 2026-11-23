@@ -13,11 +13,13 @@ import { obtenerCliente } from './auth.js';
 import { uuid, hoyISO } from './ui.js';
 import * as cripto from './tesoreria/cripto.js';
 import { fechaExcel } from './tesoreria/xlsx.js';
+import * as sepa from './tesoreria/sepa.js';
+import { CONFIG } from './config.js';
 
 export const FORMATO_COPIA = 'alacantinapp-tesoreria';
 const MINUTOS_CIERRE = 15;
 
-const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], config: null, temporizador: null };
+const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], config: null, temporizador: null };
 const oyentes = new Set();
 export const alCambiar = (fn) => { oyentes.add(fn); return () => oyentes.delete(fn); };
 const avisar = () => oyentes.forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
@@ -60,7 +62,7 @@ export const actividad = () => vigilar();
 
 export function cerrar() {
   const estaba = Boolean(t.clave);
-  t.clave = null; t.socios = []; t.movimientos = []; t.partidas = []; t.reglas = []; t.config = null;
+  t.clave = null; t.socios = []; t.movimientos = []; t.partidas = []; t.reglas = []; t.remesas = []; t.config = null;
   clearTimeout(t.temporizador);
   if (estaba) avisar();
 }
@@ -110,13 +112,13 @@ export async function cambiarContrasena(actual, nueva, repetida) {
 export async function recargar() {
   if (!t.clave) return;
   const filas = await db.todos('tesoreria');
-  const por = { socio: [], movimiento: [], partida: [], regla: [], config: [] };
+  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], config: [] };
   for (const f of filas) {
     if (!por[f.tipo]) continue;
     try { por[f.tipo].push({ ...(await cripto.descifrar(t.clave, f.id, f.datos)), id: f.id, _actualizado: f.updated_at }); }
     catch { console.warn('[tesorería] registro ilegible', f.id); }
   }
-  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla;
+  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa;
   t.config = por.config.sort((a, b) => String(b._actualizado).localeCompare(String(a._actualizado)))[0] || null;
   vigilar();
   avisar();
@@ -149,6 +151,7 @@ export const CAMPOS_SOCIO = [
   ['iban', 'IBAN (cuenta)', ['iban', 'cuenta', 'ccc', 'cuenta bancaria']],
   ['mandato_ref', 'Referencia del mandato SEPA', ['mandato', 'referencia mandato', 'ref mandato']],
   ['mandato_fecha', 'Fecha de firma del mandato', ['fecha mandato', 'firma mandato']],
+  ['bic', 'BIC del banco del socio (opcional)', ['bic', 'swift']],
   ['cuota_especial', 'Cuota especial (€; 0 si está exento)', ['cuota especial', 'exento']],
   ['notas', 'Notas', ['notas', 'observaciones', 'comentarios']]
 ];
@@ -186,6 +189,7 @@ function limpiarSocio(s) {
   if (r.iban) r.iban = formatearIban(r.iban);
   if (r.cuota_especial !== null) { const c = Number(String(r.cuota_especial).replace(',', '.')); r.cuota_especial = Number.isFinite(c) && c >= 0 ? Math.round(c * 100) / 100 : r.cuota_especial; }
   if (r.dni) r.dni = String(r.dni).replace(/[\s.-]+/g, '').toUpperCase();
+  if (r.bic) r.bic = String(r.bic).replace(/\s+/g, '').toUpperCase();
   if (r.email) r.email = r.email.toLowerCase();
   r.perfil_id = s.perfil_id || null;
   return r;
@@ -197,6 +201,8 @@ export function validarSocio(s, { id = null } = {}) {
   if (s.numero && t.socios.some(x => x.id !== id && String(x.numero) === String(s.numero))) e.push(`El número de socio ${s.numero} ya lo tiene otra persona.`);
   if (s.iban && !ibanValido(s.iban)) e.push('El IBAN no es válido (revisa los dígitos).');
   if (s.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.email)) e.push('El correo no parece válido.');
+  if (s.bic && !sepa.bicValido(s.bic)) e.push('El BIC no es válido (8 u 11 letras y números).');
+  if (s.mandato_ref && t.socios.some(x => x.id !== id && x.mandato_ref && x.mandato_ref === s.mandato_ref)) e.push('Esa referencia de mandato ya la tiene otro socio.');
   for (const k of CAMPOS_FECHA) if (s[k] && !/^\d{4}-\d{2}-\d{2}$/.test(s[k])) e.push(`La ${CAMPOS_SOCIO.find(c => c[0] === k)[1].toLowerCase()} no es una fecha válida.`);
   if (s.fecha_alta && s.fecha_baja && s.fecha_baja < s.fecha_alta) e.push('La fecha de baja es anterior a la de alta.');
   if (s.cuota_especial !== null && s.cuota_especial !== undefined && !(typeof s.cuota_especial === 'number' && s.cuota_especial >= 0)) e.push('La cuota especial debe ser un importe (0 si está exento).');
@@ -322,7 +328,7 @@ export async function restaurarCopia(copia, contrasena) {
 const quitarInternos = ({ id, _actualizado, ...resto }) => resto;
 async function guardarRegistro(tipo, obj) {
   const id = obj.id || uuid();
-  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...(t.config ? [t.config] : [])].find(x => x.id === id);
+  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...(t.config ? [t.config] : [])].find(x => x.id === id);
   await guardarCifrado(tipo, id, quitarInternos({ ...obj, creado: previo?.creado || obj.creado || new Date().toISOString() }));
   return id;
 }
@@ -429,6 +435,9 @@ export function clasificar(m) {
   const socio = m.importe > 0 ? socioDelConcepto(m.concepto) : null;
   let partida = regla?.partida || null;
   const cuotas = partidaCuotas();
+  // Abono de una remesa SEPA del Club: mismo importe y fecha cercana a la de cobro
+  const remesa = m.importe > 0 ? remesaDelAbono(m) : null;
+  if (remesa && cuotas) return { partida: cuotas.id, socio_id: null, anio: remesa.anio, remesa_id: remesa.id };
   if (!partida && socio && cuotas && Math.abs(m.importe - configuracion().cuota) < 0.005) partida = cuotas.id;
   return { partida, socio_id: socio?.id || null, anio: partida && partida === cuotas?.id ? Number(String(m.fecha).slice(0, 4)) : null };
 }
@@ -439,8 +448,8 @@ export async function aplicarReglas() {
   for (const m of t.movimientos) {
     if (m.manual) continue;
     const c = clasificar(m);
-    const nuevo = { partida: m.partida || c.partida, socio_id: m.socio_id || c.socio_id, anio: m.anio || c.anio };
-    if (nuevo.partida !== m.partida || nuevo.socio_id !== m.socio_id || nuevo.anio !== m.anio) {
+    const nuevo = { partida: m.partida || c.partida, socio_id: m.socio_id || c.socio_id, anio: m.anio || c.anio, remesa_id: m.remesa_id || c.remesa_id || null };
+    if (nuevo.partida !== m.partida || nuevo.socio_id !== m.socio_id || nuevo.anio !== m.anio || nuevo.remesa_id !== (m.remesa_id || null)) {
       await guardarRegistro('movimiento', { ...quitarInternos(m), ...nuevo, id: m.id }); cambiados++;
     }
   }
@@ -533,7 +542,9 @@ export async function guardarMovimiento(m) {
   const anio = m.anio ? Number(m.anio) : null;
   if (anio !== null && (!Number.isInteger(anio) || anio < 2000 || anio > 2100)) throw new Error('El año de la cuota no es válido.');
   const base = previo ? quitarInternos(previo) : { fecha: m.fecha, fecha_valor: null, concepto: String(m.concepto).trim(), importe, saldo: null, apunte: null, origen: 'manual' };
-  await guardarRegistro('movimiento', { ...base, partida: m.partida || null, socio_id: m.socio_id || null, anio, nota: String(m.nota || '').trim() || null, manual: true, id: previo?.id });
+  const remesa_id = m.remesa_id !== undefined ? (m.remesa_id || null) : (previo?.remesa_id || null);
+  if (remesa_id && !t.remesas.some(r => r.id === remesa_id)) throw new Error('Remesa desconocida.');
+  await guardarRegistro('movimiento', { ...base, partida: m.partida || null, socio_id: remesa_id ? null : (m.socio_id || null), anio, remesa_id, nota: String(m.nota || '').trim() || null, manual: true, id: previo?.id });
   await recargar();
 }
 export async function borrarMovimiento(id) {
@@ -574,7 +585,7 @@ export function resumen(anio) {
     gastos: del.filter(m => m.importe < 0).reduce((s, m) => s - m.importe, 0), n: del.length };
 }
 
-export const movimientosDeSocio = (id) => t.movimientos.filter(m => m.socio_id === id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+export const movimientosDeSocio = (id) => pagosDeCuotas().filter(m => m.socio_id === id).sort((a, b) => b.fecha.localeCompare(a.fecha));
 
 // ===========================================================================
 // Fase 3: cuotas por año
@@ -587,7 +598,7 @@ export function cuotasAnio(anio) {
   exigirAbierta();
   vigilar();
   const pc = partidaCuotas();
-  const pagos = t.movimientos.filter(m => pc && m.partida === pc.id && Number(m.anio) === Number(anio) && m.socio_id);
+  const pagos = pagosDeCuotas().filter(m => pc && m.partida === pc.id && Number(m.anio) === Number(anio) && m.socio_id);
   const filas = socios().filter(s => socioEnAnio(s, anio)).map(s => {
     const suyos = pagos.filter(m => m.socio_id === s.id);
     const pagado = Math.round(suyos.reduce((x, m) => x + m.importe, 0) * 100) / 100;
@@ -673,4 +684,109 @@ export function cuentasAnio(anio) {
     huecos: comprobarSaldos().filter(x => x.hasta.fecha.startsWith(String(a)) || x.desde.fecha.startsWith(String(a))),
     cuenta: configuracion().cuenta
   };
+}
+
+// ===========================================================================
+// Fase 5: SEPA (adeudos directos): acreedor, mandatos y remesas
+// ===========================================================================
+// Un abono de remesa del banco se reparte entre los socios de la remesa, para que
+// cada uno cuente como pagado (las devoluciones se anotan al socio en negativo)
+export function pagosDeCuotas() {
+  const lista = [];
+  for (const m of t.movimientos) {
+    const r = m.remesa_id ? t.remesas.find(x => x.id === m.remesa_id) : null;
+    if (!r) { lista.push(m); continue; }
+    for (const d of r.detalle) lista.push({ ...m, id: `${m.id}:${d.socio_id}`, socio_id: d.socio_id, importe: d.importe, concepto: `Remesa SEPA ${dma(r.fecha_cobro)}`, remesa: true });
+  }
+  return lista;
+}
+
+export function acreedor() {
+  const c = configuracion();
+  const a = { nif: CONFIG.club.nif, sufijo: '000', nombre: CONFIG.club.nombre, direccion: '', poblacion: '', bic: '', ...(c.acreedor || {}) };
+  if (!a.direccion && !a.poblacion && CONFIG.club.domicilio) {
+    const m = CONFIG.club.domicilio.match(/^(.*?),\s*(\d{5}\s.*)$/);
+    if (m) { a.direccion = m[1]; a.poblacion = m[2]; }
+  }
+  let id = null;
+  try { id = sepa.idAcreedor(a.nif, a.sufijo); } catch { id = null; }
+  return { ...a, id, cuenta: c.cuenta };
+}
+export async function guardarAcreedor(a) {
+  exigirAbierta();
+  const datos = { nif: String(a.nif || '').replace(/[\s-]/g, '').toUpperCase(), sufijo: String(a.sufijo || '000').toUpperCase(), nombre: String(a.nombre || '').trim(),
+    direccion: String(a.direccion || '').trim(), poblacion: String(a.poblacion || '').trim(), bic: String(a.bic || '').replace(/\s+/g, '').toUpperCase() };
+  sepa.idAcreedor(datos.nif, datos.sufijo); // valida
+  if (!datos.nombre) throw new Error('Escribe el nombre del acreedor (el Club).');
+  if (datos.bic && !sepa.bicValido(datos.bic)) throw new Error('El BIC del Club no es válido.');
+  await guardarConfiguracion({ acreedor: datos });
+}
+
+// Mandato completo: IBAN válido, referencia y fecha de firma
+export function estadoMandato(s) {
+  if (!s.iban || !ibanValido(s.iban)) return { ok: false, falta: 'IBAN' };
+  if (!s.mandato_ref) return { ok: false, falta: 'orden de domiciliación' };
+  if (!s.mandato_fecha) return { ok: false, falta: 'fecha de firma' };
+  return { ok: true };
+}
+export function referenciaMandato(s) {
+  const base = `CGA-${String(s.numero || '').replace(/\W/g, '') || String(s.id).slice(0, 8).toUpperCase()}`;
+  let ref = base, n = 2;
+  while (t.socios.some(x => x.id !== s.id && x.mandato_ref === ref)) ref = `${base}-${n++}`;
+  return ref;
+}
+// Prepara la orden de domiciliación para firmar: le pone referencia si no tiene
+export async function prepararMandato(socioId) {
+  exigirAbierta();
+  const s = t.socios.find(x => x.id === socioId);
+  if (!s) throw new Error('Socio no encontrado.');
+  if (!s.mandato_ref) await guardarSocio({ ...s, mandato_ref: referenciaMandato(s) });
+  return { socio: t.socios.find(x => x.id === socioId), acreedor: acreedor() };
+}
+
+// Fecha de cobro: al menos el siguiente día hábil (plazo D-1 de los adeudos SEPA Core)
+export function fechaCobroMinima(dia = new Date()) {
+  const d = new Date(dia); d.setHours(12, 0, 0, 0);
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+
+// Socios a los que se puede cobrar la cuota del año por remesa
+export function candidatosRemesa(anio) {
+  const c = cuotasAnio(anio);
+  return c.filas.filter(f => (f.estado === 'pendiente' || f.estado === 'parcial')).map(f => ({ ...f, mandato: estadoMandato(f.socio) }));
+}
+
+export async function generarRemesa({ anio, fechaCobro, socioIds, concepto }) {
+  exigirAbierta();
+  const a = acreedor();
+  if (!a.id) throw new Error('Falta el identificador de acreedor del Club (pestaña SEPA).');
+  if (!a.cuenta) throw new Error('Falta la cuenta del Club: importa antes un Excel del banco.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaCobro || '')) || fechaCobro < fechaCobroMinima()) throw new Error(`La fecha de cobro debe ser como pronto el ${dma(fechaCobroMinima())} (día hábil siguiente).`);
+  const cand = candidatosRemesa(anio).filter(f => socioIds.includes(f.socio.id));
+  const sinMandato = cand.filter(f => !f.mandato.ok);
+  if (sinMandato.length) throw new Error(`Sin mandato completo: ${sinMandato.map(f => `${nombreCompleto(f.socio)} (falta ${f.mandato.falta})`).join(', ')}.`);
+  if (!cand.length) throw new Error('Elige al menos un socio con la cuota pendiente.');
+  const ahora = new Date();
+  const msgId = `CGA-${String(ahora.getFullYear())}${String(ahora.getMonth() + 1).padStart(2, '0')}${String(ahora.getDate()).padStart(2, '0')}-${String(ahora.getTime()).slice(-6)}`;
+  const texto = String(concepto || `Cuota ${anio} ${CONFIG.club.nombre}`).trim();
+  const cobros = cand.map(f => ({ endToEnd: `${msgId.slice(4)}-${String(f.socio.numero || f.socio.id.slice(0, 4))}`.slice(0, 35), importe: f.falta, mandato: f.socio.mandato_ref,
+    fechaFirma: f.socio.mandato_fecha, secuencia: 'RCUR' /* cuota anual: pago recurrente (desde 2016 no hace falta FRST) */, nombre: nombreCompleto(f.socio), iban: f.socio.iban, bic: f.socio.bic, concepto: texto }));
+  const xml = sepa.remesaXml({ msgId, creado: ahora, fechaCobro, acreedor: { id: a.id, nombre: a.nombre, iban: a.cuenta, bic: a.bic, direccion: a.direccion, poblacion: a.poblacion }, cobros });
+  const total = Math.round(cobros.reduce((x, c) => x + c.importe, 0) * 100) / 100;
+  const id = await guardarRegistro('remesa', { msg_id: msgId, anio: Number(anio), fecha_cobro: fechaCobro, concepto: texto, total,
+    detalle: cand.map(f => ({ socio_id: f.socio.id, importe: f.falta, mandato: f.socio.mandato_ref })) });
+  await recargar();
+  return { xml, nombre: `remesa_${msgId}.xml`, total, n: cobros.length, id };
+}
+export const remesas = () => { exigirAbierta(); return [...t.remesas].sort((a, b) => b.fecha_cobro.localeCompare(a.fecha_cobro)); };
+export const abonoDeRemesa = (id) => t.movimientos.find(m => m.remesa_id === id) || null;
+export async function borrarRemesa(id) {
+  exigirAbierta();
+  if (abonoDeRemesa(id)) throw new Error('Esta remesa ya está cobrada en el banco: no se puede borrar.');
+  await borrarRegistro(id); await recargar();
+}
+function remesaDelAbono(m) {
+  const dias = (a, b) => Math.abs((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000);
+  return t.remesas.find(r => !t.movimientos.some(x => x.remesa_id === r.id && x.id !== m.id) && Math.abs(r.total - m.importe) < 0.005 && dias(r.fecha_cobro, m.fecha) <= 10) || null;
 }
