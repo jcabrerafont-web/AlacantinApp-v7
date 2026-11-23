@@ -19,7 +19,7 @@ import { CONFIG } from './config.js';
 export const FORMATO_COPIA = 'alacantinapp-tesoreria';
 const MINUTOS_CIERRE = 15;
 
-const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], presupuestos: [], config: null, temporizador: null };
+const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], presupuestos: [], bienes: [], arqueos: [], config: null, temporizador: null };
 const oyentes = new Set();
 export const alCambiar = (fn) => { oyentes.add(fn); return () => oyentes.delete(fn); };
 const avisar = () => oyentes.forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
@@ -116,13 +116,13 @@ export async function cambiarContrasena(actual, nueva, repetida) {
 export async function recargar() {
   if (!t.clave) return;
   const filas = await db.todos('tesoreria');
-  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], presupuesto: [], config: [] };
+  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], presupuesto: [], bien: [], arqueo: [], config: [] };
   for (const f of filas) {
     if (!por[f.tipo]) continue;
     try { por[f.tipo].push({ ...(await cripto.descifrar(t.clave, f.id, f.datos)), id: f.id, _actualizado: f.updated_at }); }
     catch { console.warn('[tesorería] registro ilegible', f.id); }
   }
-  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa; t.presupuestos = por.presupuesto;
+  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa; t.presupuestos = por.presupuesto; t.bienes = por.bien; t.arqueos = por.arqueo;
   t.config = por.config.sort((a, b) => String(b._actualizado).localeCompare(String(a._actualizado)))[0] || null;
   vigilar();
   avisar();
@@ -335,7 +335,7 @@ export async function restaurarCopia(copia, contrasena) {
 const quitarInternos = ({ id, _actualizado, ...resto }) => resto;
 async function guardarRegistro(tipo, obj) {
   const id = obj.id || uuid();
-  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...t.presupuestos, ...(t.config ? [t.config] : [])].find(x => x.id === id);
+  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...t.presupuestos, ...t.bienes, ...t.arqueos, ...(t.config ? [t.config] : [])].find(x => x.id === id);
   await guardarCifrado(tipo, id, quitarInternos({ ...obj, creado: previo?.creado || obj.creado || new Date().toISOString() }));
   return id;
 }
@@ -367,8 +367,11 @@ export const PARTIDAS_INICIALES = [
   ['Subvenciones y donativos', 'ingreso', ['subvencion', 'donativo', 'donacion']],
   ['Otros', 'ambos', []]
 ];
-export const partidas = () => { exigirAbierta(); return [...t.partidas].sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99) || a.nombre.localeCompare(b.nombre, 'es')); };
+export const partidas = ({ conTraspasos = true } = {}) => { exigirAbierta(); return [...t.partidas].filter(p => conTraspasos || !p.traspaso).sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99) || a.nombre.localeCompare(b.nombre, 'es')); };
 export const partidaCuotas = () => t.partidas.find(p => p.cuotas) || null;
+export const partidaTraspaso = () => t.partidas.find(p => p.traspaso) || null;
+// Los traspasos entre la caja y el banco no son ingresos ni gastos del Club
+const esTraspaso = (m) => Boolean(m.partida && t.partidas.find(p => p.id === m.partida)?.traspaso);
 export const nombrePartida = (id) => t.partidas.find(p => p.id === id)?.nombre || null;
 
 export async function asegurarPartidas() {
@@ -396,6 +399,7 @@ export async function guardarPartida(p) {
 export async function borrarPartida(id, { moverA } = {}) {
   exigirAbierta();
   if (t.partidas.find(p => p.id === id)?.cuotas) throw new Error('La partida de cuotas no se puede borrar.');
+  if (t.partidas.find(p => p.id === id)?.traspaso) throw new Error('La partida de traspasos entre caja y banco no se puede borrar.');
   const suyos = t.movimientos.filter(m => m.partida === id);
   if (suyos.length && moverA === undefined) throw new Error(`No se puede borrar: tiene ${suyos.length} movimiento(s). Indica a qué partida pasan.`);
   if (moverA && (moverA === id || !t.partidas.some(p => p.id === moverA))) throw new Error('Elige otra partida para sus movimientos.');
@@ -756,8 +760,8 @@ export function saldoBanco() {
 
 export function resumen(anio) {
   exigirAbierta();
-  const del = movimientos({ anio });
-  const filas = partidas().map(p => {
+  const del = movimientos({ anio }).filter(m => !esTraspaso(m));
+  const filas = partidas({ conTraspasos: false }).map(p => {
     const ms = del.filter(m => m.partida === p.id);
     return { partida: p, ingresos: ms.filter(m => m.importe > 0).reduce((s, m) => s + m.importe, 0), gastos: ms.filter(m => m.importe < 0).reduce((s, m) => s - m.importe, 0), n: ms.length };
   }).filter(f => f.n);
@@ -842,19 +846,21 @@ export function cuentasAnio(anio) {
   exigirAbierta();
   const a = Number(anio);
   const porPartida = (y) => {
-    const del = t.movimientos.filter(m => m.fecha.startsWith(String(y)));
+    const todos = t.movimientos.filter(m => m.fecha.startsWith(String(y)));
+    const del = todos.filter(m => !esTraspaso(m));
     const fila = (p) => { const ms = del.filter(m => m.partida === p); return { ingresos: r2(ms.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ms.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)) }; };
-    return { del, fila };
+    return { del, todos, fila };
   };
   const act = porPartida(a), ant = porPartida(a - 1);
   const pres = presupuesto(a);
-  const filas = partidas().map(p => ({ partida: p, ...act.fila(p.id), anterior: ant.fila(p.id), previsto: pres?.lineas?.[p.id] || null }));
+  const filas = partidas({ conTraspasos: false }).map(p => ({ partida: p, ...act.fila(p.id), anterior: ant.fila(p.id), previsto: pres?.lineas?.[p.id] || null }));
   const sin = { ingresos: r2(act.del.filter(m => !m.partida && m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(act.del.filter(m => !m.partida && m.importe < 0).reduce((x, m) => x - m.importe, 0)) };
   const tot = (lista, k) => r2(lista.reduce((x, f) => x + f[k], 0));
   const ingresos = r2(tot(filas, 'ingresos') + sin.ingresos), gastos = r2(tot(filas, 'gastos') + sin.gastos);
   const banco = saldosBanco(a);
-  const netoBanco = r2(act.del.filter(m => m.origen === 'banco').reduce((x, m) => x + m.importe, 0));
+  const netoBanco = r2(act.todos.filter(m => m.origen === 'banco').reduce((x, m) => x + m.importe, 0));
   const efectivo = act.del.filter(m => m.origen !== 'banco');
+  const caja = estadoCaja(`${a}-12-31`);
   const cuotas = cuotasAnio(a);
   return {
     anio: a, filas: filas.filter(f => f.ingresos || f.gastos || f.anterior.ingresos || f.anterior.gastos || f.previsto), sinClasificar: sin,
@@ -863,6 +869,8 @@ export function cuentasAnio(anio) {
     anterior: { ingresos: r2(ant.del.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ant.del.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)), n: ant.del.length },
     banco: { ...banco, neto: netoBanco, cuadra: banco.inicial === null || banco.final === null ? null : Math.abs(r2(banco.inicial + netoBanco) - banco.final) < 0.005 },
     efectivo: { n: efectivo.length, neto: r2(efectivo.reduce((x, m) => x + m.importe, 0)) },
+    caja: caja.configurada ? caja.saldo : null,
+    inventario: inventario(`${a}-12-31`).total,
     cuotas: { socios: cuotas.filas.length - cuotas.cuenta.exento, pagadas: cuotas.cuenta.pagado, pendientes: cuotas.cuenta.pendiente + cuotas.cuenta.parcial, recaudado: cuotas.recaudado, pendiente: cuotas.pendiente },
     huecos: comprobarSaldos().filter(x => x.hasta.fecha.startsWith(String(a)) || x.desde.fecha.startsWith(String(a))),
     cuenta: configuracion().cuenta
@@ -1015,13 +1023,13 @@ export async function borrarPresupuesto(anio) {
 export function propuestaPresupuesto(anio) {
   exigirAbierta();
   const r = real(Number(anio) - 1);
-  return Object.fromEntries(t.partidas.map(p => [p.id, r(p.id)]).filter(([, f]) => f.ingresos || f.gastos));
+  return Object.fromEntries(t.partidas.filter(p => !p.traspaso).map(p => [p.id, r(p.id)]).filter(([, f]) => f.ingresos || f.gastos));
 }
 
 export function ejecucion(anio) {
   exigirAbierta();
   const p = presupuesto(anio), r = real(anio), ant = real(Number(anio) - 1);
-  const filas = partidas().map(partida => {
+  const filas = partidas({ conTraspasos: false }).map(partida => {
     const pr = p?.lineas?.[partida.id] || { ingresos: 0, gastos: 0 };
     return { partida, previsto: pr, real: r(partida.id), anterior: ant(partida.id) };
   });
@@ -1080,4 +1088,109 @@ export async function recuperar(codigo, nueva, repetida) {
 export async function diasDesdeCopia() {
   const u = await db.metaGet(`tes-copia:${datos.estado.perfil?.id}`, null);
   return u ? Math.floor((Date.now() - Date.parse(u)) / 86400000) : null;
+}
+
+// ===========================================================================
+// Caja de efectivo: los movimientos que no son del banco. Saldo inicial,
+// traspasos con el banco y arqueos (contar el dinero y compararlo).
+// ===========================================================================
+export const esCaja = (m) => m.origen !== 'banco';
+const REGLAS_TRASPASO = ['ingreso efectivo', 'ingreso en efectivo', 'reintegro', 'retirada efectivo', 'retirada de efectivo'];
+export async function asegurarTraspaso() {
+  exigirAbierta();
+  const ya = partidaTraspaso();
+  if (ya) return ya.id;
+  const id = await guardarRegistro('partida', { nombre: 'Traspasos entre caja y banco', tipo: 'ambos', orden: 98, cuotas: false, traspaso: true });
+  for (const texto of REGLAS_TRASPASO) if (!t.reglas.some(r => r.texto === texto)) await guardarRegistro('regla', { texto, partida: id, signo: '' });
+  await recargar();
+  return id;
+}
+
+// Estado de la caja en una fecha (por defecto, hoy)
+export function estadoCaja(dia = hoyISO()) {
+  const c = configuracion().caja || null;
+  const desde = c?.fecha || '0000-00-00';
+  const movs = t.movimientos.filter(m => esCaja(m) && m.fecha >= desde && m.fecha <= dia).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const saldo = r2((c ? Number(c.inicial) || 0 : 0) + movs.reduce((x, m) => x + m.importe, 0));
+  const arqueos = t.arqueos.filter(a => a.fecha <= dia).sort((a, b) => b.fecha.localeCompare(a.fecha) || String(b.creado).localeCompare(String(a.creado)));
+  const ultimo = arqueos[0] || null;
+  const dias = ultimo ? Math.floor((Date.parse(`${dia}T12:00:00Z`) - Date.parse(`${ultimo.fecha}T12:00:00Z`)) / 86400000) : null;
+  return { configurada: Boolean(c), inicial: c ? Number(c.inicial) || 0 : 0, desde: c?.fecha || null, saldo, movimientos: movs, arqueos, ultimo, diasArqueo: dias };
+}
+export async function guardarCajaInicial({ inicial, fecha }) {
+  exigirAbierta();
+  const n = Math.round(Number(String(inicial).replace(',', '.')) * 100) / 100;
+  if (!Number.isFinite(n) || n < 0) throw new Error('Indica el dinero que había en la caja (0 si no había).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) throw new Error('Indica la fecha.');
+  await guardarConfiguracion({ caja: { inicial: n, fecha } });
+}
+// sentido: 'al_banco' (se ingresa efectivo en el banco) o 'del_banco' (se saca)
+export async function traspasoCaja({ fecha, importe, sentido, nota = '' }) {
+  exigirAbierta();
+  const n = Math.round(Math.abs(Number(String(importe).replace(',', '.'))) * 100) / 100;
+  if (!Number.isFinite(n) || n === 0) throw new Error('Indica el importe.');
+  if (sentido === 'al_banco' && n > estadoCaja(fecha).saldo + 0.005) throw new Error('En la caja no hay tanto dinero.');
+  const partida = await asegurarTraspaso();
+  await guardarMovimiento({ fecha, importe: sentido === 'al_banco' ? -n : n, concepto: sentido === 'al_banco' ? 'Ingreso de efectivo en el banco' : 'Retirada de efectivo del banco', partida, nota });
+}
+export const MONEDAS = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
+// Arqueo: lo contado frente a lo que debería haber. Con «ajustar», la diferencia se
+// anota como movimiento de caja («Diferencia de arqueo», en Otros) para que cuadre.
+export async function arqueoCaja({ fecha = hoyISO(), contado, desglose = null, nota = '', ajustar = false }) {
+  exigirAbierta();
+  const n = Math.round(Number(String(contado).replace(',', '.')) * 100) / 100;
+  if (!Number.isFinite(n) || n < 0) throw new Error('Indica el dinero contado.');
+  if (fecha > hoyISO()) throw new Error('El arqueo no puede ser de una fecha futura.');
+  const teorico = estadoCaja(fecha).saldo;
+  const diferencia = r2(n - teorico);
+  if (ajustar && Math.abs(diferencia) >= 0.005) {
+    const otros = t.partidas.find(p => normalizar(p.nombre) === 'otros');
+    await guardarMovimiento({ fecha, importe: diferencia, concepto: 'Diferencia de arqueo', partida: otros?.id || null, nota: 'Ajuste para que la caja cuadre con lo contado' });
+  }
+  await guardarRegistro('arqueo', { fecha, contado: n, teorico, diferencia, desglose, nota: String(nota).trim() || null, ajustado: Boolean(ajustar && diferencia) });
+  await recargar();
+  return { teorico, diferencia };
+}
+export async function borrarArqueo(id) { exigirAbierta(); await borrarRegistro(id); await recargar(); }
+
+// ===========================================================================
+// Inventario de bienes del Club (LO 1/2002, art. 14: inventario de sus bienes)
+// ===========================================================================
+export const CATEGORIAS_BIEN = ['Jaulas y material de exposición', 'Equipos e informática', 'Mobiliario', 'Libros y documentación', 'Trofeos y premios', 'Material de difusión', 'Otros'];
+export const ESTADOS_BIEN = [['bueno', 'Bueno'], ['regular', 'Regular'], ['malo', 'Malo']];
+export const bienVigente = (b, dia = hoyISO()) => (!b.fecha_alta || b.fecha_alta <= dia) && (!b.fecha_baja || b.fecha_baja > dia);
+export function bienes({ todos = false } = {}) {
+  exigirAbierta();
+  return t.bienes.filter(b => todos || bienVigente(b)).sort((a, b) => (a.numero || 0) - (b.numero || 0));
+}
+export async function guardarBien(b) {
+  exigirAbierta();
+  const nombre = String(b.nombre || '').trim();
+  if (!nombre) throw new Error('Escribe qué es.');
+  const cantidad = Number(b.cantidad || 1);
+  if (!Number.isInteger(cantidad) || cantidad < 1) throw new Error('La cantidad debe ser un número entero (1 o más).');
+  const valor = b.valor === '' || b.valor === null || b.valor === undefined ? null : Math.round(Number(String(b.valor).replace(',', '.')) * 100) / 100;
+  if (valor !== null && (!Number.isFinite(valor) || valor < 0)) throw new Error('El valor no es válido.');
+  const fechaOk = (f) => !f || /^\d{4}-\d{2}-\d{2}$/.test(f);
+  if (!fechaOk(b.fecha_alta) || !fechaOk(b.fecha_baja)) throw new Error('Revisa las fechas.');
+  if (b.fecha_baja && b.fecha_alta && b.fecha_baja < b.fecha_alta) throw new Error('La baja no puede ser anterior al alta.');
+  if (b.fecha_baja && !String(b.motivo_baja || '').trim()) throw new Error('Indica el motivo de la baja (vendido, roto, donado…).');
+  if (b.movimiento_id && !t.movimientos.some(m => m.id === b.movimiento_id)) throw new Error('Movimiento desconocido.');
+  const previo = t.bienes.find(x => x.id === b.id);
+  const numero = previo?.numero || Math.max(0, ...t.bienes.map(x => x.numero || 0)) + 1;
+  const limpio = (v) => String(v ?? '').trim() || null;
+  const id = await guardarRegistro('bien', { numero, nombre, categoria: CATEGORIAS_BIEN.includes(b.categoria) ? b.categoria : 'Otros', cantidad, valor,
+    fecha_alta: b.fecha_alta || null, ubicacion: limpio(b.ubicacion), estado: ESTADOS_BIEN.some(([k]) => k === b.estado) ? b.estado : 'bueno',
+    fecha_baja: b.fecha_baja || null, motivo_baja: b.fecha_baja ? limpio(b.motivo_baja) : null, movimiento_id: b.movimiento_id || null, notas: limpio(b.notas), id: previo?.id });
+  await recargar();
+  return id;
+}
+// Borrar solo si se anotó por error; lo que el Club deja de tener se da de baja
+export async function borrarBien(id) { exigirAbierta(); await borrarRegistro(id); await recargar(); }
+export function inventario(dia = hoyISO()) {
+  const vig = t.bienes.filter(b => bienVigente(b, dia)).sort((a, b) => (a.numero || 0) - (b.numero || 0));
+  const porCategoria = CATEGORIAS_BIEN.map(c => { const bs = vig.filter(b => b.categoria === c); return { categoria: c, n: bs.reduce((x, b) => x + b.cantidad, 0), valor: r2(bs.reduce((x, b) => x + (b.valor || 0), 0)) }; }).filter(x => x.n);
+  const anio = dia.slice(0, 4);
+  const bajas = t.bienes.filter(b => b.fecha_baja && b.fecha_baja.startsWith(anio) && b.fecha_baja <= dia);
+  return { dia, bienes: vig, porCategoria, bajas, total: r2(vig.reduce((x, b) => x + (b.valor || 0), 0)), sinValor: vig.filter(b => b.valor === null).length };
 }

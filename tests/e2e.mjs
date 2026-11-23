@@ -16,7 +16,7 @@ const ok = (cond, txt) => { console.log(`${cond ? '✓' : '✗'} ${txt}`); if (!
 const ir = async (hash) => { await page.evaluate(h => { location.hash = h; }, hash); await page.waitForTimeout(350); };
 const barra = () => page.$$eval('#barra a', as => as.map(a => a.innerText.replace(/\s+/g, ' ').trim()));
 const aviso = () => page.$eval('#aviso', e => e.textContent);
-const GRUPO_TES = { inicio: 'inicio', movimientos: 'dia', cuotas: 'dia', socios: 'socios', importar: 'socios', cuentas: 'informes', presupuesto: 'informes', partidas: 'ajustes', sepa: 'ajustes', seguridad: 'ajustes' };
+const GRUPO_TES = { inicio: 'inicio', movimientos: 'dia', caja: 'dia', inventario: 'informes', cuotas: 'dia', socios: 'socios', importar: 'socios', cuentas: 'informes', presupuesto: 'informes', partidas: 'ajustes', sepa: 'ajustes', seguridad: 'ajustes' };
 const irTes = async (p) => {
   await page.click(`[data-grupo=${GRUPO_TES[p]}]`);
   await page.waitForSelector(`[data-grupo=${GRUPO_TES[p]}][aria-selected=true]`);
@@ -753,6 +753,55 @@ await ir('#/tesoreria');
     ok(eq['Rifa Enero 2026'] === 'Rifa Enero 2026' && eq['Proyecto huevos gordos'] === 'Proyecto huevos gordos', `Hoja del Club: recuerda las equivalencias de la vez anterior (${JSON.stringify(eq)})`); }
   await page.click('#th-importar'); await page.waitForSelector('#te-hoja-tes', { state: 'detached', timeout: 8000 });
   ok((await aviso()).includes('0 movimientos nuevos, 0 completados con la hoja y 5 sin cambios.') && !(await aviso()).includes('por revisar'), `Hoja del Club: importarla otra vez no duplica nada (${await aviso()})`);
+  // Caja de efectivo: saldo inicial, traspaso al banco (no es gasto) y arqueo con ajuste
+  ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).bienes().length)) === 0, 'Inventario: vacío al empezar');
+  await irTes('inicio');
+  ok((await page.innerText('#te-tareas')).includes('Anota los bienes del Club') && (await page.innerText('#te-tareas')).includes('Empieza la caja de efectivo'), 'Inicio: propone empezar la caja y anotar el inventario');
+  await irTes('caja'); await page.waitForSelector('#ca-inicio');
+  await page.fill('#ca-inicial', '100'); await page.fill('#ca-desde', '2026-01-01'); await page.click('#ca-inicio button[type=submit]');
+  await page.waitForSelector('#ca-arqueo');
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const suma = t.movimientos().filter(m => t.esCaja(m) && m.fecha >= '2026-01-01').reduce((x, m) => x + m.importe, 0);
+      return { saldo: t.estadoCaja().saldo, esperado: Math.round((100 + suma) * 100) / 100, n: t.estadoCaja().movimientos.length }; });
+    ok(r.saldo === r.esperado && r.n > 0 && (await page.innerText('#ca-movs')).includes('Rifa en mano'), `Caja: saldo = lo que había + los movimientos a mano desde ese día (${JSON.stringify(r)})`); }
+  const antes = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const r = t.resumen(2026); return { i: r.ingresos, g: r.gastos, s: t.estadoCaja().saldo }; });
+  await page.click('#ca-traspaso-caja summary'); await page.fill('#ct-importe', '30'); await page.click('#ca-traspaso button[type=submit]'); await page.waitForTimeout(500);
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const x = t.resumen(2026); return { i: x.ingresos, g: x.gastos, s: t.estadoCaja().saldo, p: t.partidaTraspaso()?.nombre, regla: t.reglas().some(r => r.texto === 'ingreso efectivo') }; });
+    ok(r.s === Math.round((antes.s - 30) * 100) / 100 && r.i === antes.i && r.g === antes.g && r.p === 'Traspasos entre caja y banco' && r.regla,
+      `Caja: el traspaso al banco baja la caja pero no es gasto del Club (${JSON.stringify({ antes, r })})`); }
+  await page.click('#ca-desglose summary'); await page.fill('#ca-m-50', '2'); await page.fill('#ca-m-0_2', '3');
+  ok((await page.inputValue('#ca-contado')) === '100,60', 'Arqueo: el total se calcula con los billetes y monedas');
+  { const s = await page.evaluate(async () => (await import('./js/tesoreria.js')).estadoCaja().saldo);
+    await page.fill('#ca-contado', String(Math.round((s - 5) * 100) / 100).replace('.', ','));
+    await page.click('#ca-arqueo button[type=submit]'); await page.waitForSelector('dialog[open]');
+    ok((await page.innerText('dialog[open] h2')).includes('Faltan 5,00 €'), 'Arqueo: avisa de lo que falta');
+    await page.click('dialog[open] button[value=ajustar]'); await page.waitForSelector('#ca-arqueos');
+    const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const c = t.estadoCaja(); return { saldo: c.saldo, dif: c.ultimo.diferencia, aj: t.movimientos().some(m => m.concepto === 'Diferencia de arqueo' && m.importe === -5) }; });
+    ok(r.saldo === Math.round((s - 5) * 100) / 100 && r.dif === -5 && r.aj, `Arqueo: anotado y ajustado; la caja queda con lo contado (${JSON.stringify(r)})`); }
+  await irTes('inicio');
+  ok((await page.innerText('.kpis')).includes('En caja') && !(await page.innerText('#te-tareas')).includes('arqueo de la caja'), 'Inicio: saldo de caja y sin tarea de arqueo (recién hecho)');
+  // Inventario de bienes
+  await irTes('inventario'); await page.waitForSelector('#in-nuevo');
+  await page.click('#in-nuevo'); await page.fill('#in-nombre', 'Jaulas de exposición'); await page.selectOption('#in-categoria', 'Jaulas y material de exposición');
+  await page.fill('#in-cantidad', '12'); await page.fill('#in-valor', '360'); await page.fill('#in-ubicacion', 'Almacén del presidente'); await page.click('#in-ficha button[type=submit]');
+  await page.waitForSelector('[data-bien]');
+  ok((await page.innerText('#te-cuerpo')).includes('1 · Jaulas de exposición (×12)') && (await page.innerText('.kpis')).includes('360,00 €'), 'Inventario: alta de un bien con su valor');
+  await irTes('movimientos'); await page.fill('#mf-texto', 'pienso'); await page.waitForTimeout(300); await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);
+  await page.click('[data-editar-mov]'); await page.click('[data-inventario]'); await page.waitForSelector('#in-ficha');
+  ok((await page.inputValue('#in-nombre')) === 'Compra de pienso' && (await page.inputValue('#in-valor')) === '18,4' && (await page.innerText('#in-ficha')).includes('Enlazado con el movimiento'), 'Inventario: se añade desde el gasto, con su importe y enlazado');
+  await page.selectOption('#in-categoria', 'Otros'); await page.click('#in-ficha button[type=submit]'); await page.waitForSelector('[data-bien]');
+  await page.click('[data-categoria="Otros"] [data-bien]'); await page.waitForSelector('#in-ficha');
+  await page.click('#in-ficha details summary'); await page.fill('#in-baja', '2026-11-22'); await page.click('#in-ficha button[type=submit]'); await page.waitForTimeout(300);
+  ok((await aviso()).includes('motivo de la baja'), 'Inventario: la baja pide el motivo');
+  await page.fill('#in-motivo', 'Se gastó'); await page.click('#in-ficha button[type=submit]'); await page.waitForSelector('[data-bien]');
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const d = await import('./js/documentos.js'); const x = t.inventario('2026-11-23');
+      const doc = document.createElement('div'); doc.innerHTML = d.plantillaInventario(x).toString?.() ?? ''; return { n: x.bienes.length, total: x.total, bajas: x.bajas.length, c: t.cuentasAnio(2026).inventario, caja: t.cuentasAnio(2026).caja }; });
+    ok(r.n === 1 && r.total === 360 && r.bajas === 1 && r.c === 360 && typeof r.caja === 'number', `Inventario: lo dado de baja sale del inventario y queda en las bajas del año; las cuentas lo recogen (${JSON.stringify(r)})`); }
+  await irTes('cuentas'); await page.waitForSelector('#cc-anio'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
+  ok((await page.innerText('#cc-doc')).includes('Dinero en caja al acabar el año') && (await page.innerText('#cc-doc')).includes('Bienes del inventario'), 'Cuentas: caja e inventario en el resumen');
+  for (const p of ['caja', 'inventario']) { await irTes(p); await page.click('#ca-desglose summary').catch(() => {});
+    const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: window.innerWidth }));
+    ok(r.sw <= r.w + 1, `Tesorería › ${p}: cabe en el móvil (${JSON.stringify(r)})`);
+    if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-${p}.png`, fullPage: true }); }
   if (process.env.CAPTURAS) { await irTes('movimientos'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
   if (process.env.CAPTURAS) { await irTes('socios'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
 }

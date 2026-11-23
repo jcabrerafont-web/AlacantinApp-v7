@@ -23,7 +23,7 @@ export const CONFIG = Object.freeze({
   // WhatsApp vacío: el criador elige a quién enviarlo.
   soporteEmail: 'clubalacantina@gmail.com',
   soporteWhatsApp: '',   // con prefijo, solo cifras: p. ej. 34600000000
-  version: '7.46.0'
+  version: '7.47.0'
 });
 
 export const supabaseConfigurado = () => Boolean(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

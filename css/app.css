@@ -560,3 +560,8 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .subpestana { background: none; border: 0; border-bottom: 3px solid transparent; padding: .4rem .7rem; font: inherit; font-weight: 600; color: var(--texto-2); cursor: pointer; min-height: 40px; }
 .subpestana.activa { color: var(--azul-t); border-bottom-color: var(--azul-2); }
 .subpestana:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+
+/* Arqueo de caja: billetes y monedas */
+.rejilla-monedas { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .25rem .75rem; margin: .5rem 0; }
+.rejilla-monedas .campo { margin: 0; }
+.rejilla-monedas label { font-size: .85rem; }

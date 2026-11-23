@@ -311,6 +311,8 @@ export function plantillaCuentas(c) {
       <tr><th>Resultado del ejercicio</th><th class="num">${e(c.resultado)}</th></tr>
       <tr><td>Saldo en el banco al acabar${c.banco.hasta && c.banco.hasta < `${c.anio}-12-31` ? ` (a ${fecha(c.banco.hasta)})` : ' el año'}</td><td class="num">${e(c.banco.final)}</td></tr>
       ${c.efectivo.n ? h`<tr><td>Cobros y pagos en efectivo del año (no pasan por el banco)</td><td class="num">${e(c.efectivo.neto)}</td></tr>` : ''}
+      ${c.caja !== null && c.caja !== undefined ? h`<tr><td>Dinero en caja al acabar el año</td><td class="num">${e(c.caja)}</td></tr>` : ''}
+      ${c.inventario ? h`<tr><td>Bienes del inventario (valor de compra)</td><td class="num">${e(c.inventario)}</td></tr>` : ''}
     </tbody></table>
     ${c.banco.cuadra === false || c.huecos.length ? h`<p class="doc-aviso"><strong>Atención:</strong> ${c.huecos.length ? c.huecos.map(x => x.texto).join(' ') : 'el saldo final no coincide con el inicial más los movimientos del banco: falta algún movimiento por importar.'}</p>` : ''}
     ${conPres ? h`<p class="peq">Presupuesto ${c.anio}${c.presupuesto.aprobado ? `, aprobado en asamblea el ${fecha(c.presupuesto.aprobado)}` : ''}: ingresos ${e(c.presupuesto.ingresos)} y gastos ${e(c.presupuesto.gastos)}.</p>` : ''}
@@ -383,6 +385,27 @@ export function plantillaPresupuesto(x) {
 }
 export function presupuestoDoc(x) {
   imprimir(plantillaPresupuesto(x));
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}
+
+// Inventario de bienes del Club a una fecha (LO 1/2002, art. 14), para el libro de la asociación
+export function plantillaInventario(x) {
+  const e = (n) => (n === null || n === undefined ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`);
+  const estado = { bueno: 'Bueno', regular: 'Regular', malo: 'Malo' };
+  const ref = `IN-${x.dia}-${huella(JSON.stringify(x.bienes.map(b => [b.numero, b.cantidad, b.valor])))}`;
+  return h`
+    ${cabecera(`Inventario de bienes a ${fecha(x.dia)}`, ref, `${CONFIG.club.nombre} · Tesorería`)}
+    ${x.bienes.length ? h`<table><thead><tr><th>Nº</th><th>Bien</th><th>Tipo</th><th class="num">Cant.</th><th>Alta</th><th>Ubicación</th><th>Estado</th><th class="num">Valor</th></tr></thead><tbody>
+      ${x.bienes.map(b => h`<tr><td>${b.numero}</td><td>${b.nombre}${b.notas ? h`<br><span class="peq">${b.notas}</span>` : ''}</td><td>${b.categoria}</td><td class="num">${b.cantidad}</td><td>${b.fecha_alta ? fecha(b.fecha_alta) : '—'}</td><td>${b.ubicacion || '—'}</td><td>${estado[b.estado] || b.estado}</td><td class="num">${e(b.valor)}</td></tr>`)}
+      <tr><th colspan="7">Total (valor de compra${x.sinValor ? `; ${x.sinValor} bien(es) sin valor conocido` : ''})</th><th class="num">${e(x.total)}</th></tr></tbody></table>` : h`<p>El Club no tiene bienes anotados a esta fecha.</p>`}
+    ${x.porCategoria.length > 1 ? h`<h2>Por tipo</h2><table><tbody>${x.porCategoria.map(c => h`<tr><td>${c.categoria}</td><td class="num">${c.n}</td><td class="num">${e(c.valor)}</td></tr>`)}</tbody></table>` : ''}
+    ${x.bajas.length ? h`<h2>Bajas en ${x.dia.slice(0, 4)}</h2><table><thead><tr><th>Nº</th><th>Bien</th><th>Fecha</th><th>Motivo</th></tr></thead><tbody>
+      ${x.bajas.map(b => h`<tr><td>${b.numero}</td><td>${b.nombre}</td><td>${fecha(b.fecha_baja)}</td><td>${b.motivo_baja || ''}</td></tr>`)}</tbody></table>` : ''}
+    <div class="doc-firmas"><div>Tesorería</div><div>Visto bueno de la Presidencia</div></div>
+    <p class="doc-pie">Inventario de bienes de la asociación (Ley Orgánica 1/2002, de 22 de marzo, art. 14). Generado por AlacantinApp.</p>`;
+}
+export function inventarioDoc(x) {
+  imprimir(plantillaInventario(x));
   window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
 }
 

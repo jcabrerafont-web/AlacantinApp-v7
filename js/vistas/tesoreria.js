@@ -15,9 +15,9 @@ import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha 
 // Cinco grupos; dentro de cada uno, sus pestañas
 export const GRUPOS = [
   ['inicio', 'Inicio', [['inicio', 'Inicio']]],
-  ['dia', 'Día a día', [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas']]],
+  ['dia', 'Día a día', [['movimientos', 'Movimientos'], ['caja', 'Caja'], ['cuotas', 'Cuotas']]],
   ['socios', 'Socios', [['socios', 'Lista'], ['importar', 'Importar']]],
-  ['informes', 'Informes', [['cuentas', 'Cuentas'], ['presupuesto', 'Presupuesto']]],
+  ['informes', 'Informes', [['cuentas', 'Cuentas'], ['presupuesto', 'Presupuesto'], ['inventario', 'Inventario']]],
   ['ajustes', 'Ajustes', [['partidas', 'Partidas'], ['sepa', 'SEPA'], ['seguridad', 'Seguridad']]]
 ];
 export const grupoDe = (p) => GRUPOS.find(([, , ps]) => ps.some(([k]) => k === p))?.[0] || 'inicio';
@@ -32,6 +32,7 @@ export default async function (main) {
   let anioCuentas = null;
   const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
   let anioPres = null, borradorPres = null, partidasAbiertas = false;
+  let editandoBien = null, borradorBien = null, verBajasBien = false;
 
   // --- Partidas: crear, editar y borrar (desde Movimientos y desde Partidas) -------
   const TIPOS = { ingreso: 'Ingresos', gasto: 'Gastos', ambos: 'Ingresos y gastos' };
@@ -121,13 +122,15 @@ export default async function (main) {
         ${hayDatos && (dias === null || dias > 30) ? h`<p class="aviso-caja aviso peq" id="te-aviso-copia">${dias === null ? 'Aún no has descargado ninguna copia cifrada de la tesorería' : `Tu última copia cifrada es de hace ${dias} días`}. <button type="button" class="enlace" data-ir-seguridad>Descargar copia</button></p>` : ''}`);
       caja.querySelectorAll('[data-ir-seguridad]').forEach(b => b.addEventListener('click', () => { pestana = 'seguridad'; dibujar(); }));
     });
-    main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; editandoMov = null; dibujar(); }));
-    main.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { if (grupoDe(pestana) !== b.dataset.grupo) pestana = b.dataset.primera; editando = null; editandoMov = null; dibujar(); }));
+    main.querySelectorAll('[data-pestana]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pestana; editando = null; editandoMov = null; editandoBien = null; dibujar(); }));
+    main.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { if (grupoDe(pestana) !== b.dataset.grupo) pestana = b.dataset.primera; editando = null; editandoMov = null; editandoBien = null; dibujar(); }));
     $('#te-cerrar', main).addEventListener('click', () => { tes.cerrar(); });
     const cuerpo = $('#te-cuerpo', main);
     if (pestana === 'inicio') await pintarInicio(cuerpo);
     else if (pestana === 'movimientos') await pintarMovimientos(cuerpo);
     else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
+    else if (pestana === 'caja') await pintarCaja(cuerpo);
+    else if (pestana === 'inventario') await pintarInventario(cuerpo);
     else if (pestana === 'cuentas') await pintarCuentas(cuerpo);
     else if (pestana === 'sepa') await pintarSepa(cuerpo);
     else if (pestana === 'presupuesto') await pintarPresupuesto(cuerpo);
@@ -270,6 +273,7 @@ export default async function (main) {
     const huecos = tes.comprobarSaldos();
     const remPend = tes.remesas().filter(r => !tes.abonoDeRemesa(r.id));
     const ej = tes.presupuesto(y) ? tes.ejecucion(y) : null;
+    const caja = tes.estadoCaja();
     const [rec, dias] = await Promise.all([tes.tieneRecuperacion(), tes.diasDesdeCopia()]);
     const diasExtracto = sb ? Math.floor((Date.now() - Date.parse(`${sb.fecha}T12:00:00`)) / 86400000) : null;
     const faltan = c.cuenta.pendiente + c.cuenta.parcial;
@@ -284,11 +288,15 @@ export default async function (main) {
       new Date().getMonth() >= 9 && !tes.presupuesto(y + 1) && ['📝', `Prepara el presupuesto ${y + 1}`, 'Para aprobarlo en la asamblea', 'presupuesto', 'info', () => { anioPres = y + 1; }],
       new Date().getMonth() <= 2 && tes.aniosMovimientos().includes(y - 1) && ['📊', `Cuentas del ejercicio ${y - 1}`, 'Listas para imprimir y presentar en la asamblea', 'cuentas', 'info', () => { anioCuentas = y - 1; }],
       !rec && ['🔑', 'Crea el código de recuperación', 'Sin él, si se olvida la contraseña, nadie podrá abrir la tesorería', 'seguridad', 'hoy'],
+      caja.configurada && (caja.diasArqueo === null || caja.diasArqueo > 90) && (caja.movimientos.length || caja.inicial) && ['🧮', 'Haz un arqueo de la caja', caja.ultimo ? `El último fue el ${fecha(caja.ultimo.fecha)}. En caja debería haber ${euros(caja.saldo)}` : `En caja debería haber ${euros(caja.saldo)}`, 'caja', 'pronto'],
+      !caja.configurada && tes.movimientos().some(tes.esCaja) && ['💵', 'Empieza la caja de efectivo', 'Indica lo que había para llevar su saldo y hacer arqueos', 'caja', 'info'],
+      !tes.bienes().length && ['📦', 'Anota los bienes del Club', 'El inventario es obligatorio (LO 1/2002, art. 14)', 'inventario', 'info'],
       (tes.socios().length || tes.movimientos().length) && (dias === null || dias > 30) && ['💾', 'Descarga la copia cifrada', dias === null ? 'Aún no has descargado ninguna' : `La última es de hace ${dias} días`, 'seguridad', 'pronto']
     ].filter(Boolean);
     pintar(cuerpo, h`
       <div class="kpis">
         <div class="kpi"><b>${sb ? euros(sb.saldo) : '—'}</b><span>Saldo en el banco${sb ? ` (${fecha(sb.fecha)})` : ''}</span></div>
+        ${caja.configurada ? h`<div class="kpi"><b>${euros(caja.saldo)}</b><span>En caja (efectivo)</span></div>` : ''}
         <div class="kpi"><b>${c.cuenta.pagado} / ${c.filas.length - c.cuenta.exento}</b><span>Cuotas ${y} pagadas</span></div>
         <div class="kpi"><b>${euros(c.pendiente)}</b><span>Por cobrar ${y}</span></div>
         <div class="kpi"><b>${ej ? `${ej.total.previsto.gastos ? Math.round(100 * ej.total.real.gastos / ej.total.previsto.gastos) : 0} %` : '—'}</b><span>${ej ? `Gasto del presupuesto ${y}` : `Sin presupuesto ${y}`}</span></div>
@@ -362,6 +370,7 @@ export default async function (main) {
         </div>
         <div class="fila"><button class="btn btn-primario btn-pequeno" type="submit">Guardar</button><button class="btn btn-pequeno" type="button" data-cancelar>Cancelar</button>
           <button class="btn btn-pequeno" type="button" data-regla="${m.concepto}">Crear regla con este concepto</button>
+          ${m.importe < 0 ? h`<button class="btn btn-pequeno" type="button" data-inventario>Añadir al inventario</button>` : ''}
           ${m.origen === 'banco' ? '' : h`<button class="btn btn-peligro btn-pequeno" type="button" data-borrar-mov="${m.id}">Borrar</button>`}</div>
       </form></li>`;
       return h`<li><a class="item mov" href="#/tesoreria" data-editar-mov="${m.id}" id="mov-${m.id}">
@@ -451,6 +460,7 @@ export default async function (main) {
       // Al elegir la partida de cuotas, el año se propone solo
       $('#me-partida', form).addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
       form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; pintarMovimientos(cuerpo); });
+      form.querySelector('[data-inventario]')?.addEventListener('click', () => { editandoBien = 'nuevo'; borradorBien = { nombre: m.concepto, valor: -m.importe, fecha_alta: m.fecha, movimiento_id: m.id }; pestana = 'inventario'; editandoMov = null; dibujar(); });
       form.querySelector('[data-regla]').addEventListener('click', (ev) => { reglaPropuesta = ev.target.dataset.regla; pestana = 'partidas'; editandoMov = null; dibujar(); });
       form.querySelector('[data-borrar-mov]')?.addEventListener('click', async () => {
         if (!await confirmar('¿Borrar este movimiento?', 'Solo se pueden borrar los añadidos a mano.', 'Borrar', true)) return;
@@ -546,6 +556,174 @@ export default async function (main) {
   };
 
   // --- Cuentas del año (asamblea) -----------------------------------------------
+  // --- Caja de efectivo: saldo, traspasos con el banco y arqueos -----------------
+  const pintarCaja = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const c = tes.estadoCaja();
+    if (!c.configurada) {
+      pintar(cuerpo, h`<form class="tarjeta" id="ca-inicio"><h2>Empieza la caja</h2>
+        <p>La caja es el dinero en efectivo del Club (rifas, cuotas en mano, pequeñas compras). Su saldo es lo que había al empezar más los movimientos anotados a mano desde ese día.</p>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="ca-inicial">Dinero que había en la caja (€)</label><input id="ca-inicial" inputmode="decimal" required placeholder="0"></div>
+          <div class="campo"><label for="ca-desde">A fecha de</label><input id="ca-desde" type="date" required value="${new Date().getFullYear()}-01-01"></div>
+        </div>
+        <p class="peq muted">Los movimientos a mano anteriores a esta fecha no cuentan para el saldo de la caja.</p>
+        <button class="btn btn-primario" type="submit">Empezar la caja</button></form>`);
+      $('#ca-inicio', cuerpo).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        try { await tes.guardarCajaInicial({ inicial: $('#ca-inicial', cuerpo).value, fecha: $('#ca-desde', cuerpo).value }); aviso('Caja lista', 'ok'); dibujar(); } catch (e) { aviso(e.message, 'error'); }
+      });
+      return;
+    }
+    const tr = tes.partidaTraspaso();
+    pintar(cuerpo, h`
+      <div class="kpis">
+        <div class="kpi"><b>${euros(c.saldo)}</b><span>Saldo de caja hoy</span></div>
+        <div class="kpi"><b>${c.ultimo ? fecha(c.ultimo.fecha) : 'Nunca'}</b><span>Último arqueo</span></div>
+        <div class="kpi"><b>${c.ultimo ? euros(c.ultimo.diferencia) : '—'}</b><span>Diferencia en el último arqueo</span></div>
+      </div>
+      <form class="tarjeta" id="ca-arqueo"><h2>Arqueo: contar el dinero</h2>
+        <p class="peq muted">Cuenta billetes y monedas (o escribe el total) y la app lo compara con lo que debería haber.</p>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="ca-fecha">Fecha</label><input id="ca-fecha" type="date" value="${hoyISO()}" max="${hoyISO()}" required></div>
+          <div class="campo"><label for="ca-contado">Total contado (€)</label><input id="ca-contado" inputmode="decimal" required placeholder="0,00"></div>
+        </div>
+        <details id="ca-desglose"><summary>Contar por billetes y monedas</summary>
+          <div class="rejilla-monedas">${tes.MONEDAS.map(v => h`<div class="campo"><label for="ca-m-${String(v).replace('.', '_')}">${v >= 5 ? `Billetes de ${v} €` : v >= 1 ? `Monedas de ${v} €` : `Monedas de ${Math.round(v * 100)} cént.`}</label>
+            <input id="ca-m-${String(v).replace('.', '_')}" data-moneda="${v}" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>`)}</div>
+        </details>
+        <div class="campo"><label for="ca-nota">Nota (opcional)</label><input id="ca-nota" placeholder="Quién lo ha contado, dónde está guardado…"></div>
+        <button class="btn btn-primario" type="submit">Comparar y anotar el arqueo</button>
+      </form>
+      <details class="tarjeta" id="ca-traspaso-caja"><summary><strong>Traspaso entre caja y banco</strong></summary>
+        <form id="ca-traspaso" class="rejilla rejilla-2" style="margin-top:.5rem">
+          <div class="campo"><label for="ct-sentido">Qué se hace</label><select id="ct-sentido"><option value="al_banco">Ingresar efectivo en el banco</option><option value="del_banco">Sacar efectivo del banco</option></select></div>
+          <div class="campo"><label for="ct-importe">Importe (€)</label><input id="ct-importe" inputmode="decimal" required></div>
+          <div class="campo"><label for="ct-fecha">Fecha</label><input id="ct-fecha" type="date" value="${hoyISO()}" required></div>
+          <div><button class="btn btn-primario" type="submit">Anotar el traspaso</button></div>
+        </form>
+        <p class="peq muted">Se anota la salida o entrada en la caja. La del banco llega con el extracto; si su concepto es «ingreso efectivo» o «reintegro» va sola a «${tr?.nombre || 'Traspasos entre caja y banco'}», y si no, ponle esa partida. Los traspasos no cuentan como ingresos ni gastos del Club.</p>
+      </details>
+      ${c.arqueos.length ? h`<div class="tarjeta" id="ca-arqueos"><h2>Arqueos</h2><div class="tabla-scroll"><table class="tabla-resumen">
+        <thead><tr><th>Fecha</th><th class="num">Contado</th><th class="num">Debía haber</th><th class="num">Diferencia</th><th></th></tr></thead>
+        <tbody>${c.arqueos.map(a => h`<tr><td>${fecha(a.fecha)}${a.nota ? h`<br><span class="peq muted">${a.nota}</span>` : ''}</td><td class="num">${euros(a.contado)}</td><td class="num">${euros(a.teorico)}</td>
+          <td class="num ${Math.abs(a.diferencia) >= 0.005 ? 'texto-alerta' : ''}">${euros(a.diferencia)}${a.ajustado ? h`<br><span class="peq muted">ajustada</span>` : ''}</td>
+          <td><button type="button" class="btn btn-pequeno" data-borrar-arqueo="${a.id}" aria-label="Borrar el arqueo del ${fecha(a.fecha)}">Borrar</button></td></tr>`)}</tbody></table></div></div>` : ''}
+      <div class="tarjeta"><h2>Movimientos de caja</h2>
+        ${c.movimientos.length ? h`<ul class="lista" id="ca-movs">${c.movimientos.slice(0, 100).map(m => h`<li class="item"><span class="item-principal"><span class="item-titulo">${m.concepto}</span>
+          <span class="item-sub">${fecha(m.fecha)} · ${tes.nombrePartida(m.partida) || 'Sin clasificar'}${m.nota ? ` · ${m.nota}` : ''}</span></span><span class="importe ${m.importe < 0 ? 'negativo' : 'positivo'}">${euros(m.importe)}</span></li>`)}</ul>`
+          : h`<p class="muted">Todavía no hay movimientos de caja desde el ${fecha(c.desde)}. Se añaden en Movimientos › «Añadir un movimiento a mano», o con «Pago en efectivo» en Cuotas.</p>`}
+        <p class="peq muted">Saldo al empezar (${fecha(c.desde)}): ${euros(c.inicial)}. Los movimientos de caja se corrigen en Movimientos.</p>
+        <details><summary>Cambiar el saldo inicial</summary><form id="ca-reinicio" class="rejilla rejilla-2" style="margin-top:.5rem">
+          <div class="campo"><label for="ca-inicial">Dinero que había (€)</label><input id="ca-inicial" inputmode="decimal" value="${String(c.inicial).replace('.', ',')}" required></div>
+          <div class="campo"><label for="ca-desde">A fecha de</label><input id="ca-desde" type="date" value="${c.desde}" required></div>
+          <div><button class="btn" type="submit">Guardar</button></div></form></details>
+      </div>`);
+    const total = () => [...cuerpo.querySelectorAll('[data-moneda]')].reduce((x, i) => x + Number(i.dataset.moneda) * (Number(i.value) || 0), 0);
+    cuerpo.querySelectorAll('[data-moneda]').forEach(i => i.addEventListener('input', () => { $('#ca-contado', cuerpo).value = (Math.round(total() * 100) / 100).toFixed(2).replace('.', ','); }));
+    $('#ca-arqueo', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fechaA = $('#ca-fecha', cuerpo).value, contado = aNum($('#ca-contado', cuerpo).value), nota = $('#ca-nota', cuerpo).value;
+      const desglose = Object.fromEntries([...cuerpo.querySelectorAll('[data-moneda]')].filter(i => Number(i.value) > 0).map(i => [i.dataset.moneda, Number(i.value)]));
+      const teorico = tes.estadoCaja(fechaA).saldo, dif = Math.round((contado - teorico) * 100) / 100;
+      let ajustar = false;
+      if (Math.abs(dif) >= 0.005) {
+        const r = await dialogo({ titulo: dif < 0 ? `Faltan ${euros(-dif)}` : `Sobran ${euros(dif)}`,
+          cuerpo: h`<p>Contado: <strong>${euros(contado)}</strong>. Según lo anotado debería haber <strong>${euros(teorico)}</strong>.</p><p>Revisa si falta anotar algún cobro o pago. Si no, puedes anotar la diferencia como movimiento de caja («Diferencia de arqueo», en Otros) para que cuadre.</p>`,
+          acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'solo', texto: 'Solo anotar el arqueo' }, { valor: 'ajustar', texto: 'Anotar y ajustar', primario: true }] });
+        if (r !== 'solo' && r !== 'ajustar') return;
+        ajustar = r === 'ajustar';
+      }
+      try {
+        await tes.arqueoCaja({ fecha: fechaA, contado, desglose: Object.keys(desglose).length ? desglose : null, nota, ajustar });
+        aviso(Math.abs(dif) < 0.005 ? 'La caja cuadra. Arqueo anotado.' : `Arqueo anotado${ajustar ? ' y diferencia ajustada' : ''}.`, 'ok'); dibujar();
+      } catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#ca-traspaso', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try { await tes.traspasoCaja({ fecha: $('#ct-fecha', cuerpo).value, importe: aNum($('#ct-importe', cuerpo).value), sentido: $('#ct-sentido', cuerpo).value }); aviso('Traspaso anotado en la caja', 'ok'); dibujar(); } catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#ca-reinicio', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try { await tes.guardarCajaInicial({ inicial: aNum($('#ca-reinicio #ca-inicial', cuerpo).value), fecha: $('#ca-reinicio #ca-desde', cuerpo).value }); aviso('Saldo inicial cambiado', 'ok'); dibujar(); } catch (e) { aviso(e.message, 'error'); }
+    });
+    cuerpo.querySelectorAll('[data-borrar-arqueo]').forEach(b => b.addEventListener('click', async () => {
+      if (!(await confirmar('Borrar el arqueo', 'Se borra solo la anotación del arqueo. Si se ajustó la diferencia, ese movimiento sigue en la caja (bórralo en Movimientos si hace falta).', 'Borrar', true))) return;
+      await tes.borrarArqueo(b.dataset.borrarArqueo); dibujar();
+    }));
+  };
+
+  // --- Inventario de bienes del Club (LO 1/2002, art. 14) ----------------------
+  const pintarInventario = async (cuerpo) => {
+    const inv = tes.inventario();
+    const lista = tes.bienes({ todos: verBajasBien });
+    const b = editandoBien === 'nuevo' ? (borradorBien || {}) : editandoBien ? tes.bienes({ todos: true }).find(x => x.id === editandoBien) : null;
+    if (b) {
+      pintar(cuerpo, h`<form class="tarjeta" id="in-ficha"><h2>${b.id ? `Bien nº ${b.numero}` : 'Nuevo bien'}</h2>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="in-nombre">Qué es</label><input id="in-nombre" required value="${b.nombre || ''}" placeholder="Jaulas de exposición plegables"></div>
+          <div class="campo"><label for="in-categoria">Tipo</label><select id="in-categoria">${tes.CATEGORIAS_BIEN.map(c => h`<option ${b.categoria === c ? h`selected` : ''}>${c}</option>`)}</select></div>
+          <div class="campo"><label for="in-cantidad">Cantidad</label><input id="in-cantidad" type="number" min="1" step="1" value="${b.cantidad || 1}" required></div>
+          <div class="campo"><label for="in-valor">Valor de compra (€, del total)</label><input id="in-valor" inputmode="decimal" value="${b.valor === null || b.valor === undefined ? '' : String(b.valor).replace('.', ',')}" placeholder="Si se sabe"></div>
+          <div class="campo"><label for="in-alta">Fecha de compra o de alta</label><input id="in-alta" type="date" value="${b.fecha_alta || ''}"></div>
+          <div class="campo"><label for="in-ubicacion">Dónde está o quién lo guarda</label><input id="in-ubicacion" value="${b.ubicacion || ''}"></div>
+          <div class="campo"><label for="in-estado">Estado</label><select id="in-estado">${tes.ESTADOS_BIEN.map(([k, et]) => h`<option value="${k}" ${(b.estado || 'bueno') === k ? h`selected` : ''}>${et}</option>`)}</select></div>
+          <div class="campo"><label for="in-notas">Notas</label><input id="in-notas" value="${b.notas || ''}"></div>
+        </div>
+        ${b.movimiento_id ? h`<p class="peq muted">Enlazado con el movimiento de la compra.</p>` : ''}
+        ${b.id ? h`<details ${b.fecha_baja ? h`open` : ''}><summary>Dar de baja (vendido, roto, donado…)</summary><div class="rejilla rejilla-2" style="margin-top:.5rem">
+          <div class="campo"><label for="in-baja">Fecha de baja</label><input id="in-baja" type="date" value="${b.fecha_baja || ''}"></div>
+          <div class="campo"><label for="in-motivo">Motivo</label><input id="in-motivo" value="${b.motivo_baja || ''}"></div></div></details>` : ''}
+        <div class="fila"><button class="btn btn-primario" type="submit">Guardar</button><button class="btn" type="button" id="in-cancelar">Cancelar</button>
+          ${b.id ? h`<button class="btn btn-peligro" type="button" id="in-borrar">Borrar (anotado por error)</button>` : ''}</div>
+      </form>`);
+      $('#in-cancelar', cuerpo).addEventListener('click', () => { editandoBien = null; borradorBien = null; pintarInventario(cuerpo); });
+      $('#in-ficha', cuerpo).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const v = (id) => $(`#${id}`, cuerpo)?.value ?? '';
+        try {
+          await tes.guardarBien({ id: b.id, nombre: v('in-nombre'), categoria: v('in-categoria'), cantidad: Number(v('in-cantidad')), valor: v('in-valor').trim() === '' ? null : aNum(v('in-valor')),
+            fecha_alta: v('in-alta'), ubicacion: v('in-ubicacion'), estado: v('in-estado'), notas: v('in-notas'), fecha_baja: v('in-baja'), motivo_baja: v('in-motivo'), movimiento_id: b.movimiento_id || null });
+          aviso('Inventario guardado', 'ok'); editandoBien = null; borradorBien = null; pintarInventario(cuerpo);
+        } catch (e) { aviso(e.message, 'error'); }
+      });
+      $('#in-borrar', cuerpo)?.addEventListener('click', async () => {
+        if (!(await confirmar('Borrar del inventario', 'Bórralo solo si se anotó por error. Si el Club ya no lo tiene, mejor dalo de baja: así queda constancia.', 'Borrar', true))) return;
+        await tes.borrarBien(b.id); editandoBien = null; pintarInventario(cuerpo);
+      });
+      return;
+    }
+    const porCat = tes.CATEGORIAS_BIEN.map(c => [c, lista.filter(x => x.categoria === c)]).filter(([, xs]) => xs.length);
+    pintar(cuerpo, h`
+      <div class="kpis">
+        <div class="kpi"><b>${inv.bienes.length}</b><span>Bienes en el inventario</span></div>
+        <div class="kpi"><b>${euros(inv.total)}</b><span>Valor de compra${inv.sinValor ? ` (${inv.sinValor} sin valor)` : ''}</span></div>
+      </div>
+      <div class="tarjeta fila" style="align-items:flex-end">
+        <button class="btn btn-primario" id="in-nuevo">➕ Añadir un bien</button>
+        <div class="campo" style="margin:0"><label for="in-fecha">Inventario a fecha de</label><input id="in-fecha" type="date" value="${hoyISO()}"></div>
+        <button class="btn" id="in-imprimir">🖨️ Imprimir</button>
+        <button class="btn" id="in-csv">⬇️ CSV</button>
+      </div>
+      <p class="peq muted">La ley de asociaciones (LO 1/2002, art. 14) obliga a llevar un inventario de los bienes. Anota lo que tiene el Club (jaulas, trofeos, equipos…); lo que deja de tener se da de baja, no se borra.</p>
+      ${lista.length ? porCat.map(([c, xs]) => h`<div class="tarjeta"><h2>${c}</h2><ul class="lista" data-categoria="${c}">${xs.map(x => h`<li><a class="item" href="#/tesoreria" data-bien="${x.id}">
+        <span class="item-principal"><span class="item-titulo">${x.numero} · ${x.nombre}${x.cantidad > 1 ? ` (×${x.cantidad})` : ''}${x.fecha_baja ? h` <span class="chip">Baja</span>` : ''}</span>
+        <span class="item-sub">${[x.ubicacion, tes.ESTADOS_BIEN.find(([k]) => k === x.estado)?.[1], x.fecha_alta ? fecha(x.fecha_alta) : null, x.fecha_baja ? `baja ${fecha(x.fecha_baja)}: ${x.motivo_baja}` : null].filter(Boolean).join(' · ')}</span></span>
+        <span class="importe">${x.valor === null ? '—' : euros(x.valor)}</span></a></li>`)}</ul></div>`)
+        : h`<p class="muted tarjeta">El inventario está vacío. Empieza por lo que el Club guarda: jaulas, trofeos, carteles, equipos…</p>`}
+      <label class="fila peq"><input type="checkbox" id="in-bajas" ${verBajasBien ? h`checked` : ''}> Ver también los dados de baja</label>`);
+    $('#in-nuevo', cuerpo).addEventListener('click', () => { editandoBien = 'nuevo'; borradorBien = { fecha_alta: hoyISO() }; pintarInventario(cuerpo); });
+    $('#in-bajas', cuerpo).addEventListener('change', (ev) => { verBajasBien = ev.target.checked; pintarInventario(cuerpo); });
+    cuerpo.querySelectorAll('[data-bien]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoBien = a.dataset.bien; pintarInventario(cuerpo); }));
+    $('#in-imprimir', cuerpo).addEventListener('click', () => docs.inventarioDoc(tes.inventario($('#in-fecha', cuerpo).value || hoyISO())));
+    $('#in-csv', cuerpo).addEventListener('click', () => {
+      const x = tes.inventario($('#in-fecha', cuerpo).value || hoyISO());
+      const filas = [['NUMERO', 'BIEN', 'TIPO', 'CANTIDAD', 'VALOR', 'FECHA_ALTA', 'UBICACION', 'ESTADO', 'NOTAS']];
+      x.bienes.forEach(b => filas.push([b.numero, b.nombre, b.categoria, b.cantidad, b.valor ?? '', b.fecha_alta || '', b.ubicacion || '', b.estado, b.notas || '']));
+      descargar(csv(filas), `CGA_inventario_${x.dia}.csv`);
+    });
+  };
+
   const pintarCuentas = async (cuerpo) => {
     await tes.asegurarPartidas();
     const anios = tes.aniosMovimientos();
@@ -919,7 +1097,7 @@ export default async function (main) {
 
   await dibujar();
   // No se vuelve a pintar mientras se edita (una ficha, un movimiento o el presupuesto): se perdería lo escrito
-  const quitar = tes.alCambiar(() => { if (!tes.abierta()) { editando = null; editandoMov = null; borradorPres = null; dibujar(); } else if (!editando && !editandoMov && !borradorPres && !hojaTes && !document.querySelector('dialog[open]')) dibujar(); });
+  const quitar = tes.alCambiar(() => { if (!tes.abierta()) { editando = null; editandoMov = null; borradorPres = null; dibujar(); } else if (!editando && !editandoMov && !borradorPres && !hojaTes && !editandoBien && !document.querySelector('dialog[open]')) dibujar(); });
   const tocar = () => tes.actividad();
   main.addEventListener('input', tocar); main.addEventListener('click', tocar);
   return () => { quitar(); main.removeEventListener('input', tocar); main.removeEventListener('click', tocar); };
