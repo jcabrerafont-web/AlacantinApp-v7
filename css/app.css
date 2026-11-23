@@ -554,3 +554,4 @@ details:not(.tarjeta):not(.usuario) > summary > strong { white-space: nowrap; fl
 .doc-mandato th { width: 42%; font-weight: 600; font-size: .85em; vertical-align: top; }
 .doc-hueco { display: inline-block; min-width: 12em; border-bottom: 1px solid #94a3b8; }
 .doc-legal { font-size: .78rem; text-align: justify; }
+.texto-alerta { color: var(--rojo-t); font-weight: 600; }

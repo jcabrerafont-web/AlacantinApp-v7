@@ -294,11 +294,12 @@ export function plantillaCuentas(c) {
   const e = (n) => (n === null || n === undefined ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`);
   const ref = `CU-${c.anio}-${huella(JSON.stringify([c.ingresos, c.gastos, c.banco.inicial, c.banco.final]))}`;
   const conAnterior = c.anterior.n > 0;
-  const ingresos = c.filas.filter(f => f.ingresos || f.anterior.ingresos), gastos = c.filas.filter(f => f.gastos || f.anterior.gastos);
-  const tabla = (titulo, lista, k, total, totalAnt, sinClas) => h`<table><thead><tr><th>${titulo}</th><th class="num">${c.anio}</th>${conAnterior ? h`<th class="num">${c.anio - 1}</th>` : ''}</tr></thead><tbody>
-    ${lista.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${e(f[k])}</td>${conAnterior ? h`<td class="num">${e(f.anterior[k])}</td>` : ''}</tr>`)}
-    ${sinClas ? h`<tr><td><em>Sin clasificar</em></td><td class="num">${e(sinClas)}</td>${conAnterior ? h`<td></td>` : ''}</tr>` : ''}
-    <tr><th>Total</th><th class="num">${e(total)}</th>${conAnterior ? h`<th class="num">${e(totalAnt)}</th>` : ''}</tr></tbody></table>`;
+  const ingresos = c.filas.filter(f => f.ingresos || f.anterior.ingresos || f.previsto?.ingresos), gastos = c.filas.filter(f => f.gastos || f.anterior.gastos || f.previsto?.gastos);
+  const conPres = Boolean(c.presupuesto);
+  const tabla = (titulo, lista, k, total, totalAnt, sinClas) => h`<table><thead><tr><th>${titulo}</th>${conPres ? h`<th class="num">Presupuesto</th>` : ''}<th class="num">${c.anio}</th>${conAnterior ? h`<th class="num">${c.anio - 1}</th>` : ''}</tr></thead><tbody>
+    ${lista.map(f => h`<tr><td>${f.partida.nombre}</td>${conPres ? h`<td class="num">${e(f.previsto?.[k] || 0)}</td>` : ''}<td class="num">${e(f[k])}</td>${conAnterior ? h`<td class="num">${e(f.anterior[k])}</td>` : ''}</tr>`)}
+    ${sinClas ? h`<tr><td><em>Sin clasificar</em></td>${conPres ? h`<td></td>` : ''}<td class="num">${e(sinClas)}</td>${conAnterior ? h`<td></td>` : ''}</tr>` : ''}
+    <tr><th>Total</th>${conPres ? h`<th class="num">${e(c.presupuesto[k])}</th>` : ''}<th class="num">${e(total)}</th>${conAnterior ? h`<th class="num">${e(totalAnt)}</th>` : ''}</tr></tbody></table>`;
   return h`
     ${cabecera(`Cuentas del ejercicio ${c.anio}`, ref, `${CONFIG.club.nombre} · Tesorería`)}
     <p>${c.cuenta ? `Cuenta ${String(c.cuenta).replace(/(.{4})/g, '$1 ').trim()}. ` : ''}Del 1 de enero al 31 de diciembre de ${c.anio}${c.banco.hasta && c.banco.hasta < `${c.anio}-12-31` ? ` (movimientos hasta el ${fecha(c.banco.hasta)})` : ''}.</p>
@@ -312,6 +313,7 @@ export function plantillaCuentas(c) {
       ${c.efectivo.n ? h`<tr><td>Cobros y pagos en efectivo del año (no pasan por el banco)</td><td class="num">${e(c.efectivo.neto)}</td></tr>` : ''}
     </tbody></table>
     ${c.banco.cuadra === false || c.huecos.length ? h`<p class="doc-aviso"><strong>Atención:</strong> ${c.huecos.length ? c.huecos.map(x => x.texto).join(' ') : 'el saldo final no coincide con el inicial más los movimientos del banco: falta algún movimiento por importar.'}</p>` : ''}
+    ${conPres ? h`<p class="peq">Presupuesto ${c.anio}${c.presupuesto.aprobado ? `, aprobado en asamblea el ${fecha(c.presupuesto.aprobado)}` : ''}: ingresos ${e(c.presupuesto.ingresos)} y gastos ${e(c.presupuesto.gastos)}.</p>` : ''}
     <h2>Ingresos</h2>${tabla('Partida', ingresos, 'ingresos', c.ingresos, c.anterior.ingresos, c.sinClasificar.ingresos)}
     <h2>Gastos</h2>${tabla('Partida', gastos, 'gastos', c.gastos, c.anterior.gastos, c.sinClasificar.gastos)}
     <h2>Cuotas ${c.anio}</h2>
@@ -358,5 +360,28 @@ export function plantillaMandato({ socio, acreedor }) {
 }
 export function mandato(d) {
   imprimir(plantillaMandato(d));
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}
+
+// Presupuesto del año, para aprobarlo en la asamblea (con la ejecución si ya hay datos)
+export function plantillaPresupuesto(x) {
+  const e = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  const conReal = x.total.real.ingresos || x.total.real.gastos;
+  const conAnt = x.filas.some(f => f.anterior.ingresos || f.anterior.gastos);
+  const ref = `PR-${x.anio}-${huella(JSON.stringify(x.presupuesto?.lineas || {}))}`;
+  const tabla = (k, titulo) => { const filas = x.filas.filter(f => f.previsto[k] || (conReal && f.real[k]));
+    return h`<h2>${titulo}</h2><table><thead><tr><th>Partida</th><th class="num">Presupuesto ${x.anio}</th>${conReal ? h`<th class="num">Real hasta hoy</th>` : ''}${conAnt ? h`<th class="num">Real ${x.anio - 1}</th>` : ''}</tr></thead><tbody>
+      ${filas.map(f => h`<tr><td>${f.partida.nombre}</td><td class="num">${e(f.previsto[k])}</td>${conReal ? h`<td class="num">${e(f.real[k])}</td>` : ''}${conAnt ? h`<td class="num">${e(f.anterior[k])}</td>` : ''}</tr>`)}
+      <tr><th>Total</th><th class="num">${e(x.total.previsto[k])}</th>${conReal ? h`<th class="num">${e(x.total.real[k])}</th>` : ''}${conAnt ? h`<th class="num">${e(filas.reduce((s, f) => s + f.anterior[k], 0))}</th>` : ''}</tr></tbody></table>`; };
+  return h`
+    ${cabecera(`Presupuesto ${x.anio}`, ref, `${CONFIG.club.nombre} · Tesorería`)}
+    <p>${x.presupuesto?.aprobado ? `Aprobado en asamblea el ${fecha(x.presupuesto.aprobado)}.` : 'Propuesta para la asamblea.'}</p>
+    ${tabla('ingresos', 'Ingresos previstos')}${tabla('gastos', 'Gastos previstos')}
+    <table><tbody><tr><th>Resultado previsto</th><th class="num">${e(x.total.previsto.ingresos - x.total.previsto.gastos)}</th></tr></tbody></table>
+    ${x.presupuesto?.notas ? h`<p>${x.presupuesto.notas}</p>` : ''}
+    <div class="doc-firmas"><div>Tesorería</div><div>Visto bueno de la Presidencia</div></div>`;
+}
+export function presupuestoDoc(x) {
+  imprimir(plantillaPresupuesto(x));
   window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
 }

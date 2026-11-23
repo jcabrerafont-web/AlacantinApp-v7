@@ -609,6 +609,30 @@ await ir('#/tesoreria');
   await page.click('[data-pestana=cuotas]'); await page.click('[data-pestana=sepa]'); await page.waitForSelector('#se-emitidas');
   ok((await page.innerText('#se-emitidas')).includes('Cobrada'), 'Remesa: marcada como cobrada');
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/sepa.png`, fullPage: true });
+  // Presupuesto anual por partidas
+  await page.click('[data-pestana=presupuesto]'); await page.waitForSelector('#pp-form');
+  const anioP = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
+  ok(await page.$eval('#pp-anio', s => s.value) === String(anioP), `Presupuesto: propone el año que toca preparar (${anioP})`);
+  await page.selectOption('#pp-anio', '2027'); await page.waitForSelector('#pp-rellenar');
+  await page.click('#pp-rellenar'); await page.waitForTimeout(300);
+  ok((await page.innerText('#pp-ti')) === '112,00 €' && (await page.innerText('#pp-tg')) === '87,00 €', `Presupuesto 2027: rellenado con lo real de 2026 (ingresos ${await page.innerText('#pp-ti')}, gastos ${await page.innerText('#pp-tg')})`);
+  { const fed = await page.evaluate(async () => (await import('./js/tesoreria.js')).partidas().find(p => p.nombre.startsWith('Federación')).id);
+    await page.fill(`#pp-gastos-${fed}`, '90'); await page.dispatchEvent(`#pp-gastos-${fed}`, 'change');
+    ok((await page.innerText('#pp-tg')) === '92,00 €', 'Presupuesto: los totales se actualizan al escribir');
+    await page.fill('#pp-aprobado', '2026-12-15'); await page.click('#pp-form button[type=submit]'); await page.waitForTimeout(400);
+    const pr = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const p = t.presupuesto(2027); return [Object.keys(p.lineas).length, p.aprobado, Object.values(p.lineas).reduce((a, l) => a + l.gastos, 0)]; });
+    ok(JSON.stringify(pr) === JSON.stringify([5, '2026-12-15', 92]), `Presupuesto 2027 guardado, cifrado como el resto, con su fecha de aprobación (${JSON.stringify(pr)})`);
+    // 2026: Federación prevista en 80 € y gastado 85 €: se avisa
+    await page.selectOption('#pp-anio', '2026'); await page.waitForSelector(`#pp-gastos-${fed}`);
+    await page.fill(`#pp-gastos-${fed}`, '80'); await page.dispatchEvent(`#pp-gastos-${fed}`, 'change'); await page.click('#pp-form button[type=submit]'); await page.waitForTimeout(400);
+    ok((await page.innerText('#pp-form')).includes('Real: 85,00 € (106 %) · por encima de lo previsto'), 'Presupuesto: ejecución por partida y aviso si un gasto pasa de lo previsto'); }
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Presupuesto: en el móvil no se sale de la pantalla');
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/presupuesto.png`, fullPage: true });
+  { const doc = await page.evaluate(async () => { const d = await import('./js/documentos.js'); const t = await import('./js/tesoreria.js'); window.print = () => {};
+      d.presupuestoDoc(t.ejecucion(2027)); await new Promise(r => setTimeout(r, 100)); const txt = document.querySelector('#impresion').textContent; window.dispatchEvent(new Event('afterprint')); return txt; });
+    ok(doc.includes('Presupuesto 2027') && doc.includes('Aprobado en asamblea el 15/12/2026') && doc.includes('Resultado previsto') && doc.includes('Real 2026'), 'Presupuesto: documento para la asamblea, con lo real del año anterior'); }
+  await page.click('[data-pestana=cuentas]'); await page.waitForSelector('#cc-doc'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
+  ok((await page.innerText('#cc-doc')).includes('Presupuesto') && (await page.innerText('#cc-doc')).includes('80,00 €'), 'Cuentas: columna del presupuesto junto a lo real');
   await page.click('[data-pestana=movimientos]'); await page.waitForSelector('#te-movs');
   { const ancho = await page.evaluate(() => { const w = window.innerWidth; const fuera = [...document.querySelectorAll('main *')].filter(e => e.getBoundingClientRect().right > w + 1).slice(0, 3).map(e => `${e.tagName}#${e.id}.${e.className}`); return { sw: document.documentElement.scrollWidth, w, fuera }; });
     ok(ancho.sw <= ancho.w + 1, `Tesorería: en el móvil no se sale de la pantalla (${JSON.stringify(ancho)})`); }

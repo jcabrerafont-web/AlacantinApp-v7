@@ -19,7 +19,7 @@ import { CONFIG } from './config.js';
 export const FORMATO_COPIA = 'alacantinapp-tesoreria';
 const MINUTOS_CIERRE = 15;
 
-const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], config: null, temporizador: null };
+const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], presupuestos: [], config: null, temporizador: null };
 const oyentes = new Set();
 export const alCambiar = (fn) => { oyentes.add(fn); return () => oyentes.delete(fn); };
 const avisar = () => oyentes.forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
@@ -62,7 +62,7 @@ export const actividad = () => vigilar();
 
 export function cerrar() {
   const estaba = Boolean(t.clave);
-  t.clave = null; t.socios = []; t.movimientos = []; t.partidas = []; t.reglas = []; t.remesas = []; t.config = null;
+  t.clave = null; t.socios = []; t.movimientos = []; t.partidas = []; t.reglas = []; t.remesas = []; t.presupuestos = []; t.config = null;
   clearTimeout(t.temporizador);
   if (estaba) avisar();
 }
@@ -112,13 +112,13 @@ export async function cambiarContrasena(actual, nueva, repetida) {
 export async function recargar() {
   if (!t.clave) return;
   const filas = await db.todos('tesoreria');
-  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], config: [] };
+  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], presupuesto: [], config: [] };
   for (const f of filas) {
     if (!por[f.tipo]) continue;
     try { por[f.tipo].push({ ...(await cripto.descifrar(t.clave, f.id, f.datos)), id: f.id, _actualizado: f.updated_at }); }
     catch { console.warn('[tesorería] registro ilegible', f.id); }
   }
-  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa;
+  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa; t.presupuestos = por.presupuesto;
   t.config = por.config.sort((a, b) => String(b._actualizado).localeCompare(String(a._actualizado)))[0] || null;
   vigilar();
   avisar();
@@ -328,7 +328,7 @@ export async function restaurarCopia(copia, contrasena) {
 const quitarInternos = ({ id, _actualizado, ...resto }) => resto;
 async function guardarRegistro(tipo, obj) {
   const id = obj.id || uuid();
-  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...(t.config ? [t.config] : [])].find(x => x.id === id);
+  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...t.presupuestos, ...(t.config ? [t.config] : [])].find(x => x.id === id);
   await guardarCifrado(tipo, id, quitarInternos({ ...obj, creado: previo?.creado || obj.creado || new Date().toISOString() }));
   return id;
 }
@@ -666,7 +666,8 @@ export function cuentasAnio(anio) {
     return { del, fila };
   };
   const act = porPartida(a), ant = porPartida(a - 1);
-  const filas = partidas().map(p => ({ partida: p, ...act.fila(p.id), anterior: ant.fila(p.id) }));
+  const pres = presupuesto(a);
+  const filas = partidas().map(p => ({ partida: p, ...act.fila(p.id), anterior: ant.fila(p.id), previsto: pres?.lineas?.[p.id] || null }));
   const sin = { ingresos: r2(act.del.filter(m => !m.partida && m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(act.del.filter(m => !m.partida && m.importe < 0).reduce((x, m) => x - m.importe, 0)) };
   const tot = (lista, k) => r2(lista.reduce((x, f) => x + f[k], 0));
   const ingresos = r2(tot(filas, 'ingresos') + sin.ingresos), gastos = r2(tot(filas, 'gastos') + sin.gastos);
@@ -675,7 +676,8 @@ export function cuentasAnio(anio) {
   const efectivo = act.del.filter(m => m.origen !== 'banco');
   const cuotas = cuotasAnio(a);
   return {
-    anio: a, filas: filas.filter(f => f.ingresos || f.gastos || f.anterior.ingresos || f.anterior.gastos), sinClasificar: sin,
+    anio: a, filas: filas.filter(f => f.ingresos || f.gastos || f.anterior.ingresos || f.anterior.gastos || f.previsto), sinClasificar: sin,
+    presupuesto: pres ? { aprobado: pres.aprobado, ingresos: r2(Object.values(pres.lineas).reduce((x, l) => x + l.ingresos, 0)), gastos: r2(Object.values(pres.lineas).reduce((x, l) => x + l.gastos, 0)) } : null,
     ingresos, gastos, resultado: r2(ingresos - gastos),
     anterior: { ingresos: r2(ant.del.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ant.del.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)), n: ant.del.length },
     banco: { ...banco, neto: netoBanco, cuadra: banco.inicial === null || banco.final === null ? null : Math.abs(r2(banco.inicial + netoBanco) - banco.final) < 0.005 },
@@ -789,4 +791,62 @@ export async function borrarRemesa(id) {
 function remesaDelAbono(m) {
   const dias = (a, b) => Math.abs((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000);
   return t.remesas.find(r => !t.movimientos.some(x => x.remesa_id === r.id && x.id !== m.id) && Math.abs(r.total - m.importe) < 0.005 && dias(r.fecha_cobro, m.fecha) <= 10) || null;
+}
+
+// ===========================================================================
+// Presupuesto anual por partidas (lo aprueba la asamblea) y su ejecución
+// ===========================================================================
+export const presupuesto = (anio) => t.presupuestos.find(p => Number(p.anio) === Number(anio)) || null;
+export const aniosPresupuesto = () => {
+  const y = new Date().getFullYear();
+  return [...new Set([y + 1, y, ...t.presupuestos.map(p => Number(p.anio)), ...aniosMovimientos()])].sort((a, b) => b - a);
+};
+
+const real = (anio) => {
+  const del = t.movimientos.filter(m => m.fecha.startsWith(String(anio)));
+  return (id) => { const ms = del.filter(m => m.partida === id);
+    return { ingresos: r2(ms.filter(m => m.importe > 0).reduce((x, m) => x + m.importe, 0)), gastos: r2(ms.filter(m => m.importe < 0).reduce((x, m) => x - m.importe, 0)) }; };
+};
+
+// lineas: { [partidaId]: { ingresos, gastos } }
+export async function guardarPresupuesto(anio, { lineas, aprobado = null, notas = '' }) {
+  exigirAbierta();
+  const a = Number(anio);
+  if (!Number.isInteger(a) || a < 2000 || a > 2100) throw new Error('Año no válido.');
+  if (aprobado && !/^\d{4}-\d{2}-\d{2}$/.test(aprobado)) throw new Error('La fecha de aprobación no es válida.');
+  const limpio = {};
+  for (const [id, l] of Object.entries(lineas || {})) {
+    if (!t.partidas.some(p => p.id === id)) continue;
+    const n = (v) => { if (v === '' || v === null || v === undefined) return 0; const txt = String(v).trim(); const x = Number(txt.includes(',') ? txt.replace(/\./g, '').replace(',', '.') : txt); if (!Number.isFinite(x) || x < 0) throw new Error('Los importes del presupuesto deben ser cantidades positivas.'); return r2(x); };
+    const fila = { ingresos: n(l.ingresos), gastos: n(l.gastos) };
+    if (fila.ingresos || fila.gastos) limpio[id] = fila;
+  }
+  const previo = presupuesto(a);
+  await guardarRegistro('presupuesto', { anio: a, lineas: limpio, aprobado: aprobado || null, notas: String(notas || '').trim() || null, id: previo?.id });
+  await recargar();
+}
+export async function borrarPresupuesto(anio) {
+  exigirAbierta();
+  const p = presupuesto(anio);
+  if (p) { await borrarRegistro(p.id); await recargar(); }
+}
+// Propuesta: lo que se movió de verdad el año anterior en cada partida
+export function propuestaPresupuesto(anio) {
+  exigirAbierta();
+  const r = real(Number(anio) - 1);
+  return Object.fromEntries(t.partidas.map(p => [p.id, r(p.id)]).filter(([, f]) => f.ingresos || f.gastos));
+}
+
+export function ejecucion(anio) {
+  exigirAbierta();
+  const p = presupuesto(anio), r = real(anio), ant = real(Number(anio) - 1);
+  const filas = partidas().map(partida => {
+    const pr = p?.lineas?.[partida.id] || { ingresos: 0, gastos: 0 };
+    return { partida, previsto: pr, real: r(partida.id), anterior: ant(partida.id) };
+  });
+  const suma = (k, c) => r2(filas.reduce((x, f) => x + f[k][c], 0));
+  const tot = { previsto: { ingresos: suma('previsto', 'ingresos'), gastos: suma('previsto', 'gastos') }, real: { ingresos: suma('real', 'ingresos'), gastos: suma('real', 'gastos') } };
+  const hoy = hoyISO(), y = Number(anio);
+  const transcurrido = y < Number(hoy.slice(0, 4)) ? 1 : y > Number(hoy.slice(0, 4)) ? 0 : (Date.parse(`${hoy}T12:00:00Z`) - Date.UTC(y, 0, 1)) / (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1));
+  return { anio: y, presupuesto: p, filas, total: tot, transcurrido };
 }

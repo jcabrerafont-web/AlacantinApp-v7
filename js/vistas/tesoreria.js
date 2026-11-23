@@ -11,7 +11,8 @@ import * as sepa from '../tesoreria/sepa.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
 
-const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['sepa', 'SEPA'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const PESTANAS = [['movimientos', 'Movimientos'], ['cuotas', 'Cuotas'], ['cuentas', 'Cuentas'], ['presupuesto', 'Presupuesto'], ['sepa', 'SEPA'], ['socios', 'Socios'], ['partidas', 'Partidas'], ['importar', 'Importar socios'], ['seguridad', 'Seguridad']];
+const aNum = (v) => { const t = String(v ?? '').trim(); const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); return Number.isFinite(n) ? n : 0; };
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
@@ -21,6 +22,7 @@ export default async function (main) {
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
   const fr = { anio: new Date().getFullYear(), fecha: null, quitados: new Set() };
+  let anioPres = null, borradorPres = null;
 
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
@@ -46,6 +48,7 @@ export default async function (main) {
     else if (pestana === 'cuotas') await pintarCuotas(cuerpo);
     else if (pestana === 'cuentas') await pintarCuentas(cuerpo);
     else if (pestana === 'sepa') await pintarSepa(cuerpo);
+    else if (pestana === 'presupuesto') await pintarPresupuesto(cuerpo);
     else if (pestana === 'socios') pintarSocios(cuerpo);
     else if (pestana === 'partidas') await pintarPartidas(cuerpo);
     else if (pestana === 'importar') pintarImportar(cuerpo);
@@ -342,6 +345,78 @@ export default async function (main) {
       filas.push(['Total', 'Ingresos', c.ingresos, c.anterior.ingresos], ['Total', 'Gastos', c.gastos, c.anterior.gastos], ['Total', 'Resultado', c.resultado, Math.round((c.anterior.ingresos - c.anterior.gastos) * 100) / 100],
         ['Banco', 'Saldo inicial', c.banco.inicial ?? '', ''], ['Banco', 'Saldo final', c.banco.final ?? '', '']);
       descargar(csv(filas), `CGA_cuentas_${c.anio}.csv`);
+    });
+  };
+
+  // --- Presupuesto anual por partidas ----------------------------------------------
+  const pintarPresupuesto = async (cuerpo) => {
+    await tes.asegurarPartidas();
+    const anios = tes.aniosPresupuesto();
+    if (!anios.includes(anioPres)) anioPres = (tes.presupuesto(new Date().getFullYear() + 1) || new Date().getMonth() >= 9) ? new Date().getFullYear() + 1 : new Date().getFullYear(); // desde octubre se prepara el del año siguiente
+    const x = tes.ejecucion(anioPres);
+    const lineas = borradorPres || Object.fromEntries(x.filas.map(f => [f.partida.id, { ...f.previsto }]));
+    const num = (v) => (v ? String(v).replace('.', ',') : '');
+    const pct = (real, prev) => (prev ? Math.round(100 * real / prev) : null);
+    const conReal = x.total.real.ingresos || x.total.real.gastos;
+    const celda = (f, k) => { const prev = aNum(lineas[f.partida.id]?.[k]); const p = pct(f.real[k], prev);
+      const pasa = k === 'gastos' && prev && f.real[k] > prev;
+      return h`<div class="campo" style="margin:0"><label for="pp-${k}-${f.partida.id}">${k === 'ingresos' ? 'Ingresos' : 'Gastos'} previstos (€)</label>
+        <input id="pp-${k}-${f.partida.id}" data-linea="${f.partida.id}" data-k="${k}" inputmode="decimal" value="${num(lineas[f.partida.id]?.[k])}" placeholder="0">
+        <span class="peq ${pasa ? 'texto-alerta' : 'muted'}">${conReal || f.real[k] ? `Real: ${euros(f.real[k])}${p !== null ? ` (${p} %)` : ''}${pasa ? ' · por encima de lo previsto' : ''}` : ''}${f.anterior[k] ? ` · ${x.anio - 1}: ${euros(f.anterior[k])}` : ''}</span></div>`; };
+    const totPrev = (k) => Object.values(lineas).reduce((a, l) => a + aNum(l?.[k]), 0);
+    pintar(cuerpo, h`
+      <div class="tarjeta fila" style="align-items:flex-end">
+        <div class="campo" style="margin:0"><label for="pp-anio">Año</label><select id="pp-anio">${anios.map(a => h`<option value="${a}" ${a === anioPres ? h`selected` : ''}>${a}${tes.presupuesto(a) ? '' : ' (sin presupuesto)'}</option>`)}</select></div>
+        <button class="btn" type="button" id="pp-rellenar">Rellenar con lo real de ${anioPres - 1}</button>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b id="pp-ti">${euros(totPrev('ingresos'))}</b><span>Ingresos previstos</span></div>
+        <div class="kpi"><b id="pp-tg">${euros(totPrev('gastos'))}</b><span>Gastos previstos</span></div>
+        <div class="kpi"><b id="pp-tr">${euros(totPrev('ingresos') - totPrev('gastos'))}</b><span>Resultado previsto</span></div>
+        ${conReal ? h`<div class="kpi"><b>${pct(x.total.real.gastos, totPrev('gastos')) ?? '—'} %</b><span>Gasto ejecutado (${Math.round(100 * x.transcurrido)} % del año)</span></div>` : ''}
+      </div>
+      <form class="tarjeta" id="pp-form">
+        <ul class="lista">${x.filas.map(f => h`<li class="item"><div class="item-principal">
+          <div class="item-titulo">${f.partida.nombre}</div>
+          <div class="rejilla rejilla-2" style="margin-top:.35rem">${f.partida.tipo !== 'gasto' ? celda(f, 'ingresos') : ''}${f.partida.tipo !== 'ingreso' ? celda(f, 'gastos') : ''}</div>
+        </div></li>`)}</ul>
+        <div class="rejilla rejilla-2">
+          <div class="campo"><label for="pp-aprobado">Aprobado en asamblea el (opcional)</label><input id="pp-aprobado" type="date" value="${x.presupuesto?.aprobado || ''}"></div>
+          <div class="campo"><label for="pp-notas">Notas (opcional)</label><input id="pp-notas" value="${x.presupuesto?.notas || ''}" placeholder="p. ej. subida de la cuota a 30 €"></div>
+        </div>
+        <div class="fila"><button class="btn btn-primario" type="submit">Guardar el presupuesto</button>
+          <button class="btn" type="button" id="pp-imprimir" ${x.presupuesto ? '' : h`disabled`}>🖨️ Imprimir o guardar en PDF</button>
+          ${x.presupuesto ? h`<button class="btn btn-peligro" type="button" id="pp-borrar">Borrar</button>` : ''}</div>
+        ${borradorPres ? h`<p class="peq aviso-caja aviso">Hay cambios sin guardar.</p>` : ''}
+      </form>
+      <p class="peq muted">Para cada partida, lo que se prevé ingresar o gastar en el año. Mientras el año avanza, debajo de cada importe sale lo real y el porcentaje ejecutado. Las cuentas del ejercicio muestran también la columna del presupuesto.</p>`);
+    $('#pp-anio', cuerpo).addEventListener('change', async (ev) => {
+      if (borradorPres && !await confirmar('¿Cambiar de año?', 'Hay cambios sin guardar en este presupuesto.', 'Cambiar', true)) { ev.target.value = String(anioPres); return; }
+      anioPres = Number(ev.target.value); borradorPres = null; pintarPresupuesto(cuerpo);
+    });
+    $('#pp-rellenar', cuerpo).addEventListener('click', () => {
+      const prop = tes.propuestaPresupuesto(anioPres);
+      if (!Object.keys(prop).length) { aviso(`No hay movimientos de ${anioPres - 1} para tomar como base.`, 'error'); return; }
+      borradorPres = Object.fromEntries(x.filas.map(f => [f.partida.id, prop[f.partida.id] || { ingresos: 0, gastos: 0 }]));
+      pintarPresupuesto(cuerpo);
+    });
+    cuerpo.querySelectorAll('[data-linea]').forEach(inp => inp.addEventListener('change', () => {
+      borradorPres = borradorPres || Object.fromEntries(Object.entries(lineas).map(([k, v]) => [k, { ...v }]));
+      borradorPres[inp.dataset.linea] = { ...(borradorPres[inp.dataset.linea] || {}), [inp.dataset.k]: inp.value };
+      // Solo se actualizan los totales: sin volver a pintar, para no perder el sitio al escribir
+      const t2 = (k) => Object.values(borradorPres).reduce((a, l) => a + aNum(l?.[k]), 0);
+      $('#pp-ti', cuerpo).textContent = euros(t2('ingresos')); $('#pp-tg', cuerpo).textContent = euros(t2('gastos')); $('#pp-tr', cuerpo).textContent = euros(t2('ingresos') - t2('gastos'));
+    }));
+    $('#pp-form', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const l = Object.fromEntries(x.filas.map(f => [f.partida.id, { ingresos: $(`#pp-ingresos-${f.partida.id}`, cuerpo)?.value ?? 0, gastos: $(`#pp-gastos-${f.partida.id}`, cuerpo)?.value ?? 0 }]));
+      try { await tes.guardarPresupuesto(anioPres, { lineas: l, aprobado: $('#pp-aprobado', cuerpo).value || null, notas: $('#pp-notas', cuerpo).value }); borradorPres = null; aviso(`Presupuesto ${anioPres} guardado`, 'ok'); pintarPresupuesto(cuerpo); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#pp-imprimir', cuerpo).addEventListener('click', () => docs.presupuestoDoc(tes.ejecucion(anioPres)));
+    $('#pp-borrar', cuerpo)?.addEventListener('click', async () => {
+      if (!await confirmar(`¿Borrar el presupuesto ${anioPres}?`, 'Se borra en todos los dispositivos de tesorería.', 'Borrar', true)) return;
+      await tes.borrarPresupuesto(anioPres); borradorPres = null; pintarPresupuesto(cuerpo);
     });
   };
 
