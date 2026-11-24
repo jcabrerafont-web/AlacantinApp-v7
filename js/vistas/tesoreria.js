@@ -26,7 +26,10 @@ const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFraction
 
 export default async function (main) {
   let pestana = 'inicio', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
-  const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200 }; // anio: número o 'todos' (histórico)
+  // orden: 'recientes' (por defecto), 'antiguos' o 'importe'; se recuerda en este navegador
+  const ORDENES = [['recientes', 'Más recientes primero'], ['antiguos', 'Más antiguos primero'], ['importe', 'Por importe (mayor primero)']];
+  const ordenGuardado = (() => { try { const o = localStorage.getItem('tes-orden'); return ORDENES.some(([k]) => k === o) ? o : 'recientes'; } catch { return 'recientes'; } })();
+  const filtro = { anio: new Date().getFullYear(), partida: '', texto: '', limite: 200, orden: ordenGuardado }; // anio: número o 'todos' (histórico)
   let editandoMov = null, reglaPropuesta = '', hojaTes = null, partesBorrador = null; // partesBorrador: partes que se están editando (dividir un movimiento)
   const fc = { anio: new Date().getFullYear(), ver: 'pendientes' };
   let anioCuentas = null;
@@ -358,6 +361,9 @@ export default async function (main) {
     const sinJust = new Set(tes.gastosSinJustificante(anioSel).map(m => m.id));
     const lista = filtro.partida === 'sinjust' ? tes.movimientos({ anio: anioSel, texto: filtro.texto }).filter(m => sinJust.has(m.id))
       : tes.movimientos({ anio: anioSel, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
+    // La app los da de más reciente a más antiguo (por fecha y nº de apunte)
+    if (filtro.orden === 'antiguos') lista.reverse();
+    else if (filtro.orden === 'importe') lista.sort((a, b) => Math.abs(b.importe) - Math.abs(a.importe) || b.fecha.localeCompare(a.fecha));
     const r = tes.resumen(anioSel);
     const porAnios = anioSel ? [] : tes.resumenPorAnios();
     const sb = tes.saldoBanco();
@@ -415,9 +421,10 @@ export default async function (main) {
         <p class="peq muted" style="margin:.4rem 0 0">El Excel que descargas de la banca online, o la hoja de tesorería del Club (la del Google Sheets, descargada en Excel), con sus conceptos y nº de socio. Se puede importar las veces que haga falta: los movimientos que ya están no se repiten.</p>
       </div>`}
       <div class="tarjeta">
-        <div class="rejilla rejilla-3">
+        <div class="rejilla rejilla-2 rejilla-filtros">
           <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio"><option value="todos" ${anioSel ? '' : h`selected`}>Histórico (todos los años)</option>${(anios.length ? anios : [new Date().getFullYear()]).map(a => h`<option value="${a}" ${a === anioSel ? h`selected` : ''}>${a}</option>`)}</select></div>
           <div class="campo"><label for="mf-partida">Partida</label><select id="mf-partida"><option value="">Todas</option><option value="sin" ${filtro.partida === 'sin' ? h`selected` : ''}>Sin clasificar</option><option value="sinjust" ${filtro.partida === 'sinjust' ? h`selected` : ''}>Gastos sin justificante (${sinJust.size})</option>${parts.map(p => h`<option value="${p.id}" ${filtro.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="mf-orden">Orden</label><select id="mf-orden">${ORDENES.map(([k, et]) => h`<option value="${k}" ${filtro.orden === k ? h`selected` : ''}>${et}</option>`)}</select></div>
           <div class="campo"><label for="mf-texto">Buscar</label><input id="mf-texto" type="search" value="${filtro.texto}" placeholder="Concepto, nota…"></div>
         </div>
         ${r.filas.length ? h`<details><summary><strong>Resumen por partidas ${etiqueta}</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
@@ -472,6 +479,7 @@ export default async function (main) {
     cuerpo.querySelectorAll('[data-ir-anio]').forEach(b => b.addEventListener('click', () => { filtro.anio = Number(b.dataset.irAnio); filtro.limite = 200; pintarMovimientos(cuerpo).then(() => window.scrollTo(0, 0)); }));
     $('#te-mas', cuerpo)?.addEventListener('click', () => { filtro.limite += 200; pintarMovimientos(cuerpo); });
     $('#mf-partida', cuerpo).addEventListener('change', (ev) => { filtro.partida = ev.target.value; pintarMovimientos(cuerpo); });
+    $('#mf-orden', cuerpo).addEventListener('change', (ev) => { filtro.orden = ev.target.value; try { localStorage.setItem('tes-orden', filtro.orden); } catch { /* sin almacenamiento */ } filtro.limite = 200; pintarMovimientos(cuerpo); });
     $('#mf-texto', cuerpo).addEventListener('input', async (ev) => { filtro.texto = ev.target.value; await pintarMovimientos(cuerpo); const c = $('#mf-texto', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
     cuerpo.querySelectorAll('[data-editar-mov]').forEach(a => a.addEventListener('click', (ev) => { ev.preventDefault(); editandoMov = a.dataset.editarMov; const mm = tes.movimientos().find(x => x.id === editandoMov); partesBorrador = mm?.partes?.length > 1 ? mm.partes.map(p => ({ ...p })) : null; pintarMovimientos(cuerpo).then(() => $(`#mov-${editandoMov}`, cuerpo)?.scrollIntoView({ block: 'center' })); }));
     $('#te-partidas', cuerpo).addEventListener('toggle', (ev) => { partidasAbiertas = ev.target.open; });

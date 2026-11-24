@@ -571,3 +571,5 @@ fieldset.parte legend { font-weight: 600; font-size: .9rem; padding: 0 .25rem; }
 /* Justificantes de un movimiento */
 .justificantes { border-top: 1px solid var(--borde); margin: .5rem 0; padding-top: .5rem; }
 .justificantes li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+/* Filtros de Movimientos: 4 en fila en pantallas anchas */
+@media (min-width: 900px) { .rejilla-filtros { grid-template-columns: repeat(4, 1fr); } }

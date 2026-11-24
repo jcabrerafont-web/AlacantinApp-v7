@@ -1,6 +1,6 @@
 {
   "name": "alacantinapp",
-  "version": "7.49.0",
+  "version": "7.49.1",
   "private": true,
   "description": "Libro Genealógico de la Gallina Alacantina (ESGA025): PWA sin compilación. Este archivo solo sirve para las pruebas.",
   "type": "module",

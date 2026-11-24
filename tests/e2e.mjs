@@ -813,6 +813,21 @@ await ir('#/tesoreria');
     await page.selectOption('#mf-partida', 'sinjust'); await page.waitForTimeout(300);
     ok((await page.$$('#te-movs [data-editar-mov]')).length === r.sin && !(await page.innerText('#te-movs')).includes('Compra de pienso'), 'Justificantes: filtro «Gastos sin justificante»');
     await page.selectOption('#mf-partida', ''); await page.waitForTimeout(200); }
+  // Orden de la lista: de más antiguo a más reciente, por importe, y se recuerda
+  { const fechas = async () => page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [...document.querySelectorAll('#te-movs [data-editar-mov]')].map(a => t.movimientos().find(m => m.id === a.dataset.editarMov)); });
+    await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);
+    await page.selectOption('#mf-orden', 'antiguos'); await page.waitForTimeout(300);
+    const asc = await fechas();
+    ok(asc.length > 5 && asc.every((m, i) => !i || asc[i - 1].fecha <= m.fecha) && asc[0].fecha < asc.at(-1).fecha, `Movimientos: de más antiguo a más reciente (${asc[0]?.fecha} → ${asc.at(-1)?.fecha})`);
+    await page.selectOption('#mf-orden', 'importe'); await page.waitForTimeout(300);
+    const imp = await fechas();
+    ok(imp.every((m, i) => !i || Math.abs(imp[i - 1].importe) >= Math.abs(m.importe)), 'Movimientos: por importe, de mayor a menor');
+    await page.selectOption('#mf-orden', 'antiguos'); await page.waitForTimeout(200);
+    await irTes('inicio'); await irTes('movimientos'); await page.waitForSelector('#mf-orden');
+    ok((await page.inputValue('#mf-orden')) === 'antiguos' && await page.evaluate(() => localStorage.getItem('tes-orden') === 'antiguos'), 'Movimientos: el orden elegido se recuerda');
+    await page.selectOption('#mf-orden', 'recientes'); await page.waitForTimeout(200);
+    const desc = await fechas();
+    ok(desc.every((m, i) => !i || desc[i - 1].fecha >= m.fecha), 'Movimientos: más recientes primero (como antes)'); }
   // Caja de efectivo: saldo inicial, traspaso al banco (no es gasto) y arqueo con ajuste
   ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).bienes().length)) === 0, 'Inventario: vacío al empezar');
   await irTes('inicio');
