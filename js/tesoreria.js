@@ -152,6 +152,7 @@ export const CAMPOS_SOCIO = [
   ['provincia', 'Provincia', ['provincia']],
   ['fecha_alta', 'Fecha de alta', ['fecha alta', 'alta', 'fecha de alta', 'ingreso']],
   ['fecha_baja', 'Fecha de baja', ['fecha baja', 'baja', 'fecha de baja']],
+  ['motivo_baja', 'Motivo de la baja', ['motivo baja', 'motivo de baja', 'causa baja']],
   ['iban', 'IBAN (cuenta)', ['iban', 'cuenta', 'ccc', 'cuenta bancaria']],
   ['mandato_ref', 'Referencia del mandato SEPA', ['mandato', 'referencia mandato', 'ref mandato']],
   ['mandato_fecha', 'Fecha de firma del mandato', ['fecha mandato', 'firma mandato']],
@@ -197,6 +198,9 @@ function limpiarSocio(s) {
   if (r.email) r.email = r.email.toLowerCase();
   r.perfil_id = s.perfil_id || null;
   r.alias = Array.isArray(s.alias) ? s.alias : []; // ordenantes aprendidos (ver aprenderOrdenante)
+  // Periodos anteriores como socio (quien se dio de baja y volvió): [{ alta, baja, motivo }]
+  r.bajas_anteriores = Array.isArray(s.bajas_anteriores) ? s.bajas_anteriores : [];
+  if (!r.fecha_baja) r.motivo_baja = null;
   return r;
 }
 
@@ -869,7 +873,9 @@ export const movimientosDeSocio = (id) => pagosDeCuotas().filter(m => m.socio_id
 // Fase 3: cuotas por año
 // ===========================================================================
 // Socio del Club durante el año: dado de alta antes de que acabe y sin baja antes de que empiece
-export const socioEnAnio = (s, anio) => (!s.fecha_alta || s.fecha_alta <= `${anio}-12-31`) && (!s.fecha_baja || s.fecha_baja >= `${anio}-01-01`);
+// Periodos como socio: los anteriores (si se dio de baja y volvió) y el actual
+export const periodosSocio = (s) => [...(s.bajas_anteriores || []).map(p => ({ alta: p.alta || null, baja: p.baja || null, motivo: p.motivo || null })), { alta: s.fecha_alta || null, baja: s.fecha_baja || null, motivo: s.motivo_baja || null }];
+export const socioEnAnio = (s, anio) => periodosSocio(s).some(p => (!p.alta || p.alta <= `${anio}-12-31`) && (!p.baja || p.baja >= `${anio}-01-01`));
 export const cuotaDe = (s) => (typeof s.cuota_especial === 'number' ? s.cuota_especial : configuracion().cuota);
 
 export function cuotasAnio(anio) {
@@ -1358,4 +1364,42 @@ export function reciboCuota(socioId, anio) {
   const num = Number.isFinite(Number(f.socio.numero)) && String(f.socio.numero).trim() ? String(Number(f.socio.numero)).padStart(3, '0') : f.socio.id.slice(0, 6).toUpperCase();
   return { numero: `CU-${anio}-${num}`, anio: Number(anio), socio: f.socio, importe: f.pagado, debe: f.debe, completa: f.estado === 'pagado',
     pagos: f.pagos.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)).map(m => ({ fecha: m.fecha, importe: m.importe, forma: forma(m) })), emitido: hoyISO() };
+}
+
+// ===========================================================================
+// Histórico de socios: bajas con motivo, reactivar a quien vuelve y evolución
+// por años. La relación de asociados es obligatoria (LO 1/2002, art. 14).
+// ===========================================================================
+export const MOTIVOS_BAJA = ['Voluntaria', 'Impago de la cuota', 'Fallecimiento', 'Otro'];
+export async function darDeBajaSocio(id, { fecha = hoyISO(), motivo = '' } = {}) {
+  exigirAbierta();
+  const s = t.socios.find(x => x.id === id);
+  if (!s) throw new Error('Socio no encontrado.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) throw new Error('Indica la fecha de baja.');
+  return guardarSocio({ ...quitarInternos(s), fecha_baja: fecha, motivo_baja: String(motivo || '').trim() || null, id });
+}
+// Vuelve al Club: el periodo anterior queda guardado y empieza uno nuevo
+export async function reactivarSocio(id, { fecha = hoyISO() } = {}) {
+  exigirAbierta();
+  const s = t.socios.find(x => x.id === id);
+  if (!s) throw new Error('Socio no encontrado.');
+  if (!s.fecha_baja) throw new Error('Este socio no está de baja.');
+  if (fecha < s.fecha_baja) throw new Error('La nueva alta no puede ser anterior a la baja.');
+  const anteriores = [...(s.bajas_anteriores || []), { alta: s.fecha_alta || null, baja: s.fecha_baja, motivo: s.motivo_baja || null }];
+  return guardarSocio({ ...quitarInternos(s), bajas_anteriores: anteriores, fecha_alta: fecha, fecha_baja: null, motivo_baja: null, id });
+}
+// Cuántos socios hubo cada año, cuántas altas y cuántas bajas
+export function evolucionSocios() {
+  exigirAbierta();
+  const ps = t.socios.flatMap(s => periodosSocio(s));
+  const anioDe = (f) => (f ? Number(f.slice(0, 4)) : null);
+  const conocidos = [...ps.map(p => anioDe(p.alta)), ...ps.map(p => anioDe(p.baja)), ...t.movimientos.map(m => anioDe(m.fecha))].filter(Boolean);
+  const hoy = Number(hoyISO().slice(0, 4));
+  const desde = conocidos.length ? Math.min(...conocidos) : hoy;
+  const filas = [];
+  for (let y = hoy; y >= desde; y--) {
+    filas.push({ anio: y, socios: t.socios.filter(s => socioEnAnio(s, y)).length,
+      altas: ps.filter(p => anioDe(p.alta) === y).length, bajas: ps.filter(p => anioDe(p.baja) === y).length });
+  }
+  return { filas, sinAlta: t.socios.filter(s => !s.fecha_alta).length };
 }

@@ -851,6 +851,37 @@ await ir('#/tesoreria');
     await page.click('[data-recibo-mov]'); await page.waitForSelector('dialog[open]');
     ok((await page.innerText('dialog[open]')).includes('CU-2026-008'), 'Recibo: también desde el movimiento del pago');
     await page.click('dialog[open] button[value=no]'); await page.click('[data-cancelar]'); await page.fill('#mf-texto', ''); await page.waitForTimeout(200); }
+  // Histórico de socios: filtros, baja con motivo, vuelta al Club, evolución y relación de asociados
+  { await irTes('socios'); await page.waitForSelector('[data-vista-socios]');
+    const antes = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return t.socios().filter(s => !t.estaDeBaja(s)).length; });
+    ok((await page.innerText('[data-vista-socios="activos"]')).includes(`(${antes})`), 'Socios: filtro «Activos» con el número');
+    await page.click('#te-lista [data-socio]:has-text("Bernat")'); await page.waitForSelector('#te-dar-baja');
+    await page.click('#te-dar-baja'); await page.waitForSelector('#dlg-bmotivo');
+    await page.fill('#dlg-bfecha', '2026-11-20'); await page.selectOption('#dlg-bmotivo', 'Impago de la cuota'); await page.click('dialog[open] button[value=si]');
+    await page.waitForSelector('#te-reactivar');
+    await page.click('#te-volver'); await page.waitForSelector('[data-vista-socios]');
+    ok(!(await page.innerText('#te-lista')).includes('Bernat'), 'Socios: dado de baja, ya no sale entre los activos');
+    await page.click('[data-vista-socios="bajas"]'); await page.waitForTimeout(200);
+    ok((await page.innerText('#te-lista')).includes('Bernat') && /– 2026 \(Impago de la cuota\)/.test(await page.innerText('#te-lista')), `Socios: «De baja» con el periodo y el motivo (${(await page.innerText('#te-lista')).replace(/\s+/g, ' ').slice(0, 120)})`);
+    await page.click('[data-vista-socios="anio"]'); await page.waitForSelector('#te-anio-socios'); await page.selectOption('#te-anio-socios', '2026'); await page.waitForTimeout(200);
+    ok((await page.innerText('#te-lista')).includes('Bernat'), 'Socios: «Por año» 2026 incluye a quien se dio de baja ese año');
+    await page.click('[data-vista-socios="todos"]'); await page.waitForTimeout(200);
+    await page.click('#te-lista [data-socio]:has-text("Bernat")'); await page.waitForSelector('#te-reactivar');
+    await page.click('#te-reactivar'); await page.waitForSelector('#dlg-rfecha'); await page.fill('#dlg-rfecha', '2026-11-23'); await page.click('dialog[open] button[value=si]');
+    await page.waitForSelector('#te-dar-baja');
+    const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const b = t.socios().find(s => s.nombre === 'Bernat');
+      return { baja: b.fecha_baja, alta: b.fecha_alta, ant: b.bajas_anteriores, en2026: t.socioEnAnio(b, 2026), evo: t.evolucionSocios().filas.find(f => f.anio === 2026) }; });
+    ok(r.baja === null && r.alta === '2026-11-23' && r.ant.length === 1 && r.ant[0].motivo === 'Impago de la cuota' && r.ant[0].baja === '2026-11-20' && r.en2026 && r.evo.bajas >= 1 && r.evo.altas >= 1 && (await page.innerText('#te-ficha')).includes('Periodos anteriores'),
+      `Socios: vuelve al Club con nueva alta y el periodo anterior guardado (${JSON.stringify(r)})`);
+    await page.click('#te-volver'); await page.waitForSelector('#te-evolucion');
+    await page.click('#te-evolucion summary');
+    ok((await page.innerText('#te-evolucion')).includes('2026'), 'Socios: evolución de socios por año');
+    const rel = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const d = await import('./js/documentos.js');
+      const ui = await import('./js/ui.js'); const html = ui.crudo(d.plantillaRelacionSocios({ titulo: 'Histórico de socios', socios: t.socios(), periodos: t.periodosSocio }));
+      return { br: html.includes('20/11/2026 (Impago de la cuota)') && /<br>\s*23\/11\/2026/.test(html), escapado: html.includes('&lt;br&gt;'), ley: html.includes('Ley Orgánica 1/2002') }; });
+    ok(rel.br && !rel.escapado && rel.ley, `Socios: relación de asociados imprimible, con los dos periodos (${JSON.stringify(rel)})`);
+    await page.click('[data-vista-socios="activos"]'); await page.waitForTimeout(200);
+    await irTes('movimientos'); await page.waitForSelector('#mf-anio'); }
   // Orden de la lista: de más antiguo a más reciente, por importe, y se recuerda
   { const fechas = async () => page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [...document.querySelectorAll('#te-movs [data-editar-mov]')].map(a => t.movimientos().find(m => m.id === a.dataset.editarMov)); });
     await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);

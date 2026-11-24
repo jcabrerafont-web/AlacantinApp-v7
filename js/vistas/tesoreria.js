@@ -26,7 +26,7 @@ const aNum = (v) => { const t = String(v ?? '').trim(); const n = Number(t.inclu
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export default async function (main) {
-  let pestana = 'inicio', editando = null, buscar = '', verBajas = false, importacion = null, noImportados = [];
+  let pestana = 'inicio', editando = null, buscar = '', vistaSocios = 'activos', anioSocios = new Date().getFullYear(), importacion = null, noImportados = [];
   // orden: 'recientes' (por defecto), 'antiguos' o 'importe'; se recuerda en este navegador
   const ORDENES = [['recientes', 'Más recientes primero'], ['antiguos', 'Más antiguos primero'], ['importe', 'Por importe (mayor primero)']];
   const ordenGuardado = (() => { try { const o = localStorage.getItem('tes-orden'); return ORDENES.some(([k]) => k === o) ? o : 'recientes'; } catch { return 'recientes'; } })();
@@ -267,8 +267,15 @@ export default async function (main) {
   const pintarSocios = (cuerpo) => {
     const todos = tes.socios();
     const n = tes.normalizar(buscar);
-    const lista = todos.filter(s => (verBajas || !tes.estaDeBaja(s)) && (!n || tes.normalizar([s.numero, s.nombre, s.apellidos, s.dni, s.municipio, s.email, s.telefono].join(' ')).includes(n)));
+    const enVista = (s) => vistaSocios === 'activos' ? !tes.estaDeBaja(s) : vistaSocios === 'bajas' ? tes.estaDeBaja(s) : vistaSocios === 'anio' ? tes.socioEnAnio(s, anioSocios) : true;
+    const lista = todos.filter(s => enVista(s) && (!n || tes.normalizar([s.numero, s.nombre, s.apellidos, s.dni, s.municipio, s.email, s.telefono].join(' ')).includes(n)));
     const activos = todos.filter(s => !tes.estaDeBaja(s)).length;
+    const evo = todos.length ? tes.evolucionSocios() : null;
+    const anios = evo ? evo.filas.map(f => f.anio) : [anioSocios];
+    // Periodo como socio, para la lista: «Socio desde 2021», «2019 – 2024 (Impago)»…
+    const periodo = (s) => { const ps = tes.periodosSocio(s); const y = (f) => (f ? f.slice(0, 4) : '¿?');
+      return ps.map(p => (p.baja ? `${y(p.alta)} – ${y(p.baja)}${p.motivo ? ` (${p.motivo})` : ''}` : p.alta ? `Socio desde ${fecha(p.alta)}` : 'Sin fecha de alta')).join(' · '); };
+    const titulos = { activos: 'Socios activos', bajas: 'Socios de baja', todos: 'Histórico de socios', anio: `Socios en ${anioSocios}` };
     const e = editando === 'nuevo' ? {} : editando ? todos.find(s => s.id === editando) : null;
     if (e) return pintarFicha(cuerpo, e);
     pintar(cuerpo, h`
@@ -277,16 +284,25 @@ export default async function (main) {
       <div class="tarjeta">
         <div class="fila"><input id="te-buscar" type="search" placeholder="Buscar por nombre, nº, DNI, municipio…" value="${buscar}" style="flex:1" aria-label="Buscar socios">
           <button class="btn btn-primario" id="te-nuevo">+ Nuevo socio</button></div>
-        <label class="peq" style="display:block;margin-top:.5rem"><input type="checkbox" id="te-bajas" ${verBajas ? h`checked` : ''}> Ver también los de baja</label>
+        <div class="fila" role="group" aria-label="Qué socios ver" style="margin-top:.5rem">${[['activos', `Activos (${activos})`], ['bajas', `De baja (${todos.length - activos})`], ['todos', `Histórico (${todos.length})`], ['anio', 'Por año']].map(([k, et]) => h`<button type="button" class="btn btn-pequeno ${vistaSocios === k ? 'btn-primario' : ''}" aria-pressed="${vistaSocios === k}" data-vista-socios="${k}">${et}</button>`)}
+          ${vistaSocios === 'anio' ? h`<select id="te-anio-socios" aria-label="Año">${anios.map(a => h`<option value="${a}" ${a === anioSocios ? h`selected` : ''}>${a}</option>`)}</select>` : ''}</div>
       </div>
+      <p class="peq muted" style="margin:.25rem .25rem 0">${titulos[vistaSocios]}: ${lista.length}${n ? ' (con la búsqueda)' : ''}</p>
       ${lista.length ? h`<ul class="lista tarjeta" id="te-lista">${lista.map(s => h`<li><a class="item" href="#/tesoreria" data-socio="${s.id}">
         <span class="item-principal"><span class="item-titulo">${s.numero ? `${s.numero} · ` : ''}${tes.nombreCompleto(s)}${tes.estaDeBaja(s) ? h` <span class="chip chip-aviso">Baja</span>` : ''}</span>
-        <span class="item-sub">${[s.municipio, s.telefono, s.email].filter(Boolean).join(' · ') || '—'}</span></span><span aria-hidden="true">›</span></a></li>`)}</ul>`
+        <span class="item-sub">${periodo(s)}${[s.municipio, s.telefono].filter(Boolean).length ? ` · ${[s.municipio, s.telefono].filter(Boolean).join(' · ')}` : ''}</span></span><span aria-hidden="true">›</span></a></li>`)}</ul>`
       : h`<p class="muted tarjeta">${todos.length ? 'Ningún socio coincide con la búsqueda.' : 'Todavía no hay socios. Añádelos uno a uno o impórtalos desde el Excel del Club en «Importar».'}</p>`}
-      ${todos.length ? h`<button class="btn" id="te-csv">⬇️ Socios (CSV)</button>` : ''}`);
+      ${todos.length ? h`<div class="tarjeta fila"><button class="btn" id="te-relacion">🖨️ Relación de asociados (${titulos[vistaSocios].toLowerCase()})</button><button class="btn" id="te-csv">⬇️ CSV</button></div>` : ''}
+      ${evo ? h`<details class="tarjeta" id="te-evolucion"><summary><strong>Evolución de socios por año</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
+        <thead><tr><th>Año</th><th class="num">Socios</th><th class="num">Altas</th><th class="num">Bajas</th></tr></thead>
+        <tbody>${evo.filas.map(f => h`<tr><td><button type="button" class="enlace" data-anio-socios="${f.anio}">${f.anio}</button></td><td class="num">${f.socios}</td><td class="num">${f.altas}</td><td class="num">${f.bajas}</td></tr>`)}</tbody></table></div>
+        ${evo.sinAlta ? h`<p class="peq muted">${evo.sinAlta} socio(s) sin fecha de alta: cuentan en todos los años hasta su baja. Pon la fecha de alta en su ficha si la sabes.</p>` : ''}</details>` : ''}`);
     const campoBuscar = $('#te-buscar', cuerpo);
     campoBuscar.addEventListener('input', () => { buscar = campoBuscar.value; pintarSocios(cuerpo); const c = $('#te-buscar', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
-    $('#te-bajas', cuerpo).addEventListener('change', (ev) => { verBajas = ev.target.checked; pintarSocios(cuerpo); });
+    cuerpo.querySelectorAll('[data-vista-socios]').forEach(b => b.addEventListener('click', () => { vistaSocios = b.dataset.vistaSocios; pintarSocios(cuerpo); }));
+    $('#te-anio-socios', cuerpo)?.addEventListener('change', (ev) => { anioSocios = Number(ev.target.value); pintarSocios(cuerpo); });
+    cuerpo.querySelectorAll('[data-anio-socios]').forEach(b => b.addEventListener('click', () => { vistaSocios = 'anio'; anioSocios = Number(b.dataset.anioSocios); pintarSocios(cuerpo); window.scrollTo(0, 0); }));
+    $('#te-relacion', cuerpo)?.addEventListener('click', () => docs.relacionSocios({ titulo: titulos[vistaSocios], socios: lista, periodos: tes.periodosSocio }));
     $('#te-nuevo', cuerpo).addEventListener('click', () => { editando = 'nuevo'; pintarSocios(cuerpo); });
     cuerpo.querySelectorAll('[data-socio]').forEach(b => b.addEventListener('click', (ev) => { ev.preventDefault(); editando = b.dataset.socio; pintarSocios(cuerpo); window.scrollTo(0, 0); }));
     $('#te-csv', cuerpo)?.addEventListener('click', () => {
@@ -306,7 +322,9 @@ export default async function (main) {
       <div class="rejilla rejilla-2">${tes.CAMPOS_SOCIO.filter(([k]) => k !== 'notas').map(([k, et]) => h`<div class="campo"><label for="ts-${k}">${et}</label>
         <input id="ts-${k}" name="${k}" type="${tipo(k)}" value="${s[k] ?? ''}" ${k === 'dni' || k === 'iban' ? h`autocomplete="off" spellcheck="false"` : ''}></div>`)}</div>
       <div class="campo"><label for="ts-notas">Notas</label><textarea id="ts-notas" name="notas" rows="3">${s.notas || ''}</textarea></div>
+      ${!nuevo && (s.bajas_anteriores || []).length ? h`<p class="peq"><strong>Periodos anteriores:</strong> ${s.bajas_anteriores.map(p => `${p.alta ? fecha(p.alta) : '¿?'} – ${fecha(p.baja)}${p.motivo ? ` (${p.motivo})` : ''}`).join('; ')}</p>` : ''}
       <div class="fila"><button class="btn btn-primario" type="submit">${nuevo ? 'Añadir socio' : 'Guardar cambios'}</button>
+        ${nuevo ? '' : tes.estaDeBaja(s) || s.fecha_baja ? h`<button class="btn" type="button" id="te-reactivar">Vuelve al Club (nueva alta)…</button>` : h`<button class="btn" type="button" id="te-dar-baja">Dar de baja…</button>`}
         ${nuevo ? '' : h`<button class="btn btn-peligro" type="button" id="te-borrar">Borrar</button>`}</div>
       <p class="peq muted">Para un socio que deja el Club, mejor poner la fecha de baja que borrarlo: así se conserva su historial de cuotas.</p>
     </form>
@@ -318,6 +336,23 @@ export default async function (main) {
         <span class="item-sub">${tes.nombrePartida(m.partida) || 'Sin clasificar'}${m.anio ? ` ${m.anio}` : ''} · ${m.concepto}</span></span></li>`)}</ul>`
       : h`<p class="muted peq">Todavía no tiene movimientos asignados.</p>`}</div>`; })()}`);
     $('#te-volver', cuerpo).addEventListener('click', () => { editando = null; pintarSocios(cuerpo); });
+    $('#te-dar-baja', cuerpo)?.addEventListener('click', async () => {
+      const r = await dialogo({ titulo: `Dar de baja · ${tes.nombreCompleto(s)}`, cuerpo: h`<label for="dlg-bfecha">Fecha de baja</label><input id="dlg-bfecha" type="date" value="${hoyISO()}">
+        <label for="dlg-bmotivo">Motivo</label><select id="dlg-bmotivo">${tes.MOTIVOS_BAJA.map(m => h`<option>${m}</option>`)}</select>
+        <p class="peq muted">Sigue en el histórico de socios y en la relación de asociados. Deja de salir en las cuotas de los años siguientes.</p>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Dar de baja', primario: true }] });
+      const f = document.getElementById('dlg-bfecha')?.value, mo = document.getElementById('dlg-bmotivo')?.value;
+      if (r !== 'si') return;
+      try { await tes.darDeBajaSocio(s.id, { fecha: f, motivo: mo }); aviso('Socio dado de baja', 'ok'); pintarFicha(cuerpo, tes.socios().find(x => x.id === s.id)); } catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#te-reactivar', cuerpo)?.addEventListener('click', async () => {
+      const r = await dialogo({ titulo: `Vuelve al Club · ${tes.nombreCompleto(s)}`, cuerpo: h`<label for="dlg-rfecha">Fecha de la nueva alta</label><input id="dlg-rfecha" type="date" value="${hoyISO()}">
+        <p class="peq muted">El periodo anterior (${s.fecha_alta ? fecha(s.fecha_alta) : '¿?'} – ${fecha(s.fecha_baja)}) se guarda en su historial.</p>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Dar de alta de nuevo', primario: true }] });
+      const f = document.getElementById('dlg-rfecha')?.value;
+      if (r !== 'si') return;
+      try { await tes.reactivarSocio(s.id, { fecha: f }); aviso('Socio de nuevo en activo', 'ok'); pintarFicha(cuerpo, tes.socios().find(x => x.id === s.id)); } catch (e) { aviso(e.message, 'error'); }
+    });
     cuerpo.querySelectorAll('[data-olvidar]').forEach(b => b.addEventListener('click', async () => { await tes.olvidarOrdenante(s.id, b.dataset.olvidar); pintarFicha(cuerpo, tes.socios().find(x => x.id === s.id)); }));
     $('#ts-iban', cuerpo).addEventListener('change', (ev) => { if (ev.target.value && !tes.ibanValido(ev.target.value)) aviso('Ese IBAN no es válido: revisa los dígitos.', 'error'); });
     $('#te-borrar', cuerpo)?.addEventListener('click', async () => {

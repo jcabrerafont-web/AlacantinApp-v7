@@ -410,6 +410,25 @@ export function inventarioDoc(x) {
   window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
 }
 
+// Relación de asociados (LO 1/2002, art. 14): nº, nombre, DNI, alta y baja de cada socio
+export function plantillaRelacionSocios({ titulo, socios, periodos, dia = new Date().toISOString().slice(0, 10) }) {
+  const ref = `RS-${dia}-${huella(JSON.stringify(socios.map(s => [s.numero, s.fecha_alta, s.fecha_baja])))}`;
+  const f = (x) => (x ? fecha(x) : '—');
+  return h`
+    ${cabecera(`Relación de asociados · ${titulo}`, ref, `${CONFIG.club.nombre} · Tesorería`)}
+    <p>A ${fecha(dia)}. ${socios.length} persona(s).</p>
+    <table><thead><tr><th>Nº</th><th>Nombre y apellidos</th><th>DNI / NIE</th><th>Alta</th><th>Baja</th></tr></thead><tbody>
+      ${socios.map(s => { const ps = periodos(s); return h`<tr><td>${s.numero || ''}</td><td>${[s.nombre, s.apellidos].filter(Boolean).join(' ')}</td><td>${s.dni || ''}</td>
+        <td>${ps.map((p, i) => h`${i ? h`<br>` : ''}${f(p.alta)}`)}</td><td>${ps.map((p, i) => h`${i ? h`<br>` : ''}${p.baja ? `${f(p.baja)}${p.motivo ? ` (${p.motivo})` : ''}` : ''}`)}</td></tr>`; })}
+    </tbody></table>
+    <div class="doc-firmas"><div>Secretaría / Tesorería</div><div>Visto bueno de la Presidencia</div></div>
+    <p class="doc-pie">Relación de asociados (Ley Orgánica 1/2002, de 22 de marzo, art. 14). Contiene datos personales: guárdala en lugar seguro y destrúyela cuando no haga falta.</p>`;
+}
+export function relacionSocios(d) {
+  imprimir(plantillaRelacionSocios(d));
+  window.addEventListener('afterprint', () => pintar('#impresion', ''), { once: true });
+}
+
 // Hoja con el código de recuperación de la tesorería, para guardarla en sobre cerrado
 export function codigoRecuperacionDoc(codigo) {
   imprimir(h`${cabecera('Código de recuperación de la tesorería', new Date().toLocaleDateString('es-ES'), `${CONFIG.club.nombre} · Tesorería`)}
