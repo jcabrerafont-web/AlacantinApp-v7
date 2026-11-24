@@ -95,6 +95,55 @@ export default async function (main) {
     });
   };
 
+  // Socio nuevo desde un movimiento (un socio que se apunta y paga antes de estar en la lista)
+  const NUEVO_SOCIO = '__nuevo_socio';
+  const opcionNuevoSocio = h`<option value="${NUEVO_SOCIO}">➕ Nuevo socio…</option>`;
+  // Propuesta de nombre a partir del concepto del banco («trf. jose garcia lopez»)
+  const nombreDelConcepto = (concepto) => {
+    const w = String(concepto || '').replace(/^\s*(trf|transf|transferencia|bizum|ingreso|abono)\.?\s*/i, '').trim().split(/\s+/).filter(Boolean)
+      .map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase());
+    if (w.length < 2) return { nombre: w.join(' '), apellidos: '' };
+    const n = w.length >= 4 ? 2 : 1;
+    return { nombre: w.slice(0, n).join(' '), apellidos: w.slice(n).join(' ') };
+  };
+  const dialogoSocioRapido = async (m) => {
+    const prop = m.importe > 0 ? nombreDelConcepto(m.concepto) : { nombre: '', apellidos: '' };
+    const sig = Math.max(0, ...tes.socios().map(x => Number(x.numero)).filter(Number.isFinite)) + 1;
+    const ok = await dialogo({ titulo: 'Nuevo socio', cuerpo: h`<p class="peq muted">Lo básico para asignarle este pago. El resto (DNI, dirección, IBAN…) se completa después en Socios.</p>
+      <label for="dlg-snum">Nº de socio</label><input id="dlg-snum" inputmode="numeric" value="${sig}">
+      <label for="dlg-snombre">Nombre</label><input id="dlg-snombre" value="${prop.nombre}">
+      <label for="dlg-sape">Apellidos</label><input id="dlg-sape" value="${prop.apellidos}">
+      ${prop.nombre ? h`<p class="peq muted" style="margin:.2rem 0 0">Sacado del concepto «${m.concepto}»: revisa que nombre y apellidos estén en su sitio.</p>` : ''}
+      <label for="dlg-stel">Teléfono</label><input id="dlg-stel" type="tel">
+      <label for="dlg-semail">Correo</label><input id="dlg-semail" type="email">
+      <label for="dlg-salta">Fecha de alta</label><input id="dlg-salta" type="date" value="${m.fecha}">`,
+      acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Añadir socio', primario: true }] });
+    const v = (id) => document.getElementById(id)?.value || '';
+    const datosS = { numero: v('dlg-snum'), nombre: v('dlg-snombre'), apellidos: v('dlg-sape'), telefono: v('dlg-stel'), email: v('dlg-semail'), fecha_alta: v('dlg-salta') };
+    if (ok !== 'si') return null;
+    // Se recuerda el ordenante: sus próximas transferencias se le asignan solas
+    const alias = m.importe > 0 ? tes.ordenanteDe(m.concepto) : '';
+    return tes.guardarSocio({ ...datosS, alias: alias.split(' ').length >= 2 ? [alias] : [] });
+  };
+  const conectarSelectSocio = (sel, m, alCrear) => {
+    let anterior = sel.value;
+    sel.addEventListener('focus', () => { anterior = sel.value; });
+    sel.addEventListener('change', async () => {
+      if (sel.value !== NUEVO_SOCIO) { anterior = sel.value; return; }
+      try {
+        const s = await dialogoSocioRapido(m);
+        if (!s) { sel.value = anterior; return; }
+        // En todos los desplegables de socio del formulario (partes incluidas)
+        sel.closest('form')?.querySelectorAll('select').forEach(x => { if (!x.querySelector(`option[value="${NUEVO_SOCIO}"]`)) return;
+          const o = document.createElement('option'); o.value = s.id; o.textContent = `${s.numero ? `${s.numero} · ` : ''}${tes.nombreCompleto(s)}`;
+          x.insertBefore(o, x.querySelector(`option[value="${NUEVO_SOCIO}"]`)); });
+        sel.value = s.id; anterior = s.id;
+        aviso(`Socio ${s.numero ? `nº ${s.numero} ` : ''}${tes.nombreCompleto(s)} añadido. Completa su ficha en Socios cuando puedas.`, 'ok', { ms: 7000 });
+        alCrear?.(s);
+      } catch (e) { aviso(e.message, 'error'); sel.value = anterior; }
+    });
+  };
+
   // Antes de crear la contraseña, mirar si ya existe en el servidor (otro dispositivo)
   if (navigator.onLine) await sync.descargar(datos.estado.perfil.id).catch(() => {});
 
@@ -378,7 +427,7 @@ export default async function (main) {
           ${partesBorrador.map((p, i) => h`<fieldset class="parte"><legend>Parte ${i + 1}</legend><div class="rejilla rejilla-2">
             <div class="campo"><label for="mp-importe-${i}">Importe (€)</label><input id="mp-importe-${i}" data-parte="${i}" data-k="importe" inputmode="decimal" value="${p.importe === '' || p.importe === undefined ? '' : String(p.importe).replace('.', ',')}"></div>
             <div class="campo"><label for="mp-partida-${i}">Partida</label><select id="mp-partida-${i}" data-parte="${i}" data-k="partida"><option value="">— Sin clasificar —</option>${parts.map(x => h`<option value="${x.id}" ${p.partida === x.id ? h`selected` : ''}>${x.nombre}</option>`)}</select></div>
-            <div class="campo"><label for="mp-socio-${i}">Socio</label><select id="mp-socio-${i}" data-parte="${i}" data-k="socio_id"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${p.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
+            <div class="campo"><label for="mp-socio-${i}">Socio</label><select id="mp-socio-${i}" data-parte="${i}" data-k="socio_id"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${p.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}${opcionNuevoSocio}</select></div>
             <div class="campo"><label for="mp-anio-${i}">Año de la cuota</label><input id="mp-anio-${i}" data-parte="${i}" data-k="anio" type="number" min="2000" max="2100" value="${p.anio ?? ''}" placeholder="Solo para cuotas"></div>
             <div class="campo"><label for="mp-nota-${i}">Nota</label><input id="mp-nota-${i}" data-parte="${i}" data-k="nota" value="${p.nota || ''}"></div>
             ${partesBorrador.length > 2 ? h`<div><button type="button" class="btn btn-pequeno" data-quitar-parte="${i}">Quitar esta parte</button></div>` : ''}</div></fieldset>`)}
@@ -387,7 +436,7 @@ export default async function (main) {
             <button type="button" class="btn btn-pequeno" data-no-dividir>${m.partes?.length ? 'Quitar la división' : 'No dividir'}</button></p></div>`; })()
         : h`<div class="rejilla rejilla-2">
           <div class="campo"><label for="me-partida">Partida</label><select id="me-partida"><option value="">— Sin clasificar —</option>${parts.map(p => h`<option value="${p.id}" ${m.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}${opcionNueva}</select></div>
-          <div class="campo"><label for="me-socio">Socio</label><select id="me-socio"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${m.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}</select></div>
+          <div class="campo"><label for="me-socio">Socio</label><select id="me-socio"><option value="">— Ninguno —</option>${socios.map(x => h`<option value="${x.id}" ${m.socio_id === x.id ? h`selected` : ''}>${x.numero ? `${x.numero} · ` : ''}${tes.nombreCompleto(x)}</option>`)}${opcionNuevoSocio}</select></div>
           <div class="campo"><label for="me-anio">Año de la cuota</label><input id="me-anio" type="number" min="2000" max="2100" value="${m.anio ?? ''}" placeholder="Solo para cuotas"></div>
           <div class="campo"><label for="me-nota">Nota</label><input id="me-nota" value="${m.nota || ''}"></div>
         </div>`}
@@ -487,8 +536,14 @@ export default async function (main) {
     conectarSelectPartida($('#mm-partida', cuerpo));
     const form = $('.mov-form', cuerpo);
     if (form) {
-      if ($('#me-partida', form)) conectarSelectPartida($('#me-partida', form));
       const m = tes.movimientos().find(x => x.id === form.dataset.mov);
+      if ($('#me-partida', form)) conectarSelectPartida($('#me-partida', form));
+      // Socio nuevo: si el pago es justo la cuota y no tiene partida, se propone como cuota de su año
+      if ($('#me-socio', form)) conectarSelectSocio($('#me-socio', form), m, () => {
+        const cuotas = tes.partidaCuotas(), sp = $('#me-partida', form);
+        if (cuotas && sp && !sp.value && Math.abs(m.importe - tes.configuracion().cuota) < 0.005) { sp.value = cuotas.id; if (!$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); }
+      });
+      form.querySelectorAll('[data-k=socio_id]').forEach(sel => conectarSelectSocio(sel, m));
       // Al elegir la partida de cuotas, el año se propone solo
       $('#me-partida', form)?.addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
       form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; partesBorrador = null; pintarMovimientos(cuerpo); });

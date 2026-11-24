@@ -813,6 +813,25 @@ await ir('#/tesoreria');
     await page.selectOption('#mf-partida', 'sinjust'); await page.waitForTimeout(300);
     ok((await page.$$('#te-movs [data-editar-mov]')).length === r.sin && !(await page.innerText('#te-movs')).includes('Compra de pienso'), 'Justificantes: filtro «Gastos sin justificante»');
     await page.selectOption('#mf-partida', ''); await page.waitForTimeout(200); }
+  // Socio nuevo desde el movimiento: alguien se apunta y paga antes de estar en la lista
+  { await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); await t.guardarMovimiento({ fecha: '2026-11-15', importe: '25', concepto: 'trf. maria lopez garcia' }); });
+    await page.selectOption('#mf-anio', 'todos'); await page.fill('#mf-texto', 'maria lopez'); await page.waitForTimeout(300);
+    await page.click('[data-editar-mov]'); await page.waitForSelector('#me-socio');
+    const sig = await page.evaluate(async () => Math.max(...(await import('./js/tesoreria.js')).socios().map(s => Number(s.numero)).filter(Number.isFinite)) + 1);
+    await page.selectOption('#me-socio', '__nuevo_socio'); await page.waitForSelector('#dlg-snombre');
+    const prop = await page.evaluate(() => [document.querySelector('#dlg-snum').value, document.querySelector('#dlg-snombre').value, document.querySelector('#dlg-sape').value, document.querySelector('#dlg-salta').value]);
+    ok(JSON.stringify(prop) === JSON.stringify([String(sig), 'Maria', 'Lopez Garcia', '2026-11-15']), `Socio nuevo: número siguiente, nombre sacado del concepto y alta en la fecha del pago (${JSON.stringify(prop)})`);
+    await page.fill('#dlg-snombre', 'María'); await page.fill('#dlg-sape', 'López García'); await page.fill('#dlg-stel', '600111222');
+    await page.click('dialog[open] button[value=si]'); await page.waitForTimeout(500);
+    const sel = await page.evaluate(() => ({ socio: document.querySelector('#me-socio').selectedOptions[0].textContent, partida: document.querySelector('#me-partida').selectedOptions[0].textContent, anio: document.querySelector('#me-anio').value }));
+    ok(sel.socio === `${sig} · María López García` && sel.partida === 'Cuotas de socios' && sel.anio === '2026', `Socio nuevo: queda elegido y, al ser la cuota justa, el pago pasa a «Cuotas de socios» 2026 (${JSON.stringify(sel)})`);
+    await page.click('.mov-form button[type=submit]'); await page.waitForTimeout(500);
+    const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const s = t.socios().find(x => x.apellidos === 'López García'); const m = t.movimientos({ texto: 'maria lopez' })[0];
+      return { asignado: m.socio_id === s.id, alias: s.alias, tel: s.telefono, alta: s.fecha_alta, cuota: t.cuotasAnio(2026).filas.find(f => f.socio.id === s.id)?.estado,
+        siguiente: t.clasificar({ concepto: 'trf. lopez garcia maria', importe: 25, fecha: '2027-01-10' }).socio_id === s.id }; });
+    ok(r.asignado && r.alias.includes('maria lopez garcia') && r.tel === '600111222' && r.alta === '2026-11-15' && r.cuota === 'pagado' && r.siguiente,
+      `Socio nuevo: pago asignado, cuota 2026 pagada y sus próximas transferencias se le asignan solas (${JSON.stringify(r)})`);
+    await page.fill('#mf-texto', ''); await page.waitForTimeout(200); }
   // Orden de la lista: de más antiguo a más reciente, por importe, y se recuerda
   { const fechas = async () => page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [...document.querySelectorAll('#te-movs [data-editar-mov]')].map(a => t.movimientos().find(m => m.id === a.dataset.editarMov)); });
     await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);
