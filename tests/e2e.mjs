@@ -1295,8 +1295,8 @@ await ir('#/censo');
     const lento = { auth: { getSession: async () => ({ data: { session: { user: {} } } }) },
       from: () => ({ upsert: () => { const p = new Promise(res => setTimeout(() => res({ data: null, error: null }), 30)); p.select = () => ({ maybeSingle: () => p }); return p; }, delete: () => ({ eq: async () => ({ error: null }) }) }) };
     sync.usarCliente(lento);
-    const a = (await db.todos('animales'))[0];
-    await db.guardar('cola', { tabla: 'animales', op: 'upsert', id: a.id, registro: a, creado: Date.now(), intentos: 0, error: null });
+    const a = { id: 'x9' }; // tabla sin fusión de ediciones (el servidor simulado no la contempla)
+    await db.guardar('cola', { tabla: 'comunicados', op: 'upsert', id: a.id, registro: a, creado: Date.now(), intentos: 0, error: null });
     const p1 = sync.drenar();
     await new Promise(r => setTimeout(r, 5));
     for (let i = 0; i < 3; i++) await db.guardar('cola', { tabla: 'comunicados', op: 'upsert', id: `x${i}`, registro: { id: `x${i}` }, creado: Date.now(), intentos: 0, error: null });
