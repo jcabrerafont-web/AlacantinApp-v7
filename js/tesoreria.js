@@ -1344,3 +1344,18 @@ export async function borrarJustificante(id) {
   if (j) await borrarPartesJustificante(j);
   await recargar();
 }
+
+// ===========================================================================
+// Recibo de la cuota de un socio (PDF): lo pagado ese año y cómo se pagó
+// ===========================================================================
+export function reciboCuota(socioId, anio) {
+  exigirAbierta();
+  const c = cuotasAnio(anio);
+  const f = c.filas.find(x => x.socio.id === socioId);
+  if (!f) throw new Error('Ese socio no figura como socio ese año.');
+  if (!(f.pagado > 0)) throw new Error('Todavía no hay ningún pago de esa cuota.');
+  const forma = (m) => (m.remesa ? 'Adeudo directo SEPA' : m.origen === 'banco' ? 'Transferencia bancaria' : 'Efectivo');
+  const num = Number.isFinite(Number(f.socio.numero)) && String(f.socio.numero).trim() ? String(Number(f.socio.numero)).padStart(3, '0') : f.socio.id.slice(0, 6).toUpperCase();
+  return { numero: `CU-${anio}-${num}`, anio: Number(anio), socio: f.socio, importe: f.pagado, debe: f.debe, completa: f.estado === 'pagado',
+    pagos: f.pagos.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)).map(m => ({ fecha: m.fecha, importe: m.importe, forma: forma(m) })), emitido: hoyISO() };
+}

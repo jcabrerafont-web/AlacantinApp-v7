@@ -832,6 +832,25 @@ await ir('#/tesoreria');
     ok(r.asignado && r.alias.includes('maria lopez garcia') && r.tel === '600111222' && r.alta === '2026-11-15' && r.cuota === 'pagado' && r.siguiente,
       `Socio nuevo: pago asignado, cuota 2026 pagada y sus próximas transferencias se le asignan solas (${JSON.stringify(r)})`);
     await page.fill('#mf-texto', ''); await page.waitForTimeout(200); }
+  // Recibo de cuota en PDF (desde Cuotas y desde el movimiento del pago)
+  { const enLetra = await page.evaluate(async () => { const { importeEnLetra } = await import('./js/tesoreria/pdf.js'); return [25, 21, 30.92, 1250.5, 101].map(importeEnLetra); });
+    ok(JSON.stringify(enLetra) === JSON.stringify(['veinticinco euros', 'veintiún euros', 'treinta euros con noventa y dos céntimos', 'mil doscientos cincuenta euros con cincuenta céntimos', 'ciento un euros']), `Recibo: importe en letra (${enLetra.join(' | ')})`);
+    await irTes('cuotas'); await page.waitForSelector('#cu-anio'); await page.selectOption('#cu-anio', '2026'); await page.waitForTimeout(200);
+    await page.click('[data-ver="pagados"]'); await page.waitForTimeout(200);
+    const fila = page.locator('#cu-lista li', { hasText: 'María López García' });
+    await fila.locator('[data-recibo]').click(); await page.waitForSelector('dialog[open]');
+    ok((await page.innerText('dialog[open]')).includes('Recibo CU-2026-008') && (await page.innerText('dialog[open]')).includes('25,00 €') && (await page.innerText('dialog[open]')).includes('Transferencia bancaria') === false && (await page.innerText('dialog[open]')).includes('Efectivo'),
+      `Recibo: número, importe y forma de pago (el pago se anotó a mano: efectivo) (${(await page.innerText('dialog[open]')).replace(/\s+/g, ' ').slice(0, 160)})`);
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('dialog[open] button[value=bajar]')]);
+    const pdf = await (await import('node:fs/promises')).readFile(await dl.path());
+    const txt = pdf.toString('latin1');
+    ok(dl.suggestedFilename() === 'Recibo_CU-2026-008_Maria_Lopez_Garcia.pdf' && txt.startsWith('%PDF-1.4') && txt.includes('(RECIBO DE CUOTA DE SOCIO)') && txt.includes('(Son veinticinco euros.)') && txt.includes('(25,00 \\200)') && txt.trimEnd().endsWith('%%EOF'),
+      `Recibo: PDF válido con los datos y el € (${dl.suggestedFilename()}, ${pdf.length} bytes)`);
+    await irTes('movimientos'); await page.fill('#mf-texto', 'maria lopez'); await page.waitForTimeout(300);
+    await page.click('[data-editar-mov]'); await page.waitForSelector('[data-recibo-mov]');
+    await page.click('[data-recibo-mov]'); await page.waitForSelector('dialog[open]');
+    ok((await page.innerText('dialog[open]')).includes('CU-2026-008'), 'Recibo: también desde el movimiento del pago');
+    await page.click('dialog[open] button[value=no]'); await page.click('[data-cancelar]'); await page.fill('#mf-texto', ''); await page.waitForTimeout(200); }
   // Orden de la lista: de más antiguo a más reciente, por importe, y se recuerda
   { const fechas = async () => page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return [...document.querySelectorAll('#te-movs [data-editar-mov]')].map(a => t.movimientos().find(m => m.id === a.dataset.editarMov)); });
     await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);

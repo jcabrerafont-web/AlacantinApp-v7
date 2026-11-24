@@ -10,6 +10,7 @@ import * as docs from '../documentos.js';
 import * as sepa from '../tesoreria/sepa.js';
 import { desdeEmoji } from '../iconos.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
+import { reciboPdf, nombreArchivoRecibo } from '../tesoreria/recibo.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha, comprimirFoto } from '../ui.js';
 
 // Cinco grupos; dentro de cada uno, sus pestañas
@@ -93,6 +94,23 @@ export default async function (main) {
         sel.dispatchEvent(new Event('change'));
       } catch (e) { aviso(e.message, 'error'); sel.value = anterior; }
     });
+  };
+
+  // Recibo de cuota en PDF: en el móvil se comparte (WhatsApp, correo…); si no se puede, se descarga
+  const enviarRecibo = async (socioId, anio) => {
+    try {
+      const r = tes.reciboCuota(socioId, anio);
+      const archivo = new File([reciboPdf(r)], nombreArchivoRecibo(r), { type: 'application/pdf' });
+      const puedeCompartir = Boolean(navigator.canShare?.({ files: [archivo] }));
+      const accion = await dialogo({ titulo: `Recibo ${r.numero}`, cuerpo: h`<p><strong>${tes.nombreCompleto(r.socio)}</strong>: cuota ${r.anio}, ${euros(r.importe)}${r.completa ? '' : ' (pago parcial)'}.</p>
+        <p class="peq muted">${r.pagos.map(m => `${m.forma} · ${fecha(m.fecha)}`).join('; ')}</p>
+        ${puedeCompartir ? h`<p class="peq muted">«Compartir» abre la lista de apps del móvil: elige WhatsApp y el chat del socio.</p>` : ''}`,
+        acciones: [{ valor: 'no', texto: 'Cerrar' }, { valor: 'bajar', texto: 'Descargar PDF' }, ...(puedeCompartir ? [{ valor: 'compartir', texto: 'Compartir', primario: true }] : [])] });
+      if (accion === 'compartir') {
+        try { await navigator.share({ files: [archivo], title: `Recibo ${r.numero}`, text: `Recibo de la cuota ${r.anio} del Club Gallina Alacantina. ¡Gracias!` }); }
+        catch (e) { if (e?.name !== 'AbortError') { descargar(archivo, archivo.name, 'application/pdf'); aviso('No se pudo compartir: se ha descargado el PDF.', 'aviso'); } }
+      } else if (accion === 'bajar') descargar(archivo, archivo.name, 'application/pdf');
+    } catch (e) { aviso(e.message, 'error'); }
   };
 
   // Socio nuevo desde un movimiento (un socio que se apunta y paga antes de estar en la lista)
@@ -448,6 +466,7 @@ export default async function (main) {
         </div>
         <div class="fila"><button class="btn btn-primario btn-pequeno" type="submit">Guardar</button><button class="btn btn-pequeno" type="button" data-cancelar>Cancelar</button>
           ${partesBorrador ? '' : h`<button class="btn btn-pequeno" type="button" data-dividir>Dividir en partes</button>`}
+          ${!partesBorrador && m.socio_id && m.anio && m.partida && m.partida === tes.partidaCuotas()?.id && m.importe > 0 ? h`<button class="btn btn-pequeno" type="button" data-recibo-mov>🧾 Recibo</button>` : ''}
           <button class="btn btn-pequeno" type="button" data-regla="${m.concepto}">Crear regla con este concepto</button>
           ${m.importe < 0 ? h`<button class="btn btn-pequeno" type="button" data-inventario>Añadir al inventario</button>` : ''}
           ${m.origen === 'banco' ? '' : h`<button class="btn btn-peligro btn-pequeno" type="button" data-borrar-mov="${m.id}">Borrar</button>`}</div>
@@ -583,6 +602,7 @@ export default async function (main) {
         if (partesBorrador) leerPartes();
         await tes.borrarJustificante(b.dataset.quitarJust); aviso('Justificante quitado', 'ok'); pintarMovimientos(cuerpo);
       }));
+      form.querySelector('[data-recibo-mov]')?.addEventListener('click', () => enviarRecibo(m.socio_id, m.anio));
       form.querySelector('[data-dividir]')?.addEventListener('click', () => {
         partesBorrador = [{ importe: m.importe, partida: $('#me-partida', form).value || m.partida || '', socio_id: $('#me-socio', form).value || m.socio_id || '', anio: $('#me-anio', form).value || m.anio || '', nota: '' }, { importe: '', partida: '', socio_id: '', anio: '', nota: '' }];
         pintarMovimientos(cuerpo).then(() => $(`#mp-importe-0`, cuerpo)?.focus());
@@ -660,6 +680,7 @@ export default async function (main) {
         return h`<li class="item cuota" data-cuota="${f.socio.id}"><div class="item-principal">
           <div class="item-titulo">${f.socio.numero ? `${f.socio.numero} · ` : ''}${tes.nombreCompleto(f.socio)} <span class="chip ${ESTADOS[f.estado][1]}">${ESTADOS[f.estado][0]}</span></div>
           <div class="item-sub">${f.estado === 'exento' ? 'No paga cuota' : `Pagado ${euros(f.pagado)} de ${euros(f.debe)}`}${f.pagos.length ? ` · ${f.pagos.map(m => fecha(m.fecha)).join(', ')}` : ''}</div>
+          ${f.pagado > 0 ? h`<div class="fila" style="margin-top:.35rem"><button type="button" class="btn btn-pequeno" data-recibo="${f.socio.id}">🧾 Recibo</button></div>` : ''}
           ${debenPagar(f) ? h`<div class="fila" style="margin-top:.35rem">
             ${wa ? h`<a class="btn btn-pequeno" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
             ${correo ? h`<a class="btn btn-pequeno" href="mailto:${correo}?subject=${encodeURIComponent(`Cuota ${fc.anio} del Club Gallina Alacantina`)}&body=${encodeURIComponent(texto)}">Correo</a>` : ''}
@@ -672,6 +693,7 @@ export default async function (main) {
       <p class="peq muted">Cuenta como pagada la cuota con movimientos en «Cuotas de socios» de ese año asignados al socio. El texto del recordatorio y el importe de la cuota se cambian en «Partidas»; la cuota especial o la exención, en la ficha del socio.</p>`);
     $('#cu-anio', cuerpo).addEventListener('change', (ev) => { fc.anio = Number(ev.target.value); pintarCuotas(cuerpo); });
     cuerpo.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => { fc.ver = b.dataset.ver; pintarCuotas(cuerpo); }));
+    cuerpo.querySelectorAll('[data-recibo]').forEach(b => b.addEventListener('click', () => enviarRecibo(b.dataset.recibo, fc.anio)));
     cuerpo.querySelectorAll('[data-efectivo]').forEach(b => b.addEventListener('click', async () => {
       const s = c.filas.find(f => f.socio.id === b.dataset.efectivo).socio;
       const ok = await dialogo({ titulo: `Pago en efectivo · ${tes.nombreCompleto(s)}`, cuerpo: h`<label for="dlg-importe">Importe (€)</label><input id="dlg-importe" inputmode="decimal" value="${String(b.dataset.falta).replace('.', ',')}">
