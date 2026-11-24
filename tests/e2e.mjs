@@ -880,6 +880,27 @@ await ir('#/tesoreria');
       const ui = await import('./js/ui.js'); const html = ui.crudo(d.plantillaRelacionSocios({ titulo: 'Histórico de socios', socios: t.socios(), periodos: t.periodosSocio }));
       return { br: html.includes('20/11/2026 (Impago de la cuota)') && /<br>\s*23\/11\/2026/.test(html), escapado: html.includes('&lt;br&gt;'), ley: html.includes('Ley Orgánica 1/2002') }; });
     ok(rel.br && !rel.escapado && rel.ley, `Socios: relación de asociados imprimible, con los dos periodos (${JSON.stringify(rel)})`);
+    // Completar fechas de alta: primera transferencia (si es posterior al año de creación) o creación del Club
+    const prep = await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
+      const p = await t.guardarSocio({ numero: '9', nombre: 'Pablo', apellidos: 'Sinfecha' });
+      const q = await t.guardarSocio({ numero: '10', nombre: 'Quique', apellidos: 'Fundador' });
+      await t.guardarMovimiento({ fecha: '2026-02-10', importe: '25', concepto: 'trf. pablo sinfecha' });
+      await t.guardarMovimiento({ fecha: '2025-06-01', importe: '25', concepto: 'trf. quique fundador' });
+      for (const [c, id, y] of [['pablo sinfecha', p.id, 2026], ['quique fundador', q.id, 2025]]) { const m = t.movimientos({ texto: c })[0]; await t.guardarMovimiento({ id: m.id, partida: t.partidaCuotas().id, socio_id: id, anio: y }); }
+      const ana = t.socios().find(s => s.nombre === 'Ana'); return { anaAlta: ana.fecha_alta, sinAlta: t.socios().filter(s => !s.fecha_alta).length }; });
+    await irTes('inicio'); await irTes('socios'); await page.waitForSelector('#te-completar-altas');
+    ok((await page.innerText('#te-sin-alta')).includes(`${prep.sinAlta} socio(s) sin fecha de alta`), `Socios: avisa de los que no tienen fecha de alta (${prep.sinAlta})`);
+    await page.click('#te-completar-altas'); await page.waitForSelector('#dlg-altas-resumen');
+    const res = await page.innerText('#dlg-altas-resumen');
+    ok(res.includes('Pablo Sinfecha → 10/02/2026') && !res.includes('Quique'), `Completar altas: primera transferencia para el que llegó después; el de 2025 va con la creación (${res.replace(/\s+/g, ' ').slice(0, 200)})`);
+    await page.fill('#dlg-creacion', '2017-01-01'); await page.dispatchEvent('#dlg-creacion', 'change'); await page.waitForTimeout(200);
+    ok((await page.innerText('#dlg-altas-resumen')).includes('Quique Fundador → 01/06/2025'), 'Completar altas: con la creación en 2017, el que pagó en 2025 va con su transferencia');
+    await page.fill('#dlg-creacion', '2025-03-08'); await page.dispatchEvent('#dlg-creacion', 'change');
+    await page.click('dialog[open] button[value=si]'); await page.waitForTimeout(600);
+    const fin = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const f = (n) => t.socios().find(s => s.nombre === n)?.fecha_alta;
+      return { pablo: f('Pablo'), quique: f('Quique'), ana: f('Ana'), sin: t.socios().filter(s => !s.fecha_alta).length }; });
+    ok(fin.pablo === '2026-02-10' && fin.quique === '2025-03-08' && fin.ana === prep.anaAlta && fin.sin === 0 && !(await page.$('#te-sin-alta')),
+      `Completar altas: aplicado sin tocar las fechas que ya había (${JSON.stringify(fin)})`);
     await page.click('[data-vista-socios="activos"]'); await page.waitForTimeout(200);
     await irTes('movimientos'); await page.waitForSelector('#mf-anio'); }
   // Orden de la lista: de más antiguo a más reciente, por importe, y se recuerda

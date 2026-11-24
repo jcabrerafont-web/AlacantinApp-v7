@@ -287,6 +287,8 @@ export default async function (main) {
         <div class="fila" role="group" aria-label="Qué socios ver" style="margin-top:.5rem">${[['activos', `Activos (${activos})`], ['bajas', `De baja (${todos.length - activos})`], ['todos', `Histórico (${todos.length})`], ['anio', 'Por año']].map(([k, et]) => h`<button type="button" class="btn btn-pequeno ${vistaSocios === k ? 'btn-primario' : ''}" aria-pressed="${vistaSocios === k}" data-vista-socios="${k}">${et}</button>`)}
           ${vistaSocios === 'anio' ? h`<select id="te-anio-socios" aria-label="Año">${anios.map(a => h`<option value="${a}" ${a === anioSocios ? h`selected` : ''}>${a}</option>`)}</select>` : ''}</div>
       </div>
+      ${todos.some(s => !s.fecha_alta) ? h`<div class="aviso-caja aviso peq" id="te-sin-alta"><strong>${todos.filter(s => !s.fecha_alta).length} socio(s) sin fecha de alta.</strong> La app puede completarlas: la fecha de su primera transferencia o, para los de siempre, la de creación del Club.
+        <button type="button" class="btn btn-pequeno" id="te-completar-altas">Completar fechas…</button></div>` : ''}
       <p class="peq muted" style="margin:.25rem .25rem 0">${titulos[vistaSocios]}: ${lista.length}${n ? ' (con la búsqueda)' : ''}</p>
       ${lista.length ? h`<ul class="lista tarjeta" id="te-lista">${lista.map(s => h`<li><a class="item" href="#/tesoreria" data-socio="${s.id}">
         <span class="item-principal"><span class="item-titulo">${s.numero ? `${s.numero} · ` : ''}${tes.nombreCompleto(s)}${tes.estaDeBaja(s) ? h` <span class="chip chip-aviso">Baja</span>` : ''}</span>
@@ -299,6 +301,23 @@ export default async function (main) {
         ${evo.sinAlta ? h`<p class="peq muted">${evo.sinAlta} socio(s) sin fecha de alta: cuentan en todos los años hasta su baja. Pon la fecha de alta en su ficha si la sabes.</p>` : ''}</details>` : ''}`);
     const campoBuscar = $('#te-buscar', cuerpo);
     campoBuscar.addEventListener('input', () => { buscar = campoBuscar.value; pintarSocios(cuerpo); const c = $('#te-buscar', cuerpo); c.focus(); c.setSelectionRange(c.value.length, c.value.length); });
+    $('#te-completar-altas', cuerpo)?.addEventListener('click', async () => {
+      const resumen = (fc) => { try { const p = tes.proponerAltas(fc); const pago = p.filter(x => x.origen === 'pago'); const cre = p.length - pago.length;
+        return h`<p><strong>${cre}</strong> socio(s) con la fecha de creación (${fecha(fc)}): su primer pago es de ${fc.slice(0, 4)} o no tienen pagos.</p>
+          <p><strong>${pago.length}</strong> socio(s) con la fecha de su primera transferencia${pago.length ? ':' : '.'}</p>
+          ${pago.length ? h`<ul class="peq" style="max-height:10rem;overflow:auto;margin:.25rem 0">${pago.map(x => h`<li>${x.socio.numero ? `${x.socio.numero} · ` : ''}${tes.nombreCompleto(x.socio)} → ${fecha(x.fecha)}</li>`)}</ul>` : ''}`; }
+        catch (e) { return h`<p class="texto-alerta">${e.message}</p>`; } };
+      const espera = dialogo({ titulo: 'Completar fechas de alta', cuerpo: h`<label for="dlg-creacion">Fecha de creación del Club</label><input id="dlg-creacion" type="date" value="${tes.FECHA_CREACION_CLUB}">
+        <p class="peq muted">Por defecto, la constitución formal de la asociación (8/3/2025). Si prefieres contar desde los inicios del Club, cámbiala.</p>
+        <div id="dlg-altas-resumen">${resumen(tes.FECHA_CREACION_CLUB)}</div>
+        <p class="peq muted">Solo se rellenan los que no tienen fecha; las que ya hayas puesto no se tocan. Después puedes corregir cualquiera en su ficha.</p>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: 'Completar', primario: true }] });
+      const campo = document.getElementById('dlg-creacion');
+      campo?.addEventListener('change', () => pintar(document.getElementById('dlg-altas-resumen'), resumen(campo.value)));
+      const r = await espera; const fc = campo?.value;
+      if (r !== 'si') return;
+      try { const n = await tes.aplicarAltas(tes.proponerAltas(fc)); aviso(`Fecha de alta puesta a ${n} socio(s).`, 'ok'); pintarSocios(cuerpo); } catch (e) { aviso(e.message, 'error'); }
+    });
     cuerpo.querySelectorAll('[data-vista-socios]').forEach(b => b.addEventListener('click', () => { vistaSocios = b.dataset.vistaSocios; pintarSocios(cuerpo); }));
     $('#te-anio-socios', cuerpo)?.addEventListener('change', (ev) => { anioSocios = Number(ev.target.value); pintarSocios(cuerpo); });
     cuerpo.querySelectorAll('[data-anio-socios]').forEach(b => b.addEventListener('click', () => { vistaSocios = 'anio'; anioSocios = Number(b.dataset.anioSocios); pintarSocios(cuerpo); window.scrollTo(0, 0); }));

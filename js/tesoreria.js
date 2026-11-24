@@ -1403,3 +1403,32 @@ export function evolucionSocios() {
   }
   return { filas, sinAlta: t.socios.filter(s => !s.fecha_alta).length };
 }
+
+// Completar fechas de alta de quien no la tiene (socios importados del Excel): los que
+// pagaron por primera vez después del año de creación, la fecha de ese primer pago; los
+// demás (primer pago ese mismo año, o ninguno), la fecha de creación del Club.
+export const FECHA_CREACION_CLUB = '2025-03-08'; // constitución formal de la asociación
+export function proponerAltas(fechaCreacion = FECHA_CREACION_CLUB) {
+  exigirAbierta();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaCreacion))) throw new Error('Indica la fecha de creación del Club.');
+  const anioCreacion = fechaCreacion.slice(0, 4);
+  const pagos = pagosDeCuotas().filter(m => m.socio_id && m.importe > 0);
+  return t.socios.filter(s => !s.fecha_alta).map(s => {
+    const primero = pagos.filter(m => m.socio_id === s.id).map(m => m.fecha).sort()[0] || null;
+    const porPago = primero && primero.slice(0, 4) > anioCreacion;
+    return { socio: s, fecha: porPago ? primero : fechaCreacion, origen: porPago ? 'pago' : 'creacion', primerPago: primero };
+  }).sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+export async function aplicarAltas(propuesta) {
+  exigirAbierta();
+  let n = 0;
+  for (const p of propuesta) {
+    const s = t.socios.find(x => x.id === p.socio.id);
+    if (!s || s.fecha_alta) continue; // nunca se pisa una fecha ya puesta
+    const fecha = s.fecha_baja && s.fecha_baja < p.fecha ? s.fecha_baja : p.fecha; // el alta no puede ser posterior a la baja
+    await guardarCifrado('socio', s.id, { ...limpiarSocio({ ...s, fecha_alta: fecha }), creado: s.creado || new Date().toISOString() });
+    n++;
+  }
+  await recargar();
+  return n;
+}
