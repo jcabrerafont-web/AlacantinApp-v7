@@ -10,7 +10,7 @@ import * as docs from '../documentos.js';
 import * as sepa from '../tesoreria/sepa.js';
 import { desdeEmoji } from '../iconos.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
-import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha } from '../ui.js';
+import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha, comprimirFoto } from '../ui.js';
 
 // Cinco grupos; dentro de cada uno, sus pestañas
 export const GRUPOS = [
@@ -290,6 +290,7 @@ export default async function (main) {
       !rec && ['🔑', 'Crea el código de recuperación', 'Sin él, si se olvida la contraseña, nadie podrá abrir la tesorería', 'seguridad', 'hoy'],
       caja.configurada && (caja.diasArqueo === null || caja.diasArqueo > 90) && (caja.movimientos.length || caja.inicial) && ['🧮', 'Haz un arqueo de la caja', caja.ultimo ? `El último fue el ${fecha(caja.ultimo.fecha)}. En caja debería haber ${euros(caja.saldo)}` : `En caja debería haber ${euros(caja.saldo)}`, 'caja', 'pronto'],
       !caja.configurada && tes.movimientos().some(tes.esCaja) && ['💵', 'Empieza la caja de efectivo', 'Indica lo que había para llevar su saldo y hacer arqueos', 'caja', 'info'],
+      tes.gastosSinJustificante(y).length && ['📎', `${tes.gastosSinJustificante(y).length} gasto(s) de ${y} sin justificante`, 'Adjunta la foto o el PDF de la factura', 'movimientos', 'info', () => { filtro.partida = 'sinjust'; filtro.anio = y; }],
       !tes.bienes().length && ['📦', 'Anota los bienes del Club', 'El inventario es obligatorio (LO 1/2002, art. 14)', 'inventario', 'info'],
       (tes.socios().length || tes.movimientos().length) && (dias === null || dias > 30) && ['💾', 'Descarga la copia cifrada', dias === null ? 'Aún no has descargado ninguna' : `La última es de hace ${dias} días`, 'seguridad', 'pronto']
     ].filter(Boolean);
@@ -354,7 +355,9 @@ export default async function (main) {
     const anioSel = filtro.anio === 'todos' ? null : filtro.anio;
     const etiqueta = anioSel ?? 'desde el principio';
     const parts = tes.partidas();
-    const lista = tes.movimientos({ anio: anioSel, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
+    const sinJust = new Set(tes.gastosSinJustificante(anioSel).map(m => m.id));
+    const lista = filtro.partida === 'sinjust' ? tes.movimientos({ anio: anioSel, texto: filtro.texto }).filter(m => sinJust.has(m.id))
+      : tes.movimientos({ anio: anioSel, partida: filtro.partida === '' ? undefined : filtro.partida === 'sin' ? null : filtro.partida, texto: filtro.texto });
     const r = tes.resumen(anioSel);
     const porAnios = anioSel ? [] : tes.resumenPorAnios();
     const sb = tes.saldoBanco();
@@ -382,6 +385,12 @@ export default async function (main) {
           <div class="campo"><label for="me-anio">Año de la cuota</label><input id="me-anio" type="number" min="2000" max="2100" value="${m.anio ?? ''}" placeholder="Solo para cuotas"></div>
           <div class="campo"><label for="me-nota">Nota</label><input id="me-nota" value="${m.nota || ''}"></div>
         </div>`}
+        <div class="justificantes" id="me-justificantes"><strong class="peq">Justificantes</strong>
+          ${tes.justificantesDe(m.id).length ? h`<ul class="lista-simple">${tes.justificantesDe(m.id).map(j => h`<li>📎 ${j.nombre} <span class="muted peq">(${j.bytes > 1048576 ? `${(j.bytes / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(j.bytes / 1024))} KB`})</span>
+            <button type="button" class="btn btn-pequeno" data-ver-just="${j.id}">Ver</button> <button type="button" class="btn btn-pequeno" data-quitar-just="${j.id}" aria-label="Quitar ${j.nombre}">Quitar</button></li>`)}</ul>`
+            : h`<p class="peq muted" style="margin:.2rem 0">${m.importe < 0 ? 'Sin factura todavía.' : 'Ninguno.'}</p>`}
+          <label class="btn btn-pequeno">📎 Añadir foto o PDF<input type="file" data-adjuntar accept="image/*,application/pdf" hidden></label>
+        </div>
         <div class="fila"><button class="btn btn-primario btn-pequeno" type="submit">Guardar</button><button class="btn btn-pequeno" type="button" data-cancelar>Cancelar</button>
           ${partesBorrador ? '' : h`<button class="btn btn-pequeno" type="button" data-dividir>Dividir en partes</button>`}
           <button class="btn btn-pequeno" type="button" data-regla="${m.concepto}">Crear regla con este concepto</button>
@@ -390,7 +399,7 @@ export default async function (main) {
       </form></li>`;
       return h`<li><a class="item mov" href="#/tesoreria" data-editar-mov="${m.id}" id="mov-${m.id}">
         <span class="item-principal"><span class="item-titulo">${m.concepto}</span>
-          <span class="item-sub">${fecha(m.fecha)} · ${m.partes?.length > 1 ? h`<span class="chip">Dividido</span> ${m.partes.map(p => `${tes.nombrePartida(p.partida) || 'Sin clasificar'}${p.anio ? ` ${p.anio}` : ''}${p.socio_id ? ` · ${nombreSocio(p.socio_id)}` : ''} (${euros(p.importe)})`).join(' + ')}` : m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.remesa_id ? ' · Remesa SEPA' : ''}${m.nota ? ` · ${m.nota}` : ''}</span></span>
+          <span class="item-sub">${fecha(m.fecha)} · ${m.partes?.length > 1 ? h`<span class="chip">Dividido</span> ${m.partes.map(p => `${tes.nombrePartida(p.partida) || 'Sin clasificar'}${p.anio ? ` ${p.anio}` : ''}${p.socio_id ? ` · ${nombreSocio(p.socio_id)}` : ''} (${euros(p.importe)})`).join(' + ')}` : m.partida ? h`${tes.nombrePartida(m.partida)}${m.anio ? ` ${m.anio}` : ''}` : h`<span class="chip chip-aviso">Sin clasificar</span>`}${m.socio_id ? ` · ${nombreSocio(m.socio_id)}` : ''}${m.remesa_id ? ' · Remesa SEPA' : ''}${m.nota ? ` · ${m.nota}` : ''}${tes.justificantesDe(m.id).length ? ` · 📎 ${tes.justificantesDe(m.id).length}` : ''}</span></span>
         <span class="importe ${m.importe < 0 ? 'negativo' : 'positivo'}">${euros(m.importe)}</span></a></li>`;
     };
     pintar(cuerpo, h`
@@ -408,7 +417,7 @@ export default async function (main) {
       <div class="tarjeta">
         <div class="rejilla rejilla-3">
           <div class="campo"><label for="mf-anio">Año</label><select id="mf-anio"><option value="todos" ${anioSel ? '' : h`selected`}>Histórico (todos los años)</option>${(anios.length ? anios : [new Date().getFullYear()]).map(a => h`<option value="${a}" ${a === anioSel ? h`selected` : ''}>${a}</option>`)}</select></div>
-          <div class="campo"><label for="mf-partida">Partida</label><select id="mf-partida"><option value="">Todas</option><option value="sin" ${filtro.partida === 'sin' ? h`selected` : ''}>Sin clasificar</option>${parts.map(p => h`<option value="${p.id}" ${filtro.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
+          <div class="campo"><label for="mf-partida">Partida</label><select id="mf-partida"><option value="">Todas</option><option value="sin" ${filtro.partida === 'sin' ? h`selected` : ''}>Sin clasificar</option><option value="sinjust" ${filtro.partida === 'sinjust' ? h`selected` : ''}>Gastos sin justificante (${sinJust.size})</option>${parts.map(p => h`<option value="${p.id}" ${filtro.partida === p.id ? h`selected` : ''}>${p.nombre}</option>`)}</select></div>
           <div class="campo"><label for="mf-texto">Buscar</label><input id="mf-texto" type="search" value="${filtro.texto}" placeholder="Concepto, nota…"></div>
         </div>
         ${r.filas.length ? h`<details><summary><strong>Resumen por partidas ${etiqueta}</strong></summary><div class="tabla-scroll"><table class="tabla-resumen">
@@ -479,6 +488,38 @@ export default async function (main) {
       const sumaPartes = () => { leerPartes(); const suma = partesBorrador.reduce((x, p) => x + aNum(p.importe), 0); const falta = Math.round((m.importe - suma) * 100) / 100;
         const el = $('#me-suma', form); el.textContent = `Las partes suman ${euros(suma)} de ${euros(m.importe)}${Math.abs(falta) >= 0.005 ? ` · faltan ${euros(falta)}` : ' ✓'}`; el.classList.toggle('texto-alerta', Math.abs(falta) >= 0.005); el.classList.toggle('muted', Math.abs(falta) < 0.005); };
       form.querySelectorAll('[data-k=importe]').forEach(el => el.addEventListener('input', sumaPartes));
+      form.querySelector('[data-adjuntar]').addEventListener('change', async (ev) => {
+        const f = ev.target.files?.[0]; ev.target.value = '';
+        if (!f) return;
+        if (partesBorrador) leerPartes();
+        try {
+          let datosArchivo;
+          if (f.type === 'application/pdf') {
+            if (f.size > tes.MAX_JUSTIFICANTE) throw new Error(`El PDF ocupa ${(f.size / 1048576).toFixed(1).replace('.', ',')} MB; el máximo es 2 MB. Haz una foto de la factura, o reduce el PDF.`);
+            datosArchivo = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('No se pudo leer el archivo.')); r.readAsDataURL(f); });
+          } else if (f.type.startsWith('image/')) datosArchivo = await comprimirFoto(f, 1800, 0.78); // legible para facturas
+          else throw new Error('Solo fotos o PDF.');
+          aviso('Guardando el justificante…');
+          await tes.adjuntarJustificante(m.id, { nombre: f.type.startsWith('image/') ? f.name.replace(/\.[^.]+$/, '') + (datosArchivo.startsWith('data:image/webp') ? '.webp' : '.jpg') : f.name, datos: datosArchivo });
+          aviso('Justificante guardado (cifrado)', 'ok');
+        } catch (e) { aviso(e.message || 'No se pudo guardar el justificante.', 'error'); }
+        pintarMovimientos(cuerpo);
+      });
+      form.querySelectorAll('[data-ver-just]').forEach(b => b.addEventListener('click', async () => {
+        try {
+          const j = await tes.abrirJustificante(b.dataset.verJust);
+          const bajar = () => { const [cab, b64] = j.datos.split(','); const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); descargar(u8, j.nombre, cab.slice(5, cab.indexOf(';'))); };
+          if (j.mime.startsWith('image/')) {
+            const r = await dialogo({ titulo: j.nombre, cuerpo: h`<img src="${j.datos}" alt="Justificante ${j.nombre}" style="max-width:100%;height:auto;display:block">`, acciones: [{ valor: 'cerrar', texto: 'Cerrar' }, { valor: 'bajar', texto: 'Descargar', primario: true }] });
+            if (r === 'bajar') bajar();
+          } else bajar();
+        } catch (e) { aviso(e.message, 'error'); }
+      }));
+      form.querySelectorAll('[data-quitar-just]').forEach(b => b.addEventListener('click', async () => {
+        if (!(await confirmar('Quitar el justificante', 'Se borra el archivo de la tesorería (en este dispositivo y en el servidor).', 'Quitar', true))) return;
+        if (partesBorrador) leerPartes();
+        await tes.borrarJustificante(b.dataset.quitarJust); aviso('Justificante quitado', 'ok'); pintarMovimientos(cuerpo);
+      }));
       form.querySelector('[data-dividir]')?.addEventListener('click', () => {
         partesBorrador = [{ importe: m.importe, partida: $('#me-partida', form).value || m.partida || '', socio_id: $('#me-socio', form).value || m.socio_id || '', anio: $('#me-anio', form).value || m.anio || '', nota: '' }, { importe: '', partida: '', socio_id: '', anio: '', nota: '' }];
         pintarMovimientos(cuerpo).then(() => $(`#mp-importe-0`, cuerpo)?.focus());

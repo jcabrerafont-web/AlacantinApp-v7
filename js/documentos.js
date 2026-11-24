@@ -313,6 +313,7 @@ export function plantillaCuentas(c) {
       ${c.efectivo.n ? h`<tr><td>Cobros y pagos en efectivo del año (no pasan por el banco)</td><td class="num">${e(c.efectivo.neto)}</td></tr>` : ''}
       ${c.caja !== null && c.caja !== undefined ? h`<tr><td>Dinero en caja al acabar el año</td><td class="num">${e(c.caja)}</td></tr>` : ''}
       ${c.inventario ? h`<tr><td>Bienes del inventario (valor de compra)</td><td class="num">${e(c.inventario)}</td></tr>` : ''}
+      ${c.justificantes?.total ? h`<tr><td>Gastos con factura o justificante</td><td class="num">${c.justificantes.total - c.justificantes.sin} de ${c.justificantes.total}</td></tr>` : ''}
     </tbody></table>
     ${c.banco.cuadra === false || c.huecos.length ? h`<p class="doc-aviso"><strong>Atención:</strong> ${c.huecos.length ? c.huecos.map(x => x.texto).join(' ') : 'el saldo final no coincide con el inicial más los movimientos del banco: falta algún movimiento por importar.'}</p>` : ''}
     ${conPres ? h`<p class="peq">Presupuesto ${c.anio}${c.presupuesto.aprobado ? `, aprobado en asamblea el ${fecha(c.presupuesto.aprobado)}` : ''}: ingresos ${e(c.presupuesto.ingresos)} y gastos ${e(c.presupuesto.gastos)}.</p>` : ''}

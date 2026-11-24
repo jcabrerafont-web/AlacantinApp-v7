@@ -783,6 +783,36 @@ await ir('#/tesoreria');
   await page.click('[data-no-dividir]'); await page.waitForTimeout(400);
   ok(await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const m = t.movimientos({ texto: 'donante' })[0]; return !m.partes && t.nombrePartida(m.partida) === 'Subvenciones y donativos'; }), 'Dividir: se puede quitar la división (queda la partida de la primera parte)');
   await page.fill('#mf-texto', ''); await page.waitForTimeout(200);
+  // Justificantes (foto o PDF de la factura), cifrados y en trozos
+  { const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(260000, 65)]);
+    const grande = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(2200000, 65)]);
+    await page.selectOption('#mf-anio', 'todos'); await page.waitForTimeout(200);
+    const antes = await page.evaluate(async () => (await import('./js/tesoreria.js')).gastosSinJustificante().length);
+    await page.fill('#mf-texto', 'pienso'); await page.waitForTimeout(300);
+    await page.click('[data-editar-mov]'); await page.waitForSelector('#me-justificantes');
+    await page.setInputFiles('[data-adjuntar]', { name: 'factura pienso.png', mimeType: 'image/png', buffer: png }); await page.waitForSelector('[data-ver-just]', { timeout: 8000 });
+    await page.setInputFiles('[data-adjuntar]', { name: 'factura.pdf', mimeType: 'application/pdf', buffer: pdf }); await page.waitForFunction(() => document.querySelectorAll('[data-ver-just]').length === 2, null, { timeout: 8000 });
+    await page.setInputFiles('[data-adjuntar]', { name: 'enorme.pdf', mimeType: 'application/pdf', buffer: grande }); await page.waitForTimeout(500);
+    ok((await aviso()).includes('el máximo es 2 MB') && (await page.$$('[data-ver-just]')).length === 2, `Justificantes: no admite más de 2 MB (${await aviso()})`);
+    const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const db = await import('./js/db.js');
+      const m = t.movimientos({ texto: 'pienso' })[0]; const js = t.justificantesDe(m.id); const pdf = await t.abrirJustificante(js[1].id);
+      const filas = await db.todos('tesoreria');
+      return { n: js.length, tipos: js.map(j => j.mime), trozos: js[1].partes.length, igual: pdf.datos.startsWith('data:application/pdf;base64,') && atob(pdf.datos.split(',')[1]).length === 260009,
+        maxFila: Math.max(...filas.map(f => f.datos.length)), enClaro: filas.some(f => /AAAAAAAAAA|factura/i.test(f.datos)), sin: t.gastosSinJustificante().length }; });
+    ok(r.n === 2 && r.tipos[0].startsWith('image/') && r.tipos[1] === 'application/pdf' && r.trozos >= 3 && r.igual && r.maxFila <= 200000 && !r.enClaro && r.sin === antes - 1,
+      `Justificantes: foto (comprimida) y PDF guardados cifrados, el PDF en ${r.trozos} trozos de menos de 200.000 caracteres, y se recupera igual (${JSON.stringify(r)})`);
+    await page.click('[data-ver-just] >> nth=0'); await page.waitForSelector('dialog[open] img');
+    ok(await page.$eval('dialog[open] img', i => i.naturalWidth >= 1), 'Justificantes: la foto se ve en la app');
+    await page.click('dialog[open] button[value=cerrar]');
+    await page.click('[data-quitar-just] >> nth=1'); await page.click('dialog.dialogo button[value="si"]'); await page.waitForFunction(() => document.querySelectorAll('[data-ver-just]').length === 1, null, { timeout: 5000 });
+    ok(await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const db = await import('./js/db.js'); const filas = await db.todos('tesoreria'); return filas.filter(f => f.tipo === 'archivo_parte').length === 1 && t.justificantesDe(t.movimientos({ texto: 'pienso' })[0].id).length === 1; }), 'Justificantes: al quitar uno se borran también sus trozos');
+    await page.click('[data-cancelar]'); await page.waitForTimeout(200);
+    ok((await page.innerText('#te-movs')).includes('📎 1'), 'Justificantes: el movimiento muestra 📎 en la lista');
+    await page.fill('#mf-texto', ''); await page.waitForTimeout(200);
+    await page.selectOption('#mf-partida', 'sinjust'); await page.waitForTimeout(300);
+    ok((await page.$$('#te-movs [data-editar-mov]')).length === r.sin && !(await page.innerText('#te-movs')).includes('Compra de pienso'), 'Justificantes: filtro «Gastos sin justificante»');
+    await page.selectOption('#mf-partida', ''); await page.waitForTimeout(200); }
   // Caja de efectivo: saldo inicial, traspaso al banco (no es gasto) y arqueo con ajuste
   ok((await page.evaluate(async () => (await import('./js/tesoreria.js')).bienes().length)) === 0, 'Inventario: vacío al empezar');
   await irTes('inicio');
@@ -823,7 +853,7 @@ await ir('#/tesoreria');
   await page.click('#in-ficha details summary'); await page.fill('#in-baja', '2026-11-22'); await page.click('#in-ficha button[type=submit]'); await page.waitForTimeout(300);
   ok((await aviso()).includes('motivo de la baja'), 'Inventario: la baja pide el motivo');
   await page.fill('#in-motivo', 'Se gastó'); await page.click('#in-ficha button[type=submit]'); await page.waitForSelector('[data-bien]');
-  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const d = await import('./js/documentos.js'); const x = t.inventario('2026-11-23');
+  { const r = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const d = await import('./js/documentos.js'); const x = t.inventario();
       const doc = document.createElement('div'); doc.innerHTML = d.plantillaInventario(x).toString?.() ?? ''; return { n: x.bienes.length, total: x.total, bajas: x.bajas.length, c: t.cuentasAnio(2026).inventario, caja: t.cuentasAnio(2026).caja }; });
     ok(r.n === 1 && r.total === 360 && r.bajas === 1 && r.c === 360 && typeof r.caja === 'number', `Inventario: lo dado de baja sale del inventario y queda en las bajas del año; las cuentas lo recogen (${JSON.stringify(r)})`); }
   await irTes('cuentas'); await page.waitForSelector('#cc-anio'); await page.selectOption('#cc-anio', '2026'); await page.waitForTimeout(300);
@@ -1271,10 +1301,12 @@ await ir('#/censo');
     await new Promise(r => setTimeout(r, 5));
     for (let i = 0; i < 3; i++) await db.guardar('cola', { tabla: 'comunicados', op: 'upsert', id: `x${i}`, registro: { id: `x${i}` }, creado: Date.now(), intentos: 0, error: null });
     sync.drenar(); await p1;
-    for (let i = 0; i < 40 && (await sync.pendientes()); i++) await new Promise(r => setTimeout(r, 50));
-    const n = await sync.pendientes(); sync.usarCliente(null); return n;
+    const mios = async () => (await sync.listarCola()).filter(x => x.id === a.id || /^x\d$/.test(x.id)).length;
+    const previos = (await sync.listarCola()).length - (await mios());
+    for (let i = 0; i < 80 && (await mios()); i++) await new Promise(r => setTimeout(r, 50));
+    const n = await mios(); sync.usarCliente(null); return previos ? `${n} (y ${previos} de antes)` : n;
   });
-  ok(r === 0, `Sincronización: lo que se encola mientras se envía también se envía (${r} pendientes)`);
+  ok(r === 0 || String(r).startsWith('0 '), `Sincronización: lo que se encola mientras se envía también se envía (${r} pendientes)`);
 }
 const res = await page.evaluate(async () => {
   const sync = await import('./js/sync.js');

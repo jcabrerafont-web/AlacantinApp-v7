@@ -19,7 +19,7 @@ import { CONFIG } from './config.js';
 export const FORMATO_COPIA = 'alacantinapp-tesoreria';
 const MINUTOS_CIERRE = 15;
 
-const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], presupuestos: [], bienes: [], arqueos: [], config: null, temporizador: null };
+const t = { clave: null, socios: [], movimientos: [], partidas: [], reglas: [], remesas: [], presupuestos: [], bienes: [], arqueos: [], justificantes: [], config: null, temporizador: null };
 const oyentes = new Set();
 export const alCambiar = (fn) => { oyentes.add(fn); return () => oyentes.delete(fn); };
 const avisar = () => oyentes.forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
@@ -116,13 +116,13 @@ export async function cambiarContrasena(actual, nueva, repetida) {
 export async function recargar() {
   if (!t.clave) return;
   const filas = await db.todos('tesoreria');
-  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], presupuesto: [], bien: [], arqueo: [], config: [] };
+  const por = { socio: [], movimiento: [], partida: [], regla: [], remesa: [], presupuesto: [], bien: [], arqueo: [], justificante: [], config: [] };
   for (const f of filas) {
     if (!por[f.tipo]) continue;
     try { por[f.tipo].push({ ...(await cripto.descifrar(t.clave, f.id, f.datos)), id: f.id, _actualizado: f.updated_at }); }
     catch { console.warn('[tesorería] registro ilegible', f.id); }
   }
-  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa; t.presupuestos = por.presupuesto; t.bienes = por.bien; t.arqueos = por.arqueo;
+  t.socios = por.socio; t.movimientos = por.movimiento; t.partidas = por.partida; t.reglas = por.regla; t.remesas = por.remesa; t.presupuestos = por.presupuesto; t.bienes = por.bien; t.arqueos = por.arqueo; t.justificantes = por.justificante;
   t.config = por.config.sort((a, b) => String(b._actualizado).localeCompare(String(a._actualizado)))[0] || null;
   vigilar();
   avisar();
@@ -335,7 +335,7 @@ export async function restaurarCopia(copia, contrasena) {
 const quitarInternos = ({ id, _actualizado, ...resto }) => resto;
 async function guardarRegistro(tipo, obj) {
   const id = obj.id || uuid();
-  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...t.presupuestos, ...t.bienes, ...t.arqueos, ...(t.config ? [t.config] : [])].find(x => x.id === id);
+  const previo = [...t.movimientos, ...t.partidas, ...t.reglas, ...t.remesas, ...t.presupuestos, ...t.bienes, ...t.arqueos, ...t.justificantes, ...(t.config ? [t.config] : [])].find(x => x.id === id);
   await guardarCifrado(tipo, id, quitarInternos({ ...obj, creado: previo?.creado || obj.creado || new Date().toISOString() }));
   return id;
 }
@@ -827,7 +827,8 @@ export const existeReglaPara = (concepto, importe) => { const n = normalizar(con
 export async function borrarMovimiento(id) {
   exigirAbierta();
   const m = t.movimientos.find(x => x.id === id);
-  if (m?.origen === 'banco') throw new Error('Los movimientos del banco no se borran: si uno está mal clasificado, cámbialo.');
+  if (m?.origen === 'banco' && m.apunte !== null && m.apunte !== undefined) throw new Error('Los movimientos del banco no se borran: si uno está mal clasificado, cámbialo.');
+  for (const j of t.justificantes.filter(x => x.movimiento_id === id)) await borrarPartesJustificante(j);
   await borrarRegistro(id); await recargar();
 }
 
@@ -962,6 +963,7 @@ export function cuentasAnio(anio) {
     banco: { ...banco, neto: netoBanco, cuadra: banco.inicial === null || banco.final === null ? null : Math.abs(r2(banco.inicial + netoBanco) - banco.final) < 0.005 },
     efectivo: { n: efectivo.length, neto: r2(efectivo.reduce((x, m) => x + m.importe, 0)) },
     caja: caja.configurada ? caja.saldo : null,
+    justificantes: (() => { const g = gastosAJustificar(a); return { total: g.length, sin: g.filter(m => !justificantesDe(m.id).length).length }; })(),
     inventario: inventario(`${a}-12-31`).total,
     cuotas: { socios: cuotas.filas.length - cuotas.cuenta.exento, pagadas: cuotas.cuenta.pagado, pendientes: cuotas.cuenta.pendiente + cuotas.cuenta.parcial, recaudado: cuotas.recaudado, pendiente: cuotas.pendiente },
     huecos: comprobarSaldos().filter(x => x.hasta.fecha.startsWith(String(a)) || x.desde.fecha.startsWith(String(a))),
@@ -1285,4 +1287,60 @@ export function inventario(dia = hoyISO()) {
   const anio = dia.slice(0, 4);
   const bajas = t.bienes.filter(b => b.fecha_baja && b.fecha_baja.startsWith(anio) && b.fecha_baja <= dia);
   return { dia, bienes: vig, porCategoria, bajas, total: r2(vig.reduce((x, b) => x + (b.valor || 0), 0)), sinValor: vig.filter(b => b.valor === null).length };
+}
+
+// ===========================================================================
+// Justificantes (foto o PDF de la factura) de los movimientos, cifrados.
+// El servidor admite 200.000 caracteres por registro: el archivo se guarda
+// en trozos («archivo_parte») y la ficha del justificante lleva sus ids.
+// Los trozos no se descifran al abrir la tesorería, solo al ver el archivo.
+// ===========================================================================
+export const MAX_JUSTIFICANTE = 2 * 1024 * 1024; // PDF; las fotos se comprimen antes
+const TROZO = 100000;
+export const justificantesDe = (movimientoId) => t.justificantes.filter(j => j.movimiento_id === movimientoId).sort((a, b) => String(a.creado).localeCompare(String(b.creado)));
+// Gastos que deberían tener factura: no los traspasos ni las comisiones del banco (su justificante es el extracto)
+export function gastosAJustificar(anio = null) {
+  return t.movimientos.filter(m => m.importe < 0 && (!anio || m.fecha.startsWith(String(anio))) && !esTraspaso(m)
+    && !(m.partida && /banco|comision/.test(normalizar(nombrePartida(m.partida)))));
+}
+export const gastosSinJustificante = (anio = null) => gastosAJustificar(anio).filter(m => !justificantesDe(m.id).length).sort((a, b) => b.fecha.localeCompare(a.fecha));
+// datos: data URL («data:image/webp;base64,…» o «data:application/pdf;base64,…»)
+export async function adjuntarJustificante(movimientoId, { nombre, datos: url }) {
+  exigirAbierta();
+  if (!t.movimientos.some(m => m.id === movimientoId)) throw new Error('Movimiento desconocido.');
+  const m = /^data:([\w/+.-]+);base64,/.exec(String(url || ''));
+  if (!m || !/^(image\/(webp|jpeg|png)|application\/pdf)$/.test(m[1])) throw new Error('Solo fotos o PDF.');
+  const bytes = Math.round((url.length - m[0].length) * 3 / 4);
+  if (bytes > MAX_JUSTIFICANTE) throw new Error(`El archivo ocupa ${(bytes / 1048576).toFixed(1).replace('.', ',')} MB; el máximo es 2 MB. Haz una foto de la factura en lugar del PDF, o reduce el PDF.`);
+  const partes = [];
+  const ahora = new Date().toISOString();
+  for (let i = 0; i < url.length; i += TROZO) {
+    const id = uuid();
+    await guardarCifrado('archivo_parte', id, { i: partes.length, texto: url.slice(i, i + TROZO) }, ahora);
+    partes.push(id);
+  }
+  await guardarRegistro('justificante', { movimiento_id: movimientoId, nombre: String(nombre || 'justificante').slice(0, 120), mime: m[1], bytes, partes });
+  await recargar();
+}
+export async function abrirJustificante(id) {
+  exigirAbierta();
+  const j = t.justificantes.find(x => x.id === id);
+  if (!j) throw new Error('Justificante desconocido.');
+  let url = '';
+  for (const pid of j.partes) {
+    const f = await db.obtener('tesoreria', pid);
+    if (!f) throw new Error('El archivo aún no ha llegado a este dispositivo. Espera a que sincronice y vuelve a probar.');
+    url += (await cripto.descifrar(t.clave, pid, f.datos)).texto;
+  }
+  return { ...j, datos: url };
+}
+async function borrarPartesJustificante(j) {
+  for (const pid of j.partes || []) await borrarRegistro(pid);
+  await borrarRegistro(j.id);
+}
+export async function borrarJustificante(id) {
+  exigirAbierta();
+  const j = t.justificantes.find(x => x.id === id);
+  if (j) await borrarPartesJustificante(j);
+  await recargar();
 }
