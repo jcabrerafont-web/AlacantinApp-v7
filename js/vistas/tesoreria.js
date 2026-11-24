@@ -22,6 +22,7 @@ export const GRUPOS = [
   ['ajustes', 'Ajustes', [['partidas', 'Partidas'], ['sepa', 'SEPA'], ['seguridad', 'Seguridad']]]
 ];
 export const grupoDe = (p) => GRUPOS.find(([, , ps]) => ps.some(([k]) => k === p))?.[0] || 'inicio';
+const MESES_CORTE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const aNum = (v) => { const t = String(v ?? '').trim(); const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); return Number.isFinite(n) ? n : 0; };
 const euros = (n) => `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
@@ -614,11 +615,11 @@ export default async function (main) {
       // Socio nuevo: si el pago es justo la cuota y no tiene partida, se propone como cuota de su año
       if ($('#me-socio', form)) conectarSelectSocio($('#me-socio', form), m, () => {
         const cuotas = tes.partidaCuotas(), sp = $('#me-partida', form);
-        if (cuotas && sp && !sp.value && Math.abs(m.importe - tes.configuracion().cuota) < 0.005) { sp.value = cuotas.id; if (!$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); }
+        if (cuotas && sp && !sp.value && Math.abs(m.importe - tes.configuracion().cuota) < 0.005) { sp.value = cuotas.id; if (!$('#me-anio', form).value) $('#me-anio', form).value = String(tes.anioDeCuota(m.fecha)); }
       });
       form.querySelectorAll('[data-k=socio_id]').forEach(sel => conectarSelectSocio(sel, m));
       // Al elegir la partida de cuotas, el año se propone solo
-      $('#me-partida', form)?.addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(m.fecha).slice(0, 4); });
+      $('#me-partida', form)?.addEventListener('change', (ev) => { if (ev.target.value === tes.partidaCuotas()?.id && !$('#me-anio', form).value) $('#me-anio', form).value = String(tes.anioDeCuota(m.fecha)); });
       form.querySelector('[data-cancelar]').addEventListener('click', () => { editandoMov = null; partesBorrador = null; pintarMovimientos(cuerpo); });
       const leerPartes = () => { form.querySelectorAll('[data-parte]').forEach(el => { partesBorrador[Number(el.dataset.parte)][el.dataset.k] = el.value; }); };
       const sumaPartes = () => { leerPartes(); const suma = partesBorrador.reduce((x, p) => x + aNum(p.importe), 0); const falta = Math.round((m.importe - suma) * 100) / 100;
@@ -1142,6 +1143,7 @@ export default async function (main) {
   const pintarPartidas = async (cuerpo) => {
     await tes.asegurarPartidas();
     const parts = tes.partidas(), rs = tes.reglas(), conf = tes.configuracion();
+    const cambiosCorte = tes.cuotasPorCorte();
     const propuesta = reglaPropuesta ? tes.normalizar(reglaPropuesta).split(' ').filter(w => w.length > 2 && !['trf', 'rcbo'].includes(w)).slice(0, 3).join(' ') : '';
     pintar(cuerpo, h`
       <div class="tarjeta"><h2>Partidas</h2>
@@ -1165,6 +1167,15 @@ export default async function (main) {
           <div class="campo"><label for="tc-cuota">Importe de la cuota anual (€)</label><input id="tc-cuota" inputmode="decimal" value="${String(conf.cuota).replace('.', ',')}"></div>
           <div class="campo"><label>Cuenta del Club</label><p style="margin:.4rem 0">${conf.cuenta ? tes.formatearIban(conf.cuenta) : 'Se guarda al importar el primer Excel del banco'}</p></div>
         </div>
+        <fieldset class="parte" id="tc-corte"><legend>Cuotas pagadas a final de año</legend>
+          <div class="fila" style="align-items:flex-end">
+            <div class="campo" style="margin:0"><label for="tc-corte-mes">Cuentan para el año siguiente desde</label>
+              <select id="tc-corte-mes"><option value="">— Nunca: cuentan para el año en que se pagan —</option>${MESES_CORTE.map((m, i) => h`<option value="${String(i + 1).padStart(2, '0')}" ${conf.corte_cuota?.slice(0, 2) === String(i + 1).padStart(2, '0') ? h`selected` : ''}>${m}</option>`)}</select></div>
+            <div class="campo" style="margin:0"><label for="tc-corte-dia">Día</label><input id="tc-corte-dia" type="number" min="1" max="31" style="width:5rem" value="${conf.corte_cuota ? Number(conf.corte_cuota.slice(3)) : 1}"></div>
+          </div>
+          <p class="ayuda">Por ejemplo, desde el 1 de octubre: lo que se pague en el último trimestre es la cuota del año siguiente, y quien se da de alta entonces empieza a pagar el año siguiente.</p>
+          ${cambiosCorte.length ? h`<p class="aviso-caja aviso peq" id="tc-corte-pendientes">${cambiosCorte.length} cuota(s) ya clasificada(s) se pagaron después de la fecha y siguen anotadas en el año del pago. <button type="button" class="btn btn-pequeno" id="tc-corte-aplicar">Revisar y pasarlas al año siguiente…</button></p>` : ''}
+        </fieldset>
         <div class="campo"><label for="tc-mensaje">Texto del recordatorio de la cuota</label><textarea id="tc-mensaje" rows="4">${conf.mensaje || tes.MENSAJE_CUOTA}</textarea>
           <p class="ayuda">Se rellenan solos: {nombre}, {anio}, {importe} (lo que falta) y {cuenta}.</p></div>
         <button class="btn" type="submit">Guardar</button>
@@ -1178,7 +1189,21 @@ export default async function (main) {
       catch (e) { aviso(e.message, 'error'); }
     });
     $('#tr-aplicar', cuerpo).addEventListener('click', async () => { const n = await tes.aplicarReglas(); aviso(n ? `${n} movimiento(s) clasificados.` : 'No había nada nuevo que clasificar.', 'ok'); });
-    $('#tc-config', cuerpo).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await tes.guardarConfiguracion({ cuota: $('#tc-cuota', cuerpo).value, mensaje: $('#tc-mensaje', cuerpo).value.trim() || null }); aviso('Guardado', 'ok'); } catch (e) { aviso(e.message, 'error'); } });
+    $('#tc-config', cuerpo).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const mes = $('#tc-corte-mes', cuerpo).value, dia = Math.min(31, Math.max(1, Number($('#tc-corte-dia', cuerpo).value) || 1));
+      try { await tes.guardarConfiguracion({ cuota: $('#tc-cuota', cuerpo).value, mensaje: $('#tc-mensaje', cuerpo).value.trim() || null, corte_cuota: mes ? `${mes}-${String(dia).padStart(2, '0')}` : null }); aviso('Guardado', 'ok'); pintarPartidas(cuerpo); }
+      catch (e) { aviso(e.message, 'error'); }
+    });
+    $('#tc-corte-aplicar', cuerpo)?.addEventListener('click', async () => {
+      const nombre = (id) => { const x = tes.socios().find(y => y.id === id); return x ? tes.nombreCompleto(x) : 'sin socio'; };
+      const ok = await dialogo({ titulo: 'Pasar al año siguiente', cuerpo: h`<p>Estas cuotas se pagaron después del ${Number(conf.corte_cuota.slice(3))} de ${MESES_CORTE[Number(conf.corte_cuota.slice(0, 2)) - 1]} y pasarán a contar para el año siguiente:</p>
+        <ul class="peq" style="max-height:12rem;overflow:auto">${cambiosCorte.map(x => h`<li>${fecha(x.fecha)} · ${nombre(x.socio_id)} · ${euros(x.importe)}: cuota ${x.de} → <strong>${x.a}</strong></li>`)}</ul>
+        <p class="peq muted">Si alguna era de verdad del año del pago (alguien que pagó tarde), cámbiala después a mano en su movimiento.</p>`,
+        acciones: [{ valor: 'no', texto: 'Cancelar' }, { valor: 'si', texto: `Pasar ${cambiosCorte.length}`, primario: true }] });
+      if (ok !== 'si') return;
+      const n = await tes.aplicarCorteCuotas(cambiosCorte); aviso(`${n} cuota(s) pasadas al año siguiente.`, 'ok'); pintarPartidas(cuerpo);
+    });
   };
 
   // --- Importar desde Excel -----------------------------------------------

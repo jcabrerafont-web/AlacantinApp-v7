@@ -349,12 +349,17 @@ async function borrarRegistro(id) {
 }
 
 // --- Configuración (cuenta del Club e importe de la cuota) ------------------
-export const configuracion = () => ({ cuota: 25, cuenta: null, ...(t.config || {}) });
+export const configuracion = () => ({ cuota: 25, cuenta: null, corte_cuota: null, ...(t.config || {}) });
+// Año de la cuota que paga un pago hecho en esa fecha. Con «corte» (p. ej. «10-01»), lo pagado
+// desde ese día cuenta como cuota del año siguiente (quien paga en el último trimestre).
+export const anioDeCuota = (fecha) => { const y = Number(String(fecha).slice(0, 4)); const c = configuracion().corte_cuota; return c && String(fecha).slice(5, 10) >= c ? y + 1 : y; };
 export async function guardarConfiguracion(cambios) {
   exigirAbierta();
   const c = { ...configuracion(), ...cambios };
   const cuota = Number(String(c.cuota).replace(',', '.'));
   if (!Number.isFinite(cuota) || cuota <= 0) throw new Error('Indica el importe de la cuota.');
+  if (c.corte_cuota && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(c.corte_cuota)) throw new Error('La fecha a partir de la cual la cuota cuenta para el año siguiente no es válida.');
+  if (!c.corte_cuota) c.corte_cuota = null;
   await guardarRegistro('config', { ...c, cuota, id: t.config?.id });
   await recargar();
 }
@@ -410,8 +415,8 @@ export async function borrarPartida(id, { moverA } = {}) {
   if (suyos.length && moverA === undefined) throw new Error(`No se puede borrar: tiene ${suyos.length} movimiento(s). Indica a qué partida pasan.`);
   if (moverA && (moverA === id || !t.partidas.some(p => p.id === moverA))) throw new Error('Elige otra partida para sus movimientos.');
   const cuotas = partidaCuotas();
-  for (const m of suyos) await guardarRegistro('movimiento', { ...quitarInternos(m), partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (m.anio || Number(String(m.fecha).slice(0, 4))) : (moverA ? m.anio : null), id: m.id });
-  for (const m of divididos) await guardarRegistro('movimiento', { ...quitarInternos(m), partes: m.partes.map(p => (p.partida === id ? { ...p, partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (p.anio || Number(String(m.fecha).slice(0, 4))) : (moverA ? p.anio : null) } : p)), id: m.id });
+  for (const m of suyos) await guardarRegistro('movimiento', { ...quitarInternos(m), partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (m.anio || anioDeCuota(m.fecha)) : (moverA ? m.anio : null), id: m.id });
+  for (const m of divididos) await guardarRegistro('movimiento', { ...quitarInternos(m), partes: m.partes.map(p => (p.partida === id ? { ...p, partida: moverA || null, anio: moverA && moverA === cuotas?.id ? (p.anio || anioDeCuota(m.fecha)) : (moverA ? p.anio : null) } : p)), id: m.id });
   for (const r of t.reglas.filter(r => r.partida === id)) await borrarRegistro(r.id);
   await borrarRegistro(id);
   await recargar();
@@ -465,7 +470,7 @@ export function clasificar(m) {
   const remesa = m.importe > 0 ? remesaDelAbono(m) : null;
   if (remesa && cuotas) return { partida: cuotas.id, socio_id: null, anio: remesa.anio, remesa_id: remesa.id };
   if (!partida && socio && cuotas && Math.abs(m.importe - configuracion().cuota) < 0.005) partida = cuotas.id;
-  return { partida, socio_id: socio?.id || null, anio: partida && partida === cuotas?.id ? Number(String(m.fecha).slice(0, 4)) : null };
+  return { partida, socio_id: socio?.id || null, anio: partida && partida === cuotas?.id ? anioDeCuota(m.fecha) : null };
 }
 
 export async function aplicarReglas() {
@@ -661,7 +666,7 @@ export async function importarHojaTesoreria(leidas, equivalencias) {
     const partida = eq[normalizar(m.etiqueta)] || null;
     const anioEtiqueta = Number((String(m.etiqueta).match(/\b(20\d\d)\b/) || [])[1]) || null;
     const socio = m.numero_socio && /^\d+$/.test(m.numero_socio) ? t.socios.find(s => String(Number(s.numero)) === m.numero_socio) : null;
-    return { importe: m.importe, partida, socio_id: m.importe > 0 && socio ? socio.id : null, anio: partida && partida === cuotas?.id ? (anioEtiqueta || anioHoja || Number(fecha.slice(0, 4))) : null,
+    return { importe: m.importe, partida, socio_id: m.importe > 0 && socio ? socio.id : null, anio: partida && partida === cuotas?.id ? (anioEtiqueta || anioHoja || anioDeCuota(fecha)) : null,
       nota: [m.nota, m.numero_socio && !socio ? `Nº de socio en la hoja: ${m.numero_socio}` : ''].filter(Boolean).join(' · ') || null, revisar: Boolean(m.numero_socio && !socio) };
   };
   let divididos = 0, reparados = 0;
@@ -694,7 +699,7 @@ export async function importarHojaTesoreria(leidas, equivalencias) {
     }
     const partida = eq[normalizar(m.etiqueta)] || null;
     const anioEtiqueta = Number((m.etiqueta.match(/\b(20\d\d)\b/) || [])[1]) || null;
-    const anio = partida && partida === cuotas?.id ? (anioEtiqueta || m.anioHoja || Number(m.fecha.slice(0, 4))) : null;
+    const anio = partida && partida === cuotas?.id ? (anioEtiqueta || m.anioHoja || anioDeCuota(m.fecha)) : null;
     const socio = m.numero_socio && /^\d+$/.test(m.numero_socio) ? t.socios.find(s => String(Number(s.numero)) === m.numero_socio) : null;
     const notas = [m.nota, m.numero_socio && !socio ? `Nº de socio en la hoja: ${m.numero_socio}` : ''].filter(Boolean);
     const datosHoja = { partida, socio_id: m.importe > 0 && socio ? socio.id : null, anio, nota: notas.join(' · ') || null };
@@ -789,7 +794,7 @@ export function validarPartes(partes, total, fecha) {
   for (const p of lista) {
     if (p.partida && !t.partidas.some(x => x.id === p.partida)) throw new Error('Partida desconocida.');
     if (p.socio_id && !t.socios.some(x => x.id === p.socio_id)) throw new Error('Socio desconocido.');
-    if (p.partida && p.partida === cuotas?.id && !p.anio) p.anio = Number(String(fecha).slice(0, 4));
+    if (p.partida && p.partida === cuotas?.id && !p.anio) p.anio = anioDeCuota(fecha);
     if (p.anio !== null && (!Number.isInteger(p.anio) || p.anio < 2000 || p.anio > 2100)) throw new Error('El año de la cuota no es válido.');
   }
   return lista;
@@ -883,7 +888,10 @@ export function cuotasAnio(anio) {
   vigilar();
   const pc = partidaCuotas();
   const pagos = pagosDeCuotas().filter(m => pc && m.partida === pc.id && Number(m.anio) === Number(anio) && m.socio_id);
-  const filas = socios().filter(s => socioEnAnio(s, anio)).map(s => {
+  // Con fecha de corte, quien se da de alta después del corte empieza a pagar el año siguiente
+  const corte = configuracion().corte_cuota;
+  const altaTardia = (s) => corte && s.fecha_alta && s.fecha_alta >= `${anio}-${corte}` && !pagos.some(m => m.socio_id === s.id);
+  const filas = socios().filter(s => socioEnAnio(s, anio) && !altaTardia(s)).map(s => {
     const suyos = pagos.filter(m => m.socio_id === s.id);
     const pagado = Math.round(suyos.reduce((x, m) => x + m.importe, 0) * 100) / 100;
     const debe = cuotaDe(s);
@@ -1427,6 +1435,33 @@ export async function aplicarAltas(propuesta) {
     if (!s || s.fecha_alta) continue; // nunca se pisa una fecha ya puesta
     const fecha = s.fecha_baja && s.fecha_baja < p.fecha ? s.fecha_baja : p.fecha; // el alta no puede ser posterior a la baja
     await guardarCifrado('socio', s.id, { ...limpiarSocio({ ...s, fecha_alta: fecha }), creado: s.creado || new Date().toISOString() });
+    n++;
+  }
+  await recargar();
+  return n;
+}
+
+// Cuotas ya clasificadas que, con la fecha de corte, deberían contar para el año siguiente:
+// pagadas desde el corte y anotadas en el año del pago (las de remesas SEPA no se tocan)
+export function cuotasPorCorte() {
+  exigirAbierta();
+  const c = configuracion().corte_cuota, pc = partidaCuotas();
+  if (!c || !pc) return [];
+  const anioPago = (f) => Number(String(f).slice(0, 4));
+  return lineas().filter(m => m.partida === pc.id && !m.remesa_id && Number(m.anio) === anioPago(m.fecha) && String(m.fecha).slice(5, 10) >= c)
+    .map(m => ({ id: m.padre || m.id, parte: m.parte ?? null, fecha: m.fecha, importe: m.importe, socio_id: m.socio_id, de: Number(m.anio), a: Number(m.anio) + 1 }));
+}
+export async function aplicarCorteCuotas(lista = cuotasPorCorte()) {
+  exigirAbierta();
+  let n = 0;
+  for (const x of lista) {
+    const m = t.movimientos.find(y => y.id === x.id);
+    if (!m) continue;
+    if (x.parte !== null && Array.isArray(m.partes)) {
+      const partes = m.partes.map((p, i) => (i === x.parte && Number(p.anio) === x.de ? { ...p, anio: x.a } : p));
+      await guardarRegistro('movimiento', { ...quitarInternos(m), partes, id: m.id });
+    } else if (Number(m.anio) === x.de) await guardarRegistro('movimiento', { ...quitarInternos(m), anio: x.a, id: m.id });
+    else continue;
     n++;
   }
   await recargar();

@@ -967,6 +967,24 @@ await ir('#/tesoreria');
     const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: window.innerWidth }));
     ok(r.sw <= r.w + 1, `Tesorería › ${p}: cabe en el móvil (${JSON.stringify(r)})`);
     if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-${p}.png`, fullPage: true }); }
+  // Cuotas pagadas a final de año: desde una fecha de corte cuentan para el año siguiente
+  { await irTes('partidas'); await page.waitForSelector('#tc-corte-mes');
+    await page.selectOption('#tc-corte-mes', '10'); await page.fill('#tc-corte-dia', '1'); await page.click('#tc-config button[type=submit]');
+    await page.waitForSelector('#tc-corte-aplicar');
+    const r1 = await page.evaluate(async () => { const t = await import('./js/tesoreria.js');
+      return { corte: t.configuracion().corte_cuota, sep: t.anioDeCuota('2026-09-30'), oct: t.anioDeCuota('2026-10-01'), dic: t.anioDeCuota('2026-12-31'),
+        nuevo: t.clasificar({ concepto: 'trf. ana prueba uno', importe: 25, fecha: '2026-11-28' }).anio, lista: t.cuotasPorCorte().map(x => [x.fecha, x.de, x.a]) }; });
+    ok(r1.corte === '10-01' && r1.sep === 2026 && r1.oct === 2027 && r1.dic === 2027 && r1.nuevo === 2027 && r1.lista.length >= 2 && r1.lista.every(([f, d, a]) => f.slice(5) >= '10-01' && a === d + 1),
+      `Corte de la cuota: desde el 1 de octubre, lo pagado cuenta para el año siguiente; y propone pasar lo ya clasificado (${JSON.stringify(r1)})`);
+    await page.click('#tc-corte-aplicar'); await page.waitForSelector('dialog[open]');
+    ok((await page.innerText('dialog[open]')).includes('cuota 2026 → 2027'), 'Corte de la cuota: vista previa de lo que cambia');
+    await page.click('dialog[open] button[value=si]'); await page.waitForTimeout(600);
+    const r2 = await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); const maria = t.socios().find(s => s.apellidos === 'López García');
+      return { quedan: t.cuotasPorCorte().length, maria2027: t.cuotasAnio(2027).filas.find(f => f.socio.id === maria.id)?.estado, maria2026: t.cuotasAnio(2026).filas.find(f => f.socio.id === maria.id)?.estado ?? 'no sale' }; });
+    ok(r2.quedan === 0 && r2.maria2027 === 'pagado' && r2.maria2026 === 'no sale' && !(await page.$('#tc-corte-pendientes')),
+      `Corte de la cuota: pasadas al año siguiente; quien se dio de alta tras el corte (María, 15/11) paga desde el año siguiente (${JSON.stringify(r2)})`);
+    await page.selectOption('#tc-corte-mes', ''); await page.click('#tc-config button[type=submit]'); await page.waitForTimeout(400);
+    ok(await page.evaluate(async () => { const t = await import('./js/tesoreria.js'); return t.configuracion().corte_cuota === null && t.anioDeCuota('2026-12-31') === 2026; }), 'Corte de la cuota: se puede desactivar'); }
   if (process.env.CAPTURAS) { await irTes('movimientos'); await page.waitForSelector('#te-movs'); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria-movimientos.png`, fullPage: true }); }
   if (process.env.CAPTURAS) { await irTes('socios'); await page.waitForSelector('#te-buscar'); await page.fill('#te-buscar', ''); await page.screenshot({ path: `${process.env.CAPTURAS}/tesoreria.png`, fullPage: true }); }
 }
