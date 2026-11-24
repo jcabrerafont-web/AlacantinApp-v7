@@ -15,7 +15,7 @@ const STUB = `
     perfiles: [
       { id: ADMIN, nombre: 'Admin Club', email: 'admin@club.es', rol: 'administrador', created_at: '2026-01-01T00:00:00Z', sync_ts: ts },
       { id: PEPE, nombre: 'Pepe Criador', email: 'pepe@x.es', telefono: '600111222', rega: 'ES030140001234', municipio: 'Elche', provincia: 'Alicante', latitud: 38.2669, longitud: -0.6984, rol: 'criador', created_at: '2026-02-01T00:00:00Z', sync_ts: ts },
-      { id: LUIS, nombre: 'Luis Sinnada', email: 'luis@x.es', rol: 'aspirante', created_at: '2026-03-01T00:00:00Z', sync_ts: ts }
+      { id: LUIS, nombre: 'Luis Sinnada', email: 'luis@x.es', rol: 'aspirante', created_at: new Date(Date.now() - 5 * 864e5).toISOString(), sync_ts: ts } // alta nueva (hace 5 días)
     ],
     animales: [{ id: ANIMAL, usuario_id: PEPE, criador_id: PEPE, anilla: 'E2422000101', sexo: 'M', variedad: 'negra-moteada', fecha_nacimiento: '2024-03-01', seccion: 'RA', estado: 'activo', created_at: ts, updated_at: ts, sync_ts: ts }],
     solicitudes: [{ id: '00000000-0000-4000-8000-0000000000e5', usuario_id: PEPE, estado: 'pendiente', animales: [ANIMAL], telefono: '600111222', horario: 'indiferente', created_at: ts, updated_at: ts, sync_ts: ts }],
@@ -90,6 +90,28 @@ try {
   await page.waitForFunction(() => document.querySelector('main')?.innerText.includes('Datos y seguridad'));
   ok(Boolean(await page.$('main a[href="#/admin/historial"]')) && Boolean(await page.$('main a[href="#/copia"]')),
     'Panel: sección «Datos y seguridad» con historial y copia completa');
+
+  // El número de la barra se ve también en la tarea y en el apartado al que lleva
+  { const r = await page.evaluate(() => ({ barra: document.querySelector('#barra a[data-ruta="admin"] .insignia')?.textContent,
+      titulo: document.querySelector('#admin-pendiente h2').textContent, urgentes: [...document.querySelectorAll('#admin-urgentes li')].map(li => li.innerText.split('\n')[0]),
+      enUrgentes: document.querySelectorAll('#admin-urgentes .insignia-item').length, info: document.querySelector('#admin-info summary')?.textContent || '',
+      usuarios: [...document.querySelectorAll('main .tarjeta:not(#admin-pendiente) a.item[href="#/usuarios"]')][0]?.querySelector('.insignia-item')?.textContent, bajaRgpd: [...document.querySelectorAll('main .tarjeta:not(#admin-pendiente) a.item[href="#/usuarios"]')][1]?.querySelector('.insignia-item') ? 'sí' : 'no',
+      deUsuarios: [...document.querySelectorAll('#admin-urgentes a')].filter(a => a.getAttribute('href').startsWith('#/usuarios')).length }));
+    const n = Number(r.barra);
+    ok(n >= 1 && r.titulo === `Qué hay que hacer (${n})` && r.enUrgentes === n && r.urgentes.some(x => x.includes('1 alta(s) nueva(s) por revisar')) && r.usuarios === String(r.deUsuarios) && r.deUsuarios >= 1 && r.bajaRgpd === 'no',
+      `Panel: el número de la barra (${r.barra}) está en cada tarea pendiente y en el apartado al que lleva («Usuarios y roles»: ${r.usuarios}) (${JSON.stringify(r)})`);
+    ok(r.info.includes('no cuentan como pendientes') && r.info.includes('(1'), `Panel: lo informativo va aparte y no suma (${r.info})`);
+    await ir('#/usuarios'); await page.waitForSelector('#us-por-revisar');
+    ok((await page.innerText('summary:has-text("Luis Sinnada")')).includes('Por revisar') && (await page.innerText('[data-filtro="nuevos"]')).includes('1'), 'Usuarios: el alta nueva sale «Por revisar» y el filtro lleva el número');
+    await page.click('summary:has-text("Luis Sinnada")'); await page.waitForTimeout(500);
+    ok(await page.$eval('[data-ficha="00000000-0000-4000-8000-0000000000b3"]', d => d.open).catch(() => null) !== false && !(await page.$('#us-por-revisar')) && (await page.innerText('summary:has-text("Luis Sinnada")')).includes('Nueva'),
+      'Usuarios: al abrir su ficha queda revisada (la ficha sigue abierta y desaparece el aviso)');
+    await ir('#/admin'); await page.waitForSelector('#admin-pendiente');
+    const r2 = await page.evaluate(() => ({ barra: document.querySelector('#barra a[data-ruta="admin"] .insignia')?.textContent || '0', urg: document.querySelector('#admin-pendiente').innerText }));
+    ok(Number(r2.barra) === n - 1 && !r2.urg.includes('alta(s) nueva(s)'), `Panel: revisada el alta, el número baja (${r.barra} → ${r2.barra})`);
+    await ir('#/herramientas'); await page.waitForSelector('main a.item[href="#/admin"]');
+    const enHerr = await page.$eval('main a.item[href="#/admin"]', a => a.querySelector('.insignia-item')?.textContent || '0');
+    ok(enHerr === r2.barra, `Herramientas (móvil): «Panel de administración» lleva el mismo número que la barra (${enHerr})`); }
 
   // --- Mapa de aviarios ---
   await ir('#/mapa');

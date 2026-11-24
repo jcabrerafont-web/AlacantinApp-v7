@@ -573,3 +573,9 @@ fieldset.parte legend { font-weight: 600; font-size: .9rem; padding: 0 .25rem; }
 .justificantes li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 /* Filtros de Movimientos: 4 en fila en pantallas anchas */
 @media (min-width: 900px) { .rejilla-filtros { grid-template-columns: repeat(4, 1fr); } }
+/* El mismo número de la barra, en el sitio concreto al que se refiere */
+.insignia-item { display: inline-block; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; margin-left: auto; margin-right: .35rem;
+  background: var(--cresta); color: #fff; font: 700 12px/22px system-ui, sans-serif; text-align: center; flex-shrink: 0; }
+.chip-revisar { background: var(--cresta); color: #fff; }
+.tareas-info { margin-top: .75rem; }
+.tareas-info summary { color: var(--texto-2); font-size: .9rem; }

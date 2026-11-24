@@ -57,6 +57,7 @@ export async function cargar() {
   const [animales, calificaciones, huevos, perfiles, campanas, lotes, incubaciones, solicitudes, germoplasma, comunicados] = await Promise.all(
     ['animales', 'calificaciones', 'huevos', 'perfiles', 'campanas', 'lotes', 'incubaciones', 'solicitudes', 'germoplasma', 'comunicados'].map(s => db.todos(s)));
   estado.todos = animales;
+  estado.altasRevisadas = new Set(await db.metaGet(CLAVE_ALTAS_REVISADAS, []));
   // Si la genealogía no ha cambiado (lo normal al guardar un huevo o una calificación),
   // se conservan los cálculos de consanguinidad ya hechos.
   const idxViejo = estado.idx;
@@ -1417,6 +1418,20 @@ export function geojsonAviarios(lista) {
 // enlace que lleva a resolverlo. Solo informa; nunca cambia nada.
 // ---------------------------------------------------------------------------
 export const DIAS_ALTA_NUEVA = 30;
+// Las altas nuevas que el administrador ya ha revisado dejan de contar como tarea
+// (siguen marcadas como «Nueva» en Usuarios durante los 30 días)
+const CLAVE_ALTAS_REVISADAS = 'admin:altas-revisadas';
+export const altaPorRevisar = (u, hoy = hoyIso()) => esAltaNueva(u, hoy) && !estado.altasRevisadas?.has(u.id);
+export async function marcarAltasRevisadas(ids) {
+  const r = new Set(await db.metaGet(CLAVE_ALTAS_REVISADAS, []));
+  ids.forEach(id => r.add(id));
+  // Se guardan solo las de altas recientes (las viejas ya no cuentan)
+  const recientes = new Set(estado.perfiles.filter(u => esAltaNueva(u)).map(u => u.id));
+  const lista = [...r].filter(id => recientes.has(id));
+  await db.metaSet(CLAVE_ALTAS_REVISADAS, lista);
+  estado.altasRevisadas = new Set(lista);
+  notificar();
+}
 export const esAltaNueva = (u, hoy = hoyIso()) => Boolean(u?.created_at) &&
   (new Date(`${hoy}T12:00:00`) - new Date(u.created_at)) / 864e5 <= DIAS_ALTA_NUEVA;
 
@@ -1425,9 +1440,9 @@ export function tareasAdmin({ hoy = hoyIso() } = {}) {
   const t = [];
   const yo = estado.perfil.id;
   const otros = estado.perfiles.filter(u => u.id !== yo);
-  const nuevos = otros.filter(u => esAltaNueva(u, hoy));
-  if (nuevos.length) t.push({ nivel: 'hoy', icono: '👥', texto: `${nuevos.length} alta(s) nueva(s) en los últimos ${DIAS_ALTA_NUEVA} días`,
-    sub: 'Comprueba que son socios del Club y, si hace falta, asígnales su rol', href: '#/usuarios?filtro=nuevos' });
+  const nuevos = otros.filter(u => altaPorRevisar(u, hoy));
+  if (nuevos.length) t.push({ nivel: 'hoy', icono: '👥', texto: `${nuevos.length} alta(s) nueva(s) por revisar`,
+    sub: `${nuevos.map(u => u.nombre || u.email).slice(0, 3).join(', ')}${nuevos.length > 3 ? '…' : ''}: comprueba que son socios del Club y asígnales su rol si hace falta`, href: '#/usuarios?filtro=nuevos' });
   const pendientes = estado.solicitudes.filter(s => s.estado === 'pendiente');
   if (pendientes.length) t.push({ nivel: 'hoy', icono: '📞', texto: `${pendientes.length} solicitud(es) de inspección sin atender`,
     sub: 'Llama al criador y programa la visita', href: '#/inspecciones' });

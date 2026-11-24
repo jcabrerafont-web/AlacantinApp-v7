@@ -37,15 +37,26 @@ const SECCIONES = [
   ]]
 ];
 
-const enlace = ([href, ico, titulo, sub]) => h`<li><a class="item tarea" href="${href}">
+const enlace = ([href, ico, titulo, sub], n = 0) => h`<li><a class="item tarea" href="${href}">
   <span class="tarea-ico" aria-hidden="true">${desdeEmoji(ico)}</span>
   <span class="item-principal"><span class="item-titulo">${titulo}</span><span class="item-sub">${sub}</span></span>
-  <span aria-hidden="true">›</span></a></li>`;
+  ${n ? h`<span class="insignia-item" aria-label="${n} pendiente(s)">${n > 9 ? '9+' : n}</span>` : ''}<span aria-hidden="true">›</span></a></li>`;
+// Tareas pendientes (las que cuentan en el número de la barra) que llevan a cada apartado
+const ruta = (href) => String(href).split('?')[0];
+// Las tareas pendientes llevan el mismo número que la barra; las informativas van aparte
+const itemPendiente = (x) => h`<li><a class="item tarea tarea-${x.nivel}" href="${x.href}">
+  <span class="tarea-ico" aria-hidden="true">${desdeEmoji(x.icono)}</span>
+  <span class="item-principal"><span class="item-titulo">${x.texto}</span>${x.sub ? h`<span class="item-sub">${x.sub}</span>` : ''}</span>
+  <span class="insignia-item" aria-hidden="true">1</span><span aria-hidden="true">›</span></a></li>`;
 
 export default function (main) {
   const dibujar = () => {
     const tareas = datos.tareasAdmin();
     const urgentes = tareas.filter(x => x.nivel !== 'info');
+    const informativas = tareas.filter(x => x.nivel === 'info');
+    // Cuántas pendientes lleva cada apartado (solo en el primero que enlace a esa ruta)
+    const porRuta = new Map();
+    for (const x of urgentes) porRuta.set(ruta(x.href), (porRuta.get(ruta(x.href)) || 0) + 1);
     const usuarios = datos.estado.perfiles.length;
     const activos = datos.estado.todos.filter(a => a.estado !== 'baja').length;
     const abiertas = datos.solicitudesTodas().filter(datos.solicitudAbiertaEs).length;
@@ -62,11 +73,12 @@ export default function (main) {
       </div>
 
       <div class="tarjeta" id="admin-pendiente">
-        <h2>Qué hay que hacer</h2>
-        ${tareas.length ? h`<ul class="lista">${tareas.map(itemTarea)}</ul>` : h`<p class="aviso-caja ok" style="margin:0">✓ Todo al día. No hay nada pendiente.</p>`}
+        <h2>Qué hay que hacer${urgentes.length ? ` (${urgentes.length})` : ''}</h2>
+        ${urgentes.length ? h`<ul class="lista" id="admin-urgentes">${urgentes.map(itemPendiente)}</ul>` : h`<p class="aviso-caja ok" style="margin:0">✓ Todo al día. No hay nada pendiente.</p>`}
+        ${informativas.length ? h`<details class="tareas-info" id="admin-info"><summary>Para tu información (${informativas.length}, no cuentan como pendientes)</summary><ul class="lista">${informativas.map(itemTarea)}</ul></details>` : ''}
       </div>
 
-      ${SECCIONES.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">${items.map(enlace)}</ul></div>`)}`);
+      ${SECCIONES.map(([titulo, items]) => h`<div class="tarjeta"><h2>${titulo}</h2><ul class="lista">${items.map(it => { const n = porRuta.get(it[0]) || 0; porRuta.delete(it[0]); return enlace(it, n); })}</ul></div>`)}`);
   };
   dibujar();
   return datos.suscribir(dibujar);

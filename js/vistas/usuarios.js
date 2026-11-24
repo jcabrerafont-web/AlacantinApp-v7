@@ -12,15 +12,17 @@ export default function (main) {
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
   let filtro = q.get('filtro') === 'nuevos' ? 'nuevos' : (q.get('rol') || '');
   let texto = '';
+  const abiertas = new Set(); // fichas abiertas: siguen abiertas al repintar
   let resultado = null; // última baja hecha: se queda a la vista (lleva el correo para contestarle)
   const dibujar = () => {
     const yo = datos.estado.perfil.id;
     const ejemplares = (id) => datos.estado.todos.filter(a => a.usuario_id === id);
     const t = sinAcentos(texto.trim());
+    const porRevisar = datos.estado.perfiles.filter(u => u.id !== yo && datos.altaPorRevisar(u));
     const lista = [...datos.estado.perfiles]
       .filter(u => !filtro || (filtro === 'nuevos' ? datos.esAltaNueva(u) : u.rol === filtro))
       .filter(u => !t || sinAcentos([u.nombre, u.email, u.rega, u.municipio, u.numero_socio].join(' ')).includes(t))
-      .sort((a, b) => (datos.esAltaNueva(b) - datos.esAltaNueva(a)) || String(a.nombre || a.email).localeCompare(String(b.nombre || b.email), 'es'));
+      .sort((a, b) => (datos.altaPorRevisar(b) - datos.altaPorRevisar(a)) || (datos.esAltaNueva(b) - datos.esAltaNueva(a)) || String(a.nombre || a.email).localeCompare(String(b.nombre || b.email), 'es'));
     pintar(main, h`
       <p class="peq"><a href="#/admin">‹ Administración</a></p>
       <h1>Usuarios y roles</h1>
@@ -28,8 +30,10 @@ export default function (main) {
       <div class="tarjeta">
         <div class="campo"><label for="us-buscar">Buscar</label>
           <input id="us-buscar" type="search" autocomplete="off" placeholder="Nombre, correo, REGA o municipio" value="${texto}"></div>
-        <div class="fila" role="group" aria-label="Filtrar por">${FILTROS.map(([v, n]) => h`<button type="button" class="btn btn-pequeno" data-filtro="${v}" aria-pressed="${String(filtro === v)}">${n}</button>`)}</div>
+        <div class="fila" role="group" aria-label="Filtrar por">${FILTROS.map(([v, n]) => h`<button type="button" class="btn btn-pequeno" data-filtro="${v}" aria-pressed="${String(filtro === v)}">${n}${v === 'nuevos' && porRevisar.length ? h` <span class="insignia-item" style="margin:0" aria-label="${porRevisar.length} por revisar">${porRevisar.length}</span>` : ''}</button>`)}</div>
       </div>
+      ${porRevisar.length ? h`<div class="aviso-caja aviso peq" id="us-por-revisar"><strong>${porRevisar.length} alta(s) nueva(s) por revisar.</strong> Abre su ficha (queda revisada al abrirla): comprueba que es socio del Club y, si hace falta, cámbiale el rol.
+        <button type="button" class="enlace" id="us-revisadas">Marcar ${porRevisar.length > 1 ? 'todas ' : ''}como revisada${porRevisar.length > 1 ? 's' : ''}</button></div>` : ''}
       ${resultado ? h`<div class="aviso-caja ${resultado.cuenta === 'pendiente' ? 'aviso' : 'ok'}" id="us-resultado" role="status" tabindex="-1">
         <strong>${resultado.nombre}: baja hecha.</strong> ${resultado.perfil === 'borrado' ? 'No tenía nada en el Libro: se ha borrado su perfil por completo.' : 'Se han borrado sus datos personales; sus ejemplares siguen en el Libro a su nombre.'}
         ${resultado.cuenta === 'pendiente' ? h`<br>Falta borrar su cuenta de acceso: <a href="#/admin/supabase">sigue la tarea «Dar de baja una cuenta» en Supabase</a> con el correo <strong>${resultado.email}</strong>.` : ' Su cuenta de acceso también está borrada.'}
@@ -39,9 +43,9 @@ export default function (main) {
       <ul class="lista tarjeta" id="us-lista">${lista.map(u => {
         const ej = ejemplares(u.id);
         const activos = ej.filter(a => a.estado !== 'baja').length;
-        return h`<li><details class="usuario">
+        return h`<li><details class="usuario" data-ficha="${u.id}" ${abiertas.has(u.id) ? h`open` : ''}>
           <summary class="item"><span class="item-principal">
-            <span class="item-titulo">${u.nombre || '—'} ${u.baja ? h`<span class="chip">De baja</span>` : datos.esAltaNueva(u) ? h`<span class="chip chip-info">Nueva</span>` : ''}</span>
+            <span class="item-titulo">${u.nombre || '—'} ${u.baja ? h`<span class="chip">De baja</span>` : u.id !== yo && datos.altaPorRevisar(u) ? h`<span class="chip chip-revisar">Por revisar</span>` : datos.esAltaNueva(u) ? h`<span class="chip chip-info">Nueva</span>` : ''}</span>
             <span class="item-sub">${ROLES[u.rol] || u.rol} · ${activos} ejemplar(es) · ${u.municipio || 'sin municipio'}</span></span></summary>
           <dl class="datos-usuario">
             <dt>Correo</dt><dd>${u.email ? h`<a href="mailto:${u.email}">${u.email}</a>` : '—'}</dd>
@@ -66,6 +70,13 @@ export default function (main) {
 
     const input = $('#us-buscar', main);
     input.addEventListener('input', () => { texto = input.value; const pos = input.selectionStart; dibujar(); const i = $('#us-buscar', main); i.focus(); i.setSelectionRange(pos, pos); });
+    // Abrir la ficha de un alta nueva cuenta como revisarla (deja de sumar en el aviso)
+    main.querySelectorAll('[data-ficha]').forEach(d => d.addEventListener('toggle', () => {
+      const u = datos.estado.perfiles.find(x => x.id === d.dataset.ficha);
+      if (d.open) abiertas.add(d.dataset.ficha); else abiertas.delete(d.dataset.ficha);
+      if (d.open && u && datos.altaPorRevisar(u)) datos.marcarAltasRevisadas([u.id]);
+    }));
+    $('#us-revisadas', main)?.addEventListener('click', () => datos.marcarAltasRevisadas(porRevisar.map(u => u.id)));
     main.querySelectorAll('[data-filtro]').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.filtro; dibujar(); }));
     main.querySelectorAll('[data-usuario]').forEach(sel => sel.addEventListener('change', async () => {
       const u = datos.estado.perfiles.find(x => x.id === sel.dataset.usuario);

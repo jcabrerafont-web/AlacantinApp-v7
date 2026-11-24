@@ -366,7 +366,7 @@ ok(await page.$eval('main a[href="#/admin"]', a => a.offsetParent === null), 'Or
 await page.setViewportSize({ width: 390, height: 844 });
 await ir('#/admin');
 { const t = await page.innerText('main');
-  ok(t.includes('Qué hay que hacer') && t.includes('No hay ningún inspector nombrado') && (await page.$$('main a[href="#/admin/supabase"], main a[href="#/admin/libro"], main a[href="#/usuarios"]')).length >= 3,
+  ok(t.includes('Qué hay que hacer') && (await page.textContent('#admin-pendiente')).includes('No hay ningún inspector nombrado') && (await page.$$('main a[href="#/admin/supabase"], main a[href="#/admin/libro"], main a[href="#/usuarios"]')).length >= 3,
     'Panel de administración: tareas pendientes (falta nombrar inspector) y accesos a usuarios, Libro y Supabase'); }
 await ir('#/admin/libro');
 await page.fill('#al-buscar', '0001');
