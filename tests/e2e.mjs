@@ -844,8 +844,8 @@ await ir('#/tesoreria');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('dialog[open] button[value=bajar]')]);
     const pdf = await (await import('node:fs/promises')).readFile(await dl.path());
     const txt = pdf.toString('latin1');
-    ok(dl.suggestedFilename() === 'Recibo_CU-2026-008_Maria_Lopez_Garcia.pdf' && txt.startsWith('%PDF-1.4') && txt.includes('(RECIBO DE CUOTA DE SOCIO)') && txt.includes('(Son veinticinco euros.)') && txt.includes('(25,00 \\200)') && txt.trimEnd().endsWith('%%EOF'),
-      `Recibo: PDF válido con los datos y el € (${dl.suggestedFilename()}, ${pdf.length} bytes)`);
+    ok(dl.suggestedFilename() === 'Recibo_CU-2026-008_Maria_Lopez_Garcia.pdf' && txt.startsWith('%PDF-1.4') && txt.includes('(RECIBO DE CUOTA DE SOCIO)') && txt.includes('(Son veinticinco euros.)') && txt.includes('(25,00 \\200)') && txt.includes('/Subtype /Image') && txt.includes('/Filter /DCTDecode') && txt.trimEnd().endsWith('%%EOF'),
+      `Recibo: PDF válido con el escudo del Club, los datos y el € (${dl.suggestedFilename()}, ${pdf.length} bytes)`);
     await irTes('movimientos'); await page.fill('#mf-texto', 'maria lopez'); await page.waitForTimeout(300);
     await page.click('[data-editar-mov]'); await page.waitForSelector('[data-recibo-mov]');
     await page.click('[data-recibo-mov]'); await page.waitForSelector('dialog[open]');

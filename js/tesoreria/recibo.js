@@ -9,17 +9,20 @@ const euros = (n) => `${Number(n).toLocaleString('es-ES', { minimumFractionDigit
 // Localidad del domicilio del Club («…, 03720 Benissa (Alicante)» → «Benissa»)
 const localidad = () => (String(CONFIG.club.domicilio || '').match(/\d{5}\s+([^,(]+)/)?.[1] || '').trim();
 
-export function reciboPdf(r) {
+// logo: bytes de un JPEG (icons/logo-recibo.jpg); sin él, el recibo sale sin escudo
+export function reciboPdf(r, { logo = null } = {}) {
   const nombre = [r.socio.nombre, r.socio.apellidos].filter(Boolean).join(' ');
   const p = nuevoPdf({ titulo: `Recibo ${r.numero} · ${nombre}` });
   const izq = 20, der = 190;
   p.rect(14, 12, 182, 138, { grosor: 0.8 });
-  p.texto(izq, 24, CONFIG.club.nombre, { tam: 14, negrita: true });
-  p.texto(izq, 30, `NIF ${CONFIG.club.nif}${CONFIG.club.domicilio ? ` · ${CONFIG.club.domicilio}` : ''}`, { tam: 8.5, gris: 0.3 });
+  const x0 = logo ? izq + 24 : izq;
+  if (logo) p.imagen(izq, 15.5, 20, 20, logo);
+  p.texto(x0, 24, CONFIG.club.nombre, { tam: 14, negrita: true });
+  p.texto(x0, 30, `NIF ${CONFIG.club.nif}${CONFIG.club.domicilio ? ` · ${CONFIG.club.domicilio}` : ''}`, { tam: 8.5, gris: 0.3 });
   p.texto(der, 24, `Recibo nº ${r.numero}`, { tam: 11, negrita: true, alinear: 'der' });
-  p.linea(izq, 35, der, 35, { grosor: 0.5, gris: 0.5 });
-  p.texto(105, 46, 'RECIBO DE CUOTA DE SOCIO', { tam: 15, negrita: true, alinear: 'centro' });
-  let y = 60;
+  p.linea(izq, 38, der, 38, { grosor: 0.5, gris: 0.5 });
+  p.texto(105, 48, 'RECIBO DE CUOTA DE SOCIO', { tam: 15, negrita: true, alinear: 'centro' });
+  let y = 61;
   const fila = (et, v) => { p.texto(izq, y, et, { tam: 10, gris: 0.35 }); p.texto(izq + 38, y, v, { tam: 11, negrita: true }); y += 8; };
   fila('Recibido de', nombre || '—');
   if (r.socio.dni) fila('DNI / NIE', r.socio.dni);
@@ -42,3 +45,10 @@ export function reciboPdf(r) {
   return p.bytes();
 }
 export const nombreArchivoRecibo = (r) => `Recibo_${r.numero}_${[r.socio.nombre, r.socio.apellidos].filter(Boolean).join('_').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_')}.pdf`;
+
+// El logo se descarga una vez (lo guarda el service worker para usarlo sin cobertura)
+let logoCache = null;
+export async function logoRecibo() {
+  if (logoCache) return logoCache;
+  try { const r = await fetch('./icons/logo-recibo.jpg'); if (!r.ok) return null; logoCache = new Uint8Array(await r.arrayBuffer()); return logoCache; } catch { return null; }
+}

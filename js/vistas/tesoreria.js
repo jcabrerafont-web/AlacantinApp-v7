@@ -10,7 +10,7 @@ import * as docs from '../documentos.js';
 import * as sepa from '../tesoreria/sepa.js';
 import { desdeEmoji } from '../iconos.js';
 import { MIN_CONTRASENA } from '../tesoreria/cripto.js';
-import { reciboPdf, nombreArchivoRecibo } from '../tesoreria/recibo.js';
+import { reciboPdf, nombreArchivoRecibo, logoRecibo } from '../tesoreria/recibo.js';
 import { h, pintar, $, aviso, confirmar, dialogo, descargar, csv, hoyISO, fecha, comprimirFoto } from '../ui.js';
 
 // Cinco grupos; dentro de cada uno, sus pestañas
@@ -100,7 +100,7 @@ export default async function (main) {
   const enviarRecibo = async (socioId, anio) => {
     try {
       const r = tes.reciboCuota(socioId, anio);
-      const archivo = new File([reciboPdf(r)], nombreArchivoRecibo(r), { type: 'application/pdf' });
+      const archivo = new File([reciboPdf(r, { logo: await logoRecibo() })], nombreArchivoRecibo(r), { type: 'application/pdf' });
       const puedeCompartir = Boolean(navigator.canShare?.({ files: [archivo] }));
       const accion = await dialogo({ titulo: `Recibo ${r.numero}`, cuerpo: h`<p><strong>${tes.nombreCompleto(r.socio)}</strong>: cuota ${r.anio}, ${euros(r.importe)}${r.completa ? '' : ' (pago parcial)'}.</p>
         <p class="peq muted">${r.pagos.map(m => `${m.forma} · ${fecha(m.fecha)}`).join('; ')}</p>

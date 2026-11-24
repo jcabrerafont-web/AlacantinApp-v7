@@ -30,8 +30,22 @@ function cadena(s) {
 }
 const n2 = (v) => (Math.round(v * 100) / 100).toString();
 
+// Tamaño en píxeles de un JPEG (marcador SOF)
+export function tamanoJpeg(b) {
+  if (!(b?.[0] === 0xFF && b[1] === 0xD8)) throw new Error('El logo no es un JPEG.');
+  let i = 2;
+  while (i < b.length) {
+    if (b[i] !== 0xFF) { i++; continue; }
+    const m = b[i + 1], largo = (b[i + 2] << 8) | b[i + 3];
+    if (m >= 0xC0 && m <= 0xCF && ![0xC4, 0xC8, 0xCC].includes(m)) return { alto: (b[i + 5] << 8) | b[i + 6], ancho: (b[i + 7] << 8) | b[i + 8], componentes: b[i + 9] };
+    i += 2 + largo;
+  }
+  throw new Error('JPEG sin tamaño.');
+}
+
 export function nuevoPdf({ titulo = '' } = {}) {
   const ops = [];
+  const imagenes = []; // JPEG incrustados (DCTDecode)
   const api = {
     // alinear: 'izq' | 'der' | 'centro' (x es el borde izquierdo, derecho o el centro)
     texto(x, y, s, { tam = 11, negrita = false, alinear = 'izq', gris = 0 } = {}) {
@@ -55,6 +69,13 @@ export function nuevoPdf({ titulo = '' } = {}) {
       ops.push(`${n2(gris)} G ${grosor} w ${n2(x1 * MM)} ${n2((ALTO - y1) * MM)} m ${n2(x2 * MM)} ${n2((ALTO - y2) * MM)} l S 0 G`);
       return api;
     },
+    // Imagen JPEG (bytes) en x, y (esquina superior izquierda), con ancho y alto en mm
+    imagen(x, y, w, hh, jpeg) {
+      const t = tamanoJpeg(jpeg);
+      imagenes.push({ bytes: jpeg, ...t });
+      ops.push(`q ${n2(w * MM)} 0 0 ${n2(hh * MM)} ${n2(x * MM)} ${n2((ALTO - y - hh) * MM)} cm /Im${imagenes.length} Do Q`);
+      return api;
+    },
     rect(x, y, w, hh, { grosor = 0.8, relleno = null } = {}) {
       if (relleno !== null) ops.push(`${n2(relleno)} g ${n2(x * MM)} ${n2((ALTO - y - hh) * MM)} ${n2(w * MM)} ${n2(hh * MM)} re f 0 g`);
       ops.push(`${grosor} w ${n2(x * MM)} ${n2((ALTO - y - hh) * MM)} ${n2(w * MM)} ${n2(hh * MM)} re S`);
@@ -66,11 +87,12 @@ export function nuevoPdf({ titulo = '' } = {}) {
       const objs = [
         '<< /Type /Catalog /Pages 2 0 R >>',
         '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n2(ANCHO * MM)} ${n2(ALTO * MM)}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n2(ANCHO * MM)} ${n2(ALTO * MM)}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>${imagenes.length ? ` /XObject << ${imagenes.map((_, i) => `/Im${i + 1} ${8 + i} 0 R`).join(' ')} >>` : ''} >> /Contents 6 0 R >>`,
         '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
         '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
         `<< /Length ${contenido.length} >>\nstream\n${contenido}\nendstream`,
-        `<< /Title ${cadena(titulo)} /Producer (AlacantinApp) >>`
+        `<< /Title ${cadena(titulo)} /Producer (AlacantinApp) >>`,
+        ...imagenes.map(im => `<< /Type /XObject /Subtype /Image /Width ${im.ancho} /Height ${im.alto} /ColorSpace /${im.componentes === 1 ? 'DeviceGray' : im.componentes === 4 ? 'DeviceCMYK' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n${Array.from(im.bytes, c => String.fromCharCode(c)).join('')}\nendstream`)
       ];
       let pdf = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
       const offs = [];

@@ -12,7 +12,7 @@
 //    archivos de dos versiones.
 //  · Supabase (datos, sesión, fotos) nunca se cachea: los datos viven en IndexedDB.
 // ============================================================================
-const VERSION = '7.52.0';
+const VERSION = '7.52.1';
 const CACHE = `alacantinapp-${VERSION}`;
 const CACHE_CDN = 'alacantinapp-cdn-1';
 // Fotos del servidor (Supabase Storage): se guardan al verlas para poder verlas sin cobertura.
@@ -31,7 +31,7 @@ const APP = [
   './js/vistas/puesta.js', './js/vistas/sincronizacion.js', './js/vistas/usuarios.js',
   './js/vistas/programa.js', './js/vistas/campanas.js', './js/vistas/campana.js', './js/vistas/dossier.js', './js/vistas/copia.js', './js/respaldo.js', './js/instalacion.js', './js/buscar.js', './js/iconos.js', './fonts/lora.woff', './js/tema.js', './js/tema-inicial.js', './js/diagnostico.js', './js/vistas/problema.js', './js/vistas/privacidad.js', './js/vistas/reproduccion.js', './js/vistas/incubacion.js', './js/vistas/inspeccion.js', './js/vistas/inspecciones.js', './js/vistas/auditoria.js', './js/vistas/acta.js', './js/vistas/hoy.js', './js/vistas/nuevaclave.js', './js/vistas/admin.js', './js/vistas/adminlibro.js', './js/vistas/adminsupabase.js', './js/vistas/adminhistorial.js', './js/vistas/conoce.js', './js/vistas/mapa.js', './js/vistas/adminexpediente.js', './js/vistas/adminprograma.js', './js/vistas/admingermoplasma.js', './js/vistas/comunicados.js', './js/vistas/tesoreria.js', './js/tesoreria.js', './js/tesoreria/cripto.js', './js/tesoreria/xlsx.js', './js/tesoreria/sepa.js', './js/tesoreria/pdf.js', './js/tesoreria/recibo.js', './js/vistas/inspector.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/icon-maskable-192.png', './icons/apple-touch-icon.png',
-  './icons/logo.png', './icons/logo-cabecera.png', './docs/Estandar-Alacantina2025.pdf'
+  './icons/logo.png', './icons/logo-cabecera.png', './icons/logo-recibo.jpg', './docs/Estandar-Alacantina2025.pdf'
 ];
 const CDN = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
 
